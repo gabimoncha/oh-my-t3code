@@ -1,0 +1,419 @@
+{
+  "parentThreadId": "00000000-0000-4000-8000-000000000001",
+  "inheritedProviderInstanceId": "claudeAgent",
+  "inheritedModel": "claude-opus-5-5",
+  "runtimeMode": "auto",
+  "interactionMode": "default",
+  "features": {
+    "appOwnedSubagents": true,
+    "asyncPolling": true,
+    "maxBatchThreads": 20
+  },
+  "providers": [
+    {
+      "providerInstanceId": "codex",
+      "driverKind": "codex",
+      "displayName": "Codex",
+      "models": [
+        {
+          "id": "gpt-6.1-sol",
+          "label": "GPT-6.1-Sol",
+          "options": [
+            {
+              "id": "reasoningEffort",
+              "label": "Reasoning",
+              "type": "select",
+              "options": [
+                {
+                  "id": "low",
+                  "label": "low",
+                  "isDefault": true
+                },
+                {
+                  "id": "medium",
+                  "label": "medium"
+                },
+                {
+                  "id": "high",
+                  "label": "high"
+                },
+                {
+                  "id": "xhigh",
+                  "label": "xhigh"
+                },
+                {
+                  "id": "max",
+                  "label": "max"
+                },
+                {
+                  "id": "ultra",
+                  "label": "ultra"
+                }
+              ],
+              "currentValue": "low"
+            },
+            {
+              "id": "serviceTier",
+              "label": "Service Tier",
+              "type": "select",
+              "options": [
+                {
+                  "id": "default",
+                  "label": "default",
+                  "isDefault": true
+                },
+                {
+                  "id": "priority",
+                  "label": "priority"
+                }
+              ],
+              "currentValue": "default"
+            }
+          ]
+        },
+        {
+          "id": "gpt-6-astra",
+          "label": "GPT-6-Astra",
+          "options": [
+            {
+              "id": "reasoningEffort",
+              "label": "Reasoning",
+              "type": "select",
+              "options": [
+                {
+                  "id": "low",
+                  "label": "low",
+                  "isDefault": true
+                },
+                {
+                  "id": "medium",
+                  "label": "medium"
+                },
+                {
+                  "id": "high",
+                  "label": "high"
+                },
+                {
+                  "id": "xhigh",
+                  "label": "xhigh"
+                },
+                {
+                  "id": "max",
+                  "label": "max"
+                },
+                {
+                  "id": "ultra",
+                  "label": "ultra"
+                }
+              ],
+              "currentValue": "low"
+            },
+            {
+              "id": "serviceTier",
+              "label": "Service Tier",
+              "type": "select",
+              "options": [
+                {
+                  "id": "default",
+                  "label": "default",
+                  "isDefault": true
+                },
+                {
+                  "id": "priority",
+                  "label": "priority"
+                }
+              ],
+              "currentValue": "default"
+            }
+          ]
+        },
+        {
+          "id": "gpt-6-luna",
+          "label": "GPT-6-Luna",
+          "options": [
+            {
+              "id": "reasoningEffort",
+              "label": "Reasoning",
+              "type": "select",
+              "options": [
+                {
+                  "id": "low",
+                  "label": "low",
+                  "isDefault": true
+                },
+                {
+                  "id": "medium",
+                  "label": "medium"
+                },
+                {
+                  "id": "high",
+                  "label": "high"
+                },
+                {
+                  "id": "xhigh",
+                  "label": "xhigh"
+                }
+              ],
+              "currentValue": "low"
+            }
+          ]
+        }
+      ],
+      "canRunChildTask": true,
+      "canRunCrossProviderChildTask": true,
+      "constraints": []
+    },
+    {
+      "providerInstanceId": "claudeAgent",
+      "driverKind": "claudeAgent",
+      "displayName": "Claude",
+      "models": [
+        {
+          "id": "claude-opus-5-5",
+          "label": "Claude Opus 5.5",
+          "options": [
+            {
+              "id": "effort",
+              "label": "Reasoning",
+              "type": "select",
+              "options": [
+                {
+                  "id": "low",
+                  "label": "low"
+                },
+                {
+                  "id": "medium",
+                  "label": "medium"
+                },
+                {
+                  "id": "high",
+                  "label": "high",
+                  "isDefault": true
+                },
+                {
+                  "id": "xhigh",
+                  "label": "xhigh"
+                },
+                {
+                  "id": "max",
+                  "label": "max"
+                },
+                {
+                  "id": "ultrathink",
+                  "label": "ultrathink"
+                }
+              ],
+              "currentValue": "high"
+            },
+            {
+              "id": "contextWindow",
+              "label": "Context Window",
+              "type": "select",
+              "options": [
+                {
+                  "id": "200k",
+                  "label": "200k",
+                  "isDefault": true
+                },
+                {
+                  "id": "1m",
+                  "label": "1m"
+                }
+              ],
+              "currentValue": "200k"
+            },
+            {
+              "id": "fastMode",
+              "label": "Fast Mode",
+              "type": "boolean"
+            }
+          ]
+        },
+        {
+          "id": "claude-sonnet-5-5",
+          "label": "Claude Sonnet 5.5",
+          "options": [
+            {
+              "id": "effort",
+              "label": "Reasoning",
+              "type": "select",
+              "options": [
+                {
+                  "id": "low",
+                  "label": "low"
+                },
+                {
+                  "id": "medium",
+                  "label": "medium"
+                },
+                {
+                  "id": "high",
+                  "label": "high",
+                  "isDefault": true
+                },
+                {
+                  "id": "xhigh",
+                  "label": "xhigh"
+                },
+                {
+                  "id": "max",
+                  "label": "max"
+                },
+                {
+                  "id": "ultrathink",
+                  "label": "ultrathink"
+                }
+              ],
+              "currentValue": "high"
+            },
+            {
+              "id": "contextWindow",
+              "label": "Context Window",
+              "type": "select",
+              "options": [
+                {
+                  "id": "200k",
+                  "label": "200k",
+                  "isDefault": true
+                },
+                {
+                  "id": "1m",
+                  "label": "1m"
+                }
+              ],
+              "currentValue": "200k"
+            },
+            {
+              "id": "fastMode",
+              "label": "Fast Mode",
+              "type": "boolean"
+            }
+          ]
+        }
+      ],
+      "canRunChildTask": true,
+      "canRunCrossProviderChildTask": true,
+      "constraints": []
+    },
+    {
+      "providerInstanceId": "cursor",
+      "driverKind": "cursor",
+      "displayName": "Cursor",
+      "models": [
+        {
+          "id": "composer-3",
+          "label": null,
+          "options": [
+            {
+              "id": "reasoning",
+              "label": "Reasoning",
+              "type": "select",
+              "options": [
+                {
+                  "id": "low",
+                  "label": "low"
+                },
+                {
+                  "id": "medium",
+                  "label": "medium",
+                  "isDefault": true
+                },
+                {
+                  "id": "high",
+                  "label": "high"
+                }
+              ],
+              "currentValue": "medium"
+            }
+          ]
+        },
+        {
+          "id": "default",
+          "label": "Auto"
+        }
+      ],
+      "canRunChildTask": true,
+      "canRunCrossProviderChildTask": true,
+      "constraints": []
+    },
+    {
+      "providerInstanceId": "pi",
+      "driverKind": "pi",
+      "displayName": "Pi",
+      "models": [
+        {
+          "id": "openai-codex/gpt-6-astra",
+          "label": "GPT-6-Astra",
+          "options": [
+            {
+              "id": "thinking",
+              "label": "Thinking",
+              "type": "select",
+              "options": [
+                {
+                  "id": "off",
+                  "label": "off"
+                },
+                {
+                  "id": "minimal",
+                  "label": "minimal"
+                },
+                {
+                  "id": "low",
+                  "label": "low"
+                },
+                {
+                  "id": "medium",
+                  "label": "medium",
+                  "isDefault": true
+                },
+                {
+                  "id": "high",
+                  "label": "high"
+                },
+                {
+                  "id": "xhigh",
+                  "label": "xhigh"
+                }
+              ],
+              "currentValue": "medium"
+            }
+          ]
+        }
+      ],
+      "canRunChildTask": true,
+      "canRunCrossProviderChildTask": true,
+      "constraints": []
+    },
+    {
+      "providerInstanceId": "grok",
+      "driverKind": "grok",
+      "displayName": "Grok",
+      "models": [
+        {
+          "id": "grok-build",
+          "label": "Grok Build",
+          "options": []
+        }
+      ],
+      "canRunChildTask": false,
+      "canRunCrossProviderChildTask": false,
+      "constraints": [
+        "Provider instance is disabled.",
+        "Provider executable is not installed."
+      ]
+    },
+    {
+      "providerInstanceId": "opencode",
+      "driverKind": "opencode",
+      "displayName": "OpenCode",
+      "models": [],
+      "canRunChildTask": false,
+      "canRunCrossProviderChildTask": false,
+      "constraints": [
+        "Provider instance is disabled.",
+        "OpenCode is disabled in T3 Code settings."
+      ]
+    }
+  ]
+}

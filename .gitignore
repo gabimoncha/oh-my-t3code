@@ -1,0 +1,6 @@
+node_modules/
+dist/
+coverage/
+.omt/ledger.jsonl
+.omt/evidence/
+.DS_Store

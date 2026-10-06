@@ -1,0 +1,34 @@
+{
+  "name": "oh-my-t3code",
+  "version": "0.1.0",
+  "description": "Roles, briefs, plans, and review loops for agents that run in T3 Code.",
+  "type": "module",
+  "license": "MIT",
+  "repository": "github:gabimoncha/oh-my-t3code",
+  "bin": {
+    "omt": "dist/cli.js",
+    "oh-my-t3code": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "skills",
+    "schema",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "omt": "node src/cli.ts",
+    "test": "node --test \"test/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.build.json",
+    "schema": "node scripts/build-schema.ts",
+    "check": "pnpm typecheck && pnpm test"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "typescript": "^7.0.2"
+  }
+}

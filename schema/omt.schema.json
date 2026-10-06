@@ -1,0 +1,181 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/gabimoncha/oh-my-t3code/main/schema/omt.schema.json",
+  "title": "oh-my-t3code config",
+  "description": "A user (~/.config/oh-my-t3code/config.jsonc) or project (.omt/config.jsonc) config layer.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "version": {
+      "const": 1
+    },
+    "roles": {
+      "type": "object",
+      "description": "Role overrides and new roles. Set a role to null to remove it.",
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9-]{0,31}$"
+      },
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "null"
+          },
+          {
+            "$ref": "#/$defs/role"
+          }
+        ]
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "maxParallel": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 32,
+          "description": "Most child tasks that run at the same time."
+        },
+        "maxTasksPerRun": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500,
+          "description": "Most child tasks in one run."
+        },
+        "maxDepth": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3,
+          "description": "Most levels of delegation below the main thread."
+        },
+        "maxReviewRounds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10,
+          "description": "Most review rounds for one unit."
+        }
+      }
+    }
+  },
+  "$defs": {
+    "role": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "access": {
+          "enum": [
+            "read-only",
+            "edit"
+          ]
+        },
+        "result": {
+          "enum": [
+            "work",
+            "review",
+            "test",
+            "research",
+            "plan"
+          ]
+        },
+        "t3Role": {
+          "enum": [
+            "implementation",
+            "research",
+            "review",
+            "design",
+            "test",
+            "general"
+          ]
+        },
+        "interactionMode": {
+          "enum": [
+            "inherit",
+            "default",
+            "plan"
+          ]
+        },
+        "runtimeMode": {
+          "enum": [
+            "inherit",
+            "approval-required",
+            "auto-accept-edits",
+            "auto",
+            "full-access"
+          ]
+        },
+        "chain": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 10,
+          "items": {
+            "$ref": "#/$defs/rung"
+          }
+        }
+      }
+    },
+    "rung": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "model"
+      ],
+      "anyOf": [
+        {
+          "required": [
+            "provider"
+          ]
+        },
+        {
+          "required": [
+            "driver"
+          ]
+        }
+      ],
+      "properties": {
+        "provider": {
+          "type": "string",
+          "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+          "description": "T3 provider instance id."
+        },
+        "driver": {
+          "type": "string",
+          "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+          "description": "T3 driver kind."
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "effort": {
+          "enum": [
+            "off",
+            "minimal",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ]
+        },
+        "options": {
+          "type": "object",
+          "additionalProperties": {
+            "type": [
+              "string",
+              "boolean"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

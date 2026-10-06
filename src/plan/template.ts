@@ -1,0 +1,36 @@
+export function planTemplate(slug: string, title: string, createdAt: string, options: { light?: boolean } = {}): string {
+  const oracle = options.light === true ? "" : "- [ ] F2. The oracle role approves the whole change.\n";
+  return `# ${title}
+
+<!-- omt-plan v1 slug=${slug} created=${createdAt} -->
+
+## Objective
+
+<what changes for the user, in one paragraph>
+
+## Done when
+
+- [ ] D1. <a check that can fail: a command, a test, or an observable result>
+
+## Roles
+
+<paste the output of \`omt roles\` here>
+
+## Units
+
+- [ ] U1. <title>
+  - Role: execute
+  - Scope: <files or directories>
+  - Done when: <condition>
+  - Verify: \`<command>\`
+  - Depends on: none
+
+## Final verification
+
+- [ ] F1. The full test suite passes: \`<command>\`
+${oracle}
+## Log
+
+- ${createdAt} plan created
+`;
+}

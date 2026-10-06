@@ -1,0 +1,96 @@
+import { test } from "node:test";
+import type { TestContext } from "node:test";
+import assert from "node:assert/strict";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { DEFAULT_CONFIG } from "../../src/config/defaults.ts";
+import { loadConfig } from "../../src/config/load.ts";
+import { tempDir } from "../helpers.ts";
+
+function setup(t: TestContext) {
+  const root = tempDir(t);
+  const home = join(root, "home");
+  const project = join(root, "project");
+  const cwd = join(project, "src", "deep");
+  mkdirSync(join(project, ".git"), { recursive: true });
+  mkdirSync(cwd, { recursive: true });
+  const configDir = join(root, "cfg");
+  const env = { OMT_CONFIG_DIR: configDir };
+  const userPath = join(configDir, "config.jsonc");
+  const projectPath = join(project, ".omt", "config.jsonc");
+  const write = (path: string, text: string) => {
+    mkdirSync(join(path, ".."), { recursive: true });
+    writeFileSync(path, text);
+  };
+  const load = () => loadConfig({ cwd, env, homedir: home });
+  return { userPath, projectPath, write, load };
+}
+
+test("with no files the result is the defaults, and every source is listed", async (t) => {
+  const { userPath, projectPath, load } = setup(t);
+  const loaded = await load();
+  assert.deepEqual(loaded.config, DEFAULT_CONFIG);
+  assert.deepEqual(loaded.issues, []);
+  assert.deepEqual(loaded.sources, [
+    { kind: "defaults", present: true },
+    { kind: "user", path: userPath, present: false },
+    { kind: "project", path: projectPath, present: false },
+  ]);
+});
+
+test("layers apply in order: defaults, then user, then project", async (t) => {
+  const { userPath, projectPath, write, load } = setup(t);
+  write(userPath, '// user\n{ "limits": { "maxParallel": 8, "maxDepth": 2, }, "roles": { "quick": null } }');
+  write(projectPath, '{ "limits": { "maxParallel": 2 }, "roles": { "review": { "runtimeMode": "auto" } } }');
+  const loaded = await load();
+  assert.deepEqual(loaded.issues, []);
+  assert.deepEqual(loaded.config.limits, { ...DEFAULT_CONFIG.limits, maxParallel: 2, maxDepth: 2 });
+  assert.equal(loaded.config.roles.quick, undefined);
+  assert.equal(loaded.config.roles.review?.runtimeMode, "auto");
+  assert.deepEqual(
+    loaded.sources.map((source) => source.present),
+    [true, true, true],
+  );
+});
+
+test("a JSONC syntax error is one error issue, and only that file is skipped", async (t) => {
+  const { userPath, projectPath, write, load } = setup(t);
+  write(userPath, '{ "limits": { "maxParallel": 8 } }');
+  write(projectPath, '{\n  "limits": { "maxParallel": 2 }\n  "roles": {}\n}');
+  const loaded = await load();
+  assert.equal(loaded.config.limits.maxParallel, 8);
+  assert.equal(loaded.issues.length, 1);
+  const issue = loaded.issues[0];
+  assert.equal(issue?.source, projectPath);
+  assert.equal(issue?.path, "");
+  assert.equal(issue?.severity, "error");
+  assert.ok(issue?.message.startsWith("3:3: "), issue?.message);
+  assert.equal(loaded.sources[2]?.present, true);
+});
+
+test("validation and merge issues carry the file path as source", async (t) => {
+  const { userPath, write, load } = setup(t);
+  write(userPath, '{ "version": 2, "roles": { "new-one": { "access": "edit" } }, "limits": { "maxDepth": 9 } }');
+  const loaded = await load();
+  assert.deepEqual(
+    loaded.issues.map((issue) => [issue.source, issue.path]),
+    [
+      [userPath, "version"],
+      [userPath, "limits.maxDepth"],
+      [userPath, "roles.new-one"],
+    ],
+  );
+  assert.deepEqual(loaded.config, DEFAULT_CONFIG);
+});
+
+test("the project config is found from a nested working directory", async (t) => {
+  const { projectPath, write, load } = setup(t);
+  write(projectPath, '{ "roles": { "explore": null } }');
+  assert.equal((await load()).config.roles.explore, undefined);
+});
+
+test("an I/O error other than a missing file throws", async (t) => {
+  const { userPath, load } = setup(t);
+  mkdirSync(userPath, { recursive: true });
+  await assert.rejects(load());
+});

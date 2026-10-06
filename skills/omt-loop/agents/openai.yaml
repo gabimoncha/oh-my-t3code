@@ -1,0 +1,5 @@
+interface:
+  display_name: "omt loop"
+  short_description: "Keep omt work going across turns until a condition holds."
+policy:
+  allow_implicit_invocation: false

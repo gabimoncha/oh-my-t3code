@@ -1,0 +1,5 @@
+interface:
+  display_name: "oh-my-t3code"
+  short_description: "Route to the omt workflows for T3 Code."
+policy:
+  allow_implicit_invocation: false

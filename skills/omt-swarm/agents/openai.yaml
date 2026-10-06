@@ -1,0 +1,5 @@
+interface:
+  display_name: "omt swarm"
+  short_description: "Run independent tracks in separate worktree threads, each ending in a PR."
+policy:
+  allow_implicit_invocation: false
