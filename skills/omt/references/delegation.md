@@ -15,7 +15,13 @@ Call the CLI as `omt`. When `command -v omt` finds nothing, use `.omt/bin/omt` f
 
 ## Your interaction mode
 
-Every omt skill starts by calling `orchestrator_capabilities` and reading your own `interactionMode`.
+Each omt skill that dispatches work checks its modes first. It calls `t3_thread_configuration` with no `threadId`. It returns only this thread's `modelSelection`, `runtimeMode`, and `interactionMode`. Read your own `interactionMode` from it. On ACP providers whose T3 tools are missing, call it with:
+
+```sh
+ELECTRON_RUN_AS_NODE=1 "$T3_ACP_MCP_NODE" ${T3_ACP_MCP_ENTRYPOINT:+"$T3_ACP_MCP_ENTRYPOINT"} acp-mcp-call t3_thread_configuration '{}'
+```
+
+Do not call `orchestrator_capabilities` to read your modes. Use it only for the provider and model catalog ([roles.md](roles.md)). Its result is large, so save it to a temp file and read only the fields you need.
 
 - `default`: follow the skill as written.
 - `plan`: you are read-only too. Dispatch only read-only roles (`explore`, `research`, `plan-review`, `review`, `oracle`). Write no files: run no `omt init`, `omt plan new`, `omt plan mark`, or `omt ledger add`, and save no evidence files. Commands that only print (`omt roles`, `omt brief`, `omt ledger stats`, `omt plan status`) are fine. Count your dispatched and active tasks yourself against the limits. Deliver the plan or the report in your final message. When the work needs files or edit roles, ask the user to switch the thread to default mode and stop.

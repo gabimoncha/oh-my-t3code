@@ -11,7 +11,7 @@ You run parallel `review` tasks over a change, merge their findings, and check t
 
 ### 0. Check your mode
 
-Call `orchestrator_capabilities` and read your `interactionMode` ([delegation.md](../omt/references/delegation.md#your-interaction-mode)). In `plan` mode, dispatch only `review` and `oracle`, write no ledger entry and no evidence file, and deliver the merged findings in your final message. The fix loop in step 6 needs default mode.
+Call `t3_thread_configuration` with no `threadId` and read your `interactionMode` ([delegation.md](../omt/references/delegation.md#your-interaction-mode)). In `plan` mode, dispatch only `review` and `oracle`, write no ledger entry and no evidence file, and deliver the merged findings in your final message. The fix loop in step 6 needs default mode.
 
 Done when: you know your mode.
 

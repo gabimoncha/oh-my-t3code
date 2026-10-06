@@ -12,7 +12,7 @@ You split work into independent tracks and launch each as a top-level T3 thread 
 
 ### 1. Check the modes
 
-Call `orchestrator_capabilities`. `t3_thread_launch` requires that this thread runs in `full-access` runtime mode and `default` interaction mode.
+Call `t3_thread_configuration` with no `threadId` and read `runtimeMode` and `interactionMode` ([delegation.md](../omt/references/delegation.md#your-interaction-mode)). `t3_thread_launch` requires that this thread runs in `full-access` runtime mode and `default` interaction mode.
 
 Done when: both modes match. Otherwise tell the user which mode to change and stop.
 
