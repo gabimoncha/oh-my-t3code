@@ -884,12 +884,14 @@ next: U4 Add the token refresh endpoint
 
 `omt hook user-prompt-submit` reads the hook input JSON from stdin and looks at its `prompt` string.
 
-Detection (`detectUltrawork(prompt)`):
+Detection (`detectUltrawork(prompt)`). The start checks in rules 1 to 3 ignore leading whitespace.
 
 1. Return false when the prompt contains `<!-- omt-brief` or starts with `Act as the `. Both mark a delegated child's brief. T3 loads user settings in child sessions too, so without this rule a brief that mentions ultrawork would start a nested loop.
 2. Return false when the prompt starts with `/omt-ulw`. The skill is already loading.
-3. Remove fenced code blocks, inline code spans, lines that start with `>`, and text inside double quotes.
-4. Match the words `ulw` or `ultrawork`, case-insensitive, with no letter, digit, `_`, `-`, `/`, or `$` directly before or after.
+3. Return false when the prompt starts with `<task-notification>`. Claude Code sends the result of a background task to the session as a prompt that starts with this tag, and that result holds no user request. The tag later in a prompt does not skip it.
+4. Remove fenced code blocks, inline code spans, lines that start with `>`, and text inside double quotes.
+5. Match the words `ulw` or `ultrawork`, case-insensitive, with no letter, digit, `_`, `-`, `/`, or `$` directly before or after.
+6. Skip a match that is negated. A match is negated when one of the words `no`, `not`, `never`, `without`, `dont`, `don't`, or `don’t` (case-insensitive) comes before it on the same line, with at most two other words between them. The negator is a whole word. It has no letter, digit, or `_` directly before it, so `know` and `cannot` do not negate. A word is a run of letters, digits, `'`, and `’`. Only spaces or tabs separate the negator, the words, and the match, so a comma, a period, a non-breaking space, or a line break ends the window. Return true at the first match that is not negated, so `no ulw here, but ultrawork this` matches. The window is wide on purpose. A missed match costs less than a false one, because the agent can still load omt-ulw from its skill description, but a false match tells it to run the loop against the user's words. The cost is that `don't forget to ulw this` stays silent.
 
 On a match the command prints one line of JSON and exits 0:
 
@@ -1225,7 +1227,7 @@ Required coverage:
 - Brief: every section, omitted sections, both access lines, both delegation lines, the plan-mode line, template lookup order, the title rule, and the `--json` payload.
 - Plan: the template, parsing every checkbox state, counts, the next unit, and `complete`.
 - Ledger: append, list, stats, a malformed line, and `requestId` sanitizing with round and attempt.
-- Hook: a detection matrix (inside a code block, inside quotes, `ulwx`, `$ulw`, `ULTRAWORK`, a prompt with `<!-- omt-brief`, a prompt that starts with `Act as the `, a prompt that starts with `/omt-ulw`), invalid JSON, and the output shape.
+- Hook: a detection matrix (inside a code block, inside quotes, `ulwx`, `$ulw`, `ULTRAWORK`, a prompt with `<!-- omt-brief`, a prompt that starts with `Act as the `, a prompt that starts with `/omt-ulw`, a prompt that starts with `<task-notification>`, negated keywords and the two-word window, a 200,000-character negated prompt), invalid JSON, and the output shape.
 - Install: create, idempotent rerun, conflict without and with `--force`, a locally modified managed skill, backups outside the skill roots, `--dry-run` and a declined prompt write nothing, non-TTY without `--yes`, roots that resolve to the same directory, hook add and update that keep other settings, an unchanged hook writes nothing, a symlinked `settings.json` stays a symlink, `--hooks` refused for a temp `cliPath`, uninstall removes only managed paths, and `--purge`.
 - Project install: the files of section 14.8, an idempotent rerun, `--dry-run`, the exclude file for a `.git` directory and a worktree `.git` file, block replacement, no `.git`, `--no-git-exclude` (also on a reinstall, and its `.omt/.gitignore` restore), the conditional `.omt` and `settings.local.json` lines, the hook in `settings.local.json`, uninstall with a locally modified skill and `--purge`, `--targets gemini` (exit 2), a temp `cliPath`, and the shim conflict and update. Also: a copied project, a moved clone round trip, a tracked manifest with paths outside the root, a symlinked path to the root, the home directory as the root (exit 2), a dangling settings symlink, a failed scratch delete, glob characters in a package path, worktrees, a block whose root is gone, the exact bytes of the exclude file, a kept created `settings.local.json`, and a kept ledger. Also: uninstall, reinstall, and a second uninstall after each kind of kept created file, each with an empty `git status`; an uninstall that fails midway; a symlinked exclude file and `.omt/.gitignore`; a crafted tracked manifest that names project files; a package copied inside the same repository; and the exact paths that stay after a failed install and its uninstall.
 - Doctor: each status that the table in section 14.7 defines, with `nodeVersion` injected through the context.

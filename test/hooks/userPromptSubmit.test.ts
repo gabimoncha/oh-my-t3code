@@ -16,6 +16,17 @@ const MATCHES: string[] = [
   "line one\nulw",
   "`code` then ulw",
   "\"quoted\" ulw",
+  "no ulw here, but ultrawork this",
+  "know ulw",
+  "cannot\nulw",
+  "not now. ulw",
+  "do not touch the build script, ulw",
+  "ulw, don't forget tests",
+  "no problem, ulw add a flag",
+  "not one two three ulw",
+  "no\u00a0ulw",
+  "no\nulw",
+  "ulw explain this <task-notification> tag",
 ];
 
 const MISSES: string[] = [
@@ -42,14 +53,36 @@ const MISSES: string[] = [
   "text before <!-- omt-brief v1 --> ultrawork",
   "Act as the implementation sub-agent. ulw",
   "/omt-ulw add a flag",
+  "do not use ultrawork",
+  "don't ulw this",
+  "don’t ulw this",
+  "dont ulw",
+  "no ulw here",
+  "without ultrawork",
+  "never use ulw",
+  "Don't run the ulw loop",
+  "NOT ULTRAWORK",
+  "not one two ulw",
+  "no ulw ulw",
+  "<task-notification>\n<task-id>w43cdy93b</task-id>\n<status>completed</status>\n<summary>Workflow done</summary>\n<result>The hook armed on 'ulw add a flag'. Then ulw ran.</result>\n</task-notification>",
+  "  \n<task-notification>\n<status>completed</status>\n<result>Quoted 'ulw add a flag' and a bare ulw.</result>\n</task-notification>",
+  "\n<task-notification><result>ulw</result></task-notification>",
 ];
 
 test("detectUltrawork matches the bare words", () => {
   for (const prompt of MATCHES) assert.equal(detectUltrawork(prompt), true, JSON.stringify(prompt));
 });
 
-test("detectUltrawork ignores code, quotes, blockquotes, word parts, and child briefs", () => {
+test("detectUltrawork ignores code, quotes, blockquotes, word parts, negations, child briefs, and task notifications", () => {
   for (const prompt of MISSES) assert.equal(detectUltrawork(prompt), false, JSON.stringify(prompt));
+});
+
+test("detectUltrawork checks a 200,000-character negated prompt in under 1,000 ms", () => {
+  const prompt = "no ulw ".repeat(Math.ceil(200_000 / 7));
+  assert.ok(prompt.length >= 200_000);
+  const started = performance.now();
+  assert.equal(detectUltrawork(prompt), false);
+  assert.ok(performance.now() - started < 1000);
 });
 
 test("an unclosed fence hides the rest of the prompt", () => {

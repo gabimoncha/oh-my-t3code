@@ -1,7 +1,34 @@
 import type { CliContext } from "../types.ts";
 
 const WORD_RE = /(?<![\p{L}\p{N}_\-/$])(?:ulw|ultrawork)(?![\p{L}\p{N}_\-/$])/iu;
+const KEYWORD_RE = new RegExp(WORD_RE.source, "giu");
+const NEGATOR_RE = /(?<![\p{L}\p{N}_])(?:no|not|never|without|dont|don['’]t)$/iu;
+const WINDOW_CHAR_RE = /^[\p{L}\p{N}'’]$/u;
 const FENCE_RE = /^ {0,3}(`{3,}|~{3,})/;
+
+function charBefore(text: string, end: number): string {
+  const low = text.charCodeAt(end - 1);
+  const high = text.charCodeAt(end - 2);
+  if (low >= 0xdc00 && low <= 0xdfff && high >= 0xd800 && high <= 0xdbff) return text.slice(end - 2, end);
+  return text.slice(end - 1, end);
+}
+
+// Looks back over at most three words. Each word is in the window of at most three matches, so detection stays linear in the prompt length.
+function isNegated(text: string, index: number): boolean {
+  let pos = index;
+  for (let words = 0; words < 3; words++) {
+    const sepEnd = pos;
+    while (pos > 0 && (text[pos - 1] === " " || text[pos - 1] === "\t")) pos--;
+    if (pos === sepEnd) return false;
+    const wordEnd = pos;
+    for (let ch = charBefore(text, pos); pos > 0 && WINDOW_CHAR_RE.test(ch); ch = charBefore(text, pos)) {
+      pos -= ch.length;
+    }
+    if (pos === wordEnd) return false;
+    if (NEGATOR_RE.test(text.slice(Math.max(0, pos - 2), wordEnd))) return true;
+  }
+  return false;
+}
 
 function stripIgnored(prompt: string): string {
   const kept: string[] = [];
@@ -31,7 +58,12 @@ export function detectUltrawork(prompt: string): boolean {
   const start = prompt.trimStart();
   if (start.startsWith("Act as the ")) return false;
   if (start.startsWith("/omt-ulw")) return false;
-  return WORD_RE.test(stripIgnored(prompt));
+  if (start.startsWith("<task-notification>")) return false;
+  const text = stripIgnored(prompt);
+  for (const match of text.matchAll(KEYWORD_RE)) {
+    if (!isNegated(text, match.index)) return true;
+  }
+  return false;
 }
 
 export function ultraworkContext(): string {
