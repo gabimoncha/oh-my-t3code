@@ -1,12 +1,31 @@
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { accessSync, constants, mkdirSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { TestContext } from "node:test";
 import type { CliContext } from "../src/types.ts";
 
 export const PACKAGE_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 export const CLI_PATH = join(PACKAGE_ROOT, "src", "cli.ts");
+
+// The absolute path of a tool on the real PATH, skipping version-manager shims, which can loop
+// when HOME is a temp directory. Tests that set a temp HOME call tools by this path.
+export function findTool(name: string, fallback: string): string {
+  for (const dir of (process.env.PATH ?? "").split(delimiter)) {
+    if (dir === "" || /[/\\]shims$/.test(dir)) continue;
+    const path = join(dir, name);
+    try {
+      if (!statSync(path).isFile()) continue;
+      accessSync(path, constants.X_OK);
+      return path;
+    } catch {
+      // Not in this directory.
+    }
+  }
+  return fallback;
+}
+
+export const GIT = findTool("git", "/usr/bin/git");
 
 export function makeTempDir(prefix = "omt-test-"): { path: string; remove: () => void } {
   const path = mkdtempSync(join(tmpdir(), prefix));

@@ -23,7 +23,7 @@ Each skill name works as a composer mention: `$omt-ulw` becomes `/omt-ulw` in Cl
 
 ## CLI cheat sheet
 
-`omt` is on `PATH` after `pnpm install`, `pnpm build`, and `pnpm link --global` in a clone of the repository, or, when the package is published, after `npm install -g oh-my-t3code`. Run `omt --version` to check. Without it, follow the manual steps in [roles.md](references/roles.md) and [brief.md](references/brief.md).
+To find the CLI (`omt`, `.omt/bin/omt`, or the manual steps), follow [The CLI](references/delegation.md#the-cli).
 
 | Command | Prints |
 | --- | --- |

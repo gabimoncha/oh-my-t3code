@@ -295,11 +295,11 @@ test("--hooks adds the entry and keeps every other setting", async (t) => {
       ],
     },
   });
-  assert.equal(text, `${JSON.stringify(JSON.parse(text), null, 2)}\n`);
+  assert.equal(text, `${JSON.stringify(JSON.parse(text), null, 4)}\n`, "the edit keeps the file's 4-space indentation");
   const backup = join(f.backups, STAMP, "claude-settings.json");
   assert.equal(readFileSync(backup, "utf8"), originalText);
   const manifest = readJson(f.manifest);
-  assert.deepEqual(manifest.hooks, [{ kind: "claude-user-prompt-submit", settingsPath: f.settings, command }]);
+  assert.deepEqual(manifest.hooks, [{ kind: "claude-user-prompt-submit", settingsPath: f.settings, command, backup }]);
   assert.deepEqual(manifest.backups, [backup]);
 });
 

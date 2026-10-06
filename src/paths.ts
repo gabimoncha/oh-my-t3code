@@ -69,6 +69,22 @@ export function evidenceDir(root: string): string {
   return join(omtDir(root), "evidence");
 }
 
+export function projectManifestPath(root: string): string {
+  return join(omtDir(root), "install.json");
+}
+
+export function projectShimPath(root: string): string {
+  return join(omtDir(root), "bin", "omt");
+}
+
+export function projectSkillRoots(root: string): { agents: string; claude: string } {
+  return { agents: join(root, ".agents", "skills"), claude: join(root, ".claude", "skills") };
+}
+
+export function projectClaudeSettingsPath(root: string): string {
+  return join(root, ".claude", "settings.local.json");
+}
+
 export function claudeConfigDir(env: Env, homedir: string): string {
   return envPath(env, "CLAUDE_CONFIG_DIR") ?? join(homedir, ".claude");
 }

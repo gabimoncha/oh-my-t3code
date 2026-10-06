@@ -43,7 +43,7 @@ Done when: the objective, at least one failable done condition, the tier, and th
 
 ### 2. Route
 
-Run `omt roles`. Without the CLI, use the table in [roles.md](../omt/references/roles.md#resolve-by-hand).
+Run `omt roles` ([The CLI](../omt/references/delegation.md#the-cli) says where to find it). Without the CLI, use the table in [roles.md](../omt/references/roles.md#resolve-by-hand).
 
 Done when: you know a target for each role you plan to use, or you report the role that is `unavailable` and why.
 

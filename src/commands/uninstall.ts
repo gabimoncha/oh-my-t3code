@@ -7,17 +7,20 @@ import { usageError } from "../util/errors.ts";
 
 export const summary = "Remove the skills, links, and hooks that omt installed.";
 
-export const usage = `Usage: omt uninstall [--yes] [--dry-run] [--purge] [--force]
+export const usage = `Usage: omt uninstall [--project] [--yes] [--dry-run] [--purge] [--force]
 
 Remove the managed skills, links, and hook entries that omt installed, and
 the install manifest. Paths that omt does not manage stay unchanged. A
 managed skill that you edited stays, with the links that point at it.
 
 Options:
+  --project         remove the project install of the current project:
+                    also the CLI shim and the git exclude block
   --yes             apply the plan without asking
   --dry-run         print the plan and write nothing
   --purge           also remove the user config, and the config directory
-                    when it is then empty
+                    when it is then empty; with --project, also remove an
+                    edited .omt/config.jsonc that the install created
   --force           back up locally modified skills, then remove them
   -h, --help        print this help
 `;
@@ -28,9 +31,14 @@ export const run: CommandRun = async (ctx) => {
     "dry-run": { type: "boolean" },
     purge: { type: "boolean" },
     force: { type: "boolean" },
+    project: { type: "boolean" },
   });
   if (positionals.length > 0) throw usageError(`unexpected argument "${positionals[0]}"`);
-  const plan = await buildUninstallPlan(ctx, { purge: values.purge === true, force: values.force === true });
+  const plan = await buildUninstallPlan(ctx, {
+    purge: values.purge === true,
+    force: values.force === true,
+    scope: values.project === true ? "project" : "user",
+  });
 
   ctx.stdout(renderUninstallPlan(plan));
   if (!uninstallHasChanges(plan)) {

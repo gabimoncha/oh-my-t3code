@@ -2,6 +2,10 @@
 
 The T3 rules for every omt skill. The T3 MCP server key is `t3-code`. Skills name its tools by base name (`delegate_task`, `task_status`). Your harness may add a prefix, such as `mcp__t3-code__delegate_task` or `mcp__t3_code__delegate_task`: call the tool under the name your tool list shows.
 
+## The CLI
+
+Call the CLI as `omt`. When `command -v omt` finds nothing, use `.omt/bin/omt` from the project root, which `omt install --project` creates. Without either, follow the manual steps in [roles.md](roles.md) and [brief.md](brief.md).
+
 ## What a child is
 
 - A child gets only the task text, after one line T3 adds: `Act as the <role> sub-agent for this task.` It does not see your conversation. The brief is its full context ([brief.md](brief.md)).

@@ -321,6 +321,10 @@ export class OmtError extends Error {
 | `plansDir(root)` | `<root>/.omt/plans` |
 | `ledgerPath(root)` | `<root>/.omt/ledger.jsonl` |
 | `evidenceDir(root)` | `<root>/.omt/evidence` |
+| `projectManifestPath(root)` | `<root>/.omt/install.json` |
+| `projectShimPath(root)` | `<root>/.omt/bin/omt` |
+| `projectSkillRoots(root)` | `{ agents: <root>/.agents/skills, claude: <root>/.claude/skills }` |
+| `projectClaudeSettingsPath(root)` | `<root>/.claude/settings.local.json` |
 | `claudeConfigDir(env, homedir)` | `$CLAUDE_CONFIG_DIR`, else `<home>/.claude` |
 | `skillRoots(env, homedir)` | `{ agents: <home>/.agents/skills, claude: <claudeConfigDir>/skills, gemini: <home>/.gemini/config/skills }` |
 | `claudeSettingsPath(env, homedir)` | `<claudeConfigDir>/settings.json` |
@@ -337,9 +341,9 @@ Argument parsing uses `node:util` `parseArgs` with `strict: true` and `allowPosi
 
 | Command | Synopsis |
 | --- | --- |
-| `install` | `omt install [--targets <list>] [--hooks] [--yes] [--dry-run] [--force]` |
-| `uninstall` | `omt uninstall [--yes] [--dry-run] [--purge] [--force]` |
-| `doctor` | `omt doctor [--capabilities <file>] [--json]` |
+| `install` | `omt install [--project [--no-git-exclude]] [--targets <list>] [--hooks] [--yes] [--dry-run] [--force]` |
+| `uninstall` | `omt uninstall [--project] [--yes] [--dry-run] [--purge] [--force]` |
+| `doctor` | `omt doctor [--project] [--capabilities <file>] [--json]` |
 | `init` | `omt init` |
 | `config` | `omt config [show \| path \| validate \| init] [--json] [--defaults] [--force]` |
 | `roles` | `omt roles [--capabilities <file>] [--role <name>]... [--json]` |
@@ -350,6 +354,8 @@ Argument parsing uses `node:util` `parseArgs` with `strict: true` and `allowPosi
 | `hook` | `omt hook user-prompt-submit` |
 
 In every flag that takes a file, `-` means standard input.
+
+`--project` selects project scope for `install`, `uninstall`, and `doctor` (section 14.8). Without it, these commands work in user scope. `--no-git-exclude` without `--project` is a usage error.
 
 `--capabilities` is optional everywhere. Without it, routing is `unverified`: the CLI trusts the chain, and T3 validates the target when `delegate_task` runs. The skills treat that as the normal path and fall back to the next rung on a typed T3 error. To verify, the agent saves the `orchestrator_capabilities` result to a file. Claude Code saves a large tool result to a file by itself and reports the path. On ACP providers, `acp-mcp-call orchestrator_capabilities '{}' > caps.json` writes it. Any agent can also write a trimmed copy that keeps only the providers and models its chains name.
 
@@ -366,7 +372,7 @@ Creates, in the project root, only what is missing:
 
 - `.omt/config.jsonc` with the starter project config (section 6.5)
 - `.omt/plans/`
-- `.omt/.gitignore` with the two lines `ledger.jsonl` and `evidence/`
+- `.omt/.gitignore` with the five lines `ledger.jsonl`, `evidence/`, `bin/`, `install.json`, and `backups/`
 
 It prints one line per path: `create <path>` or `exists <path>`. It never overwrites a file.
 
@@ -934,7 +940,7 @@ The hash is SHA-256 over the sorted relative paths and the contents of a skill d
 4. Without `--yes`: when `isTTY` is true, ask `Apply this plan? [y/N] ` and continue only on `y` or `yes`. Any other answer prints `Nothing was changed.` and exits 1. When it is false, print `Re-run with --yes to apply.` and exit 1. Nothing is written in either case.
 5. Apply:
    - For each `replace`, move the existing path to `<configDir>/backups/<YYYYMMDDHHmmss>/<root name>/<name>`. When the stamp directory already exists, use `<YYYYMMDDHHmmss>-<n>` with the lowest free `n`. Backups never stay inside a skill root, because Cursor and OpenCode scan skill roots recursively and would load a backup as a duplicate skill.
-   - For each `create`, `update`, or `replace` copy, build the new directory at `<parent of the agents root>/.omt-tmp-<random>`, write the marker into it, then move it into place. For an existing target, first rename it to `<parent of the agents root>/.omt-old-<random>`, then rename the new directory in, then delete the old one. Temp directories never sit inside a skill root.
+   - For each `create`, `update`, or `replace` copy, build the new directory at `<parent of the agents root>/.omt-tmp-<random>`, write the marker into it, then move it into place. For an existing target, first rename it to `<parent of the agents root>/.omt-old-<random>`, then rename the new directory in, then delete the old one. Temp directories never sit inside a skill root. When the delete of a scratch directory fails, the run stops with an error that names the directory.
    - When a swap fails, delete the temp directory and move the old directory back, so the installed skill stays in place.
    - Create the links, write the starter user config, add the hook, and write the manifest.
 6. Print a summary and the next steps: restart agent sessions in T3 so they load the new skills, then try `$omt-ulw <task>`.
@@ -949,15 +955,21 @@ The hook command is:
 "<nodePath>" "<cliPath>" hook user-prompt-submit # oh-my-t3code
 ```
 
+In project scope, the command calls the shim instead, so one file holds the node and CLI paths:
+
+```text
+"<root>/.omt/bin/omt" hook user-prompt-submit # oh-my-t3code
+```
+
 The trailing comment is the signature that marks the entry as managed. `--hooks` is refused, with exit 1 and a hint to install the package globally, when `cliPath` is inside a temp directory (`os.tmpdir()`) an npx cache (a path that contains `/_npx/`), or a pnpm dlx cache (a path that contains `/dlx/` under a `pnpm` directory). Such a path can disappear.
 
 The installer edits `claudeSettingsPath()`:
 
 1. A missing file counts as `{}`. A file that is not valid JSON is an error, and the installer changes nothing.
 2. Under `hooks.UserPromptSubmit`, add `{ "hooks": [{ "type": "command", "command": "<command>", "timeout": 10 }] }`. When an entry with the signature exists, replace its command instead.
-3. Keep every other key and entry unchanged. Serialize with 2-space indentation and a final newline.
+3. Keep every other key and entry unchanged. Serialize an existing file in its own style: detect the indentation from the first indented line (2 spaces, 4 spaces, or a tab), and keep compact JSON compact. The write serializes the whole file in that indentation, so a mixed layout, such as inline arrays in an indented file, becomes fully indented. An empty object such as `{}` shows no style and gets 2-space indentation. Keep a final newline only when the old file had one, and keep CRLF line ends. A new file gets 2-space indentation and a final newline.
 4. When the new content equals the old content, write nothing. This is the `unchanged` case.
-5. Otherwise back up the old file, with mode 0600, to `<configDir>/backups/<YYYYMMDDHHmmss>/claude-settings.json`, then write. The new `settings.json` keeps the mode of the old one. When `settings.json` is a symlink, write next to its real path and rename onto the real path, so the symlink stays in place.
+5. Otherwise back up the old file, with mode 0600, to `<configDir>/backups/<YYYYMMDDHHmmss>/claude-settings.json`, then write. A missing file needs no backup. When this write adds the entry to an existing file (the `create` action), the manifest hook records the backup as `backup`. An `update` backup is not recorded there, because it holds an older omt entry. In project scope an `update` makes no backup when the file is in the layout that omt writes, that is, when serializing the parsed file in its detected style gives its exact bytes. Then the rewrite changes only the command of the omt entry. A file in any other layout gets the backup, so its original bytes stay recoverable. A settings path that is a dangling symlink counts as a missing file, and the write creates the link's target. The new `settings.json` keeps the mode of the old one. When `settings.json` is a symlink, write next to its real path and rename onto the real path, so the symlink stays in place.
 
 Verify the hook schema against the current Claude Code hooks documentation before you write this code.
 
@@ -974,24 +986,25 @@ Verify the hook schema against the current Claude Code hooks documentation befor
   "skills": ["omt", "omt-ulw"],
   "links": [{ "path": "<link path>", "target": "<relative target>" }],
   "config": { "path": "<user config path>", "created": true },
-  "hooks": [{ "kind": "claude-user-prompt-submit", "settingsPath": "<path>", "command": "<command>" }],
+  "hooks": [{ "kind": "claude-user-prompt-submit", "settingsPath": "<path>", "command": "<command>", "created": true, "backup": "<path>" }],
   "backups": ["<path>"]
 }
 ```
 
-A new install merges into an existing manifest.
+A new install merges into an existing manifest. `created` is present, and true, when an install created the settings file. A later run keeps it. `backup` is the install-time backup of the settings file (section 14.4). A later run keeps the old value when it records none.
 
 ### 14.6 Uninstall
 
 `omt uninstall` builds its plan from the manifest and from a scan:
 
 - Remove each link in the Claude and Gemini roots that is a symlink resolving to a managed directory, except a link to a kept skill.
-- Remove each managed skill directory in the agents root. A locally modified skill (its hash differs from the marker hash) is planned as `keep` with `(locally modified)` and stays in place. With `--force`, it is moved to `<configDir>/backups/<stamp>/agents/<name>` instead.
-- Remove each hook entry with the signature, with the same backup and symlink rules as section 14.4.
+- Remove each managed skill directory in the agents root. In project scope, a skill or link that was in place before the install stays (section 14.8). A locally modified skill (its hash differs from the marker hash) is planned as `keep` with `(locally modified)` and stays in place. With `--force`, it is moved to `<configDir>/backups/<stamp>/agents/<name>` instead.
+- Remove each hook entry with the signature, with the same style, backup, and symlink rules as section 14.4. When the manifest says that an install created the settings file, and removing the entry leaves `{}`, delete the file without a backup. When the settings path is a symlink, delete the link's target, which the install created, and keep the link.
+- Exact restore: when the manifest hook has a `backup`, and the JSON left after removing the entry deep-equals the parsed backup, write the backup's bytes back exactly and make no new backup. Then delete that backup, and remove its stamp directory and `backups/` when they become empty. Otherwise write the edited JSON in the file's own style, after a new backup.
 - Keep the user config unless `--purge` is given. `--purge` also removes the config directory when it is then empty.
 - Remove the manifest.
 
-The plan lists the user config and the manifest only when they exist. It never removes a path that is not managed. It leaves the skill roots in place, even when they are empty. A manifest or Claude settings file that is not valid JSON stops the command before any change. The confirmation flow is the same as for install.
+The plan lists the user config and the manifest only when they exist. Two names of one directory or file (a symlink, or `/tmp` and `/private/tmp`) count as one, so the plan lists each skill, link, and settings file once. It never removes a path that is not managed. It leaves the skill roots in place, even when they are empty. A manifest or Claude settings file that is not valid JSON stops the command before any change. The confirmation flow is the same as for install.
 
 ### 14.7 Doctor
 
@@ -1009,7 +1022,139 @@ The plan lists the user config and the manifest only when they exist. It never r
 | `homes` | every T3 `claudeAgent` instance that sets `config.homePath` has the skills linked in `<homePath>/skills` | an instance with a `homePath` that lacks the skills | | no instance sets a `homePath` |
 | `roles` | every role resolves (only with `--capabilities`) | some roles are unavailable | the `execute` role is unavailable | |
 
+With `--project`, doctor checks the project scope (section 14.8). It runs `node` and `config` as above, and `skills`, `links`, and `hooks` against the project paths. It replaces `path` and `homes` with these checks, and keeps `t3` and `roles`:
+
+| Id | PASS | WARN | FAIL | INFO |
+| --- | --- | --- | --- | --- |
+| `shim` | `.omt/bin/omt` is present, carries the signature, is executable, and its node and CLI paths exist | the shim is missing or not managed, or its recorded node path does not exist (the shim falls back to `node` on `PATH`) | the shim's CLI path does not exist, or the shim is not executable | |
+| `exclude` | the exclude file holds the block of this root | the exclude file has no block for this root, or it holds a block for a root that no longer exists | | no `.git` in the root or a parent directory, or the last install ran with `--no-git-exclude` and there is no block |
+
+In project scope, every install hint names the running CLI, `node <cliPath> install --project`, because `omt` may not be on `PATH` and the shim may be broken.
+
 The `hooks` check reads the settings paths from the manifest. With no manifest hook, it looks for a signed entry in `claudeSettingsPath()`. The `homes` check reads `providerInstances` from `t3SettingsPath()` and never writes it. It looks at instances whose `driver` is `claudeAgent`, expands a leading `~`, and accepts a link or a managed copy for each skill. The `roles` check is left out without `--capabilities`. The status set is `PASS`, `WARN`, `FAIL`, and `INFO`. `--json` prints `{ "ok": boolean, "checks": [{ "id", "status", "message" }] }`, where `ok` is false when any check fails. The exit code is 1 when any check fails.
+
+### 14.8 Project scope
+
+`--project` installs into one repository, so the owner can try oh-my-t3code there without touching the global skill roots, the global Claude settings, or `PATH`. The project root is `findProjectRoot(cwd)`. `install`, `uninstall`, and `doctor` with `--project` refuse, with exit 2 and a hint, a root that is the home directory, or whose skill roots, `settings.local.json`, or `.omt` are the user-scope agents root, Claude skills root, `claudeSettingsPath()`, or `configDir()`. That happens in the home directory, or below it when the home directory holds `.git` or `.omt`. Project scope reuses the planning, apply, backup, marker, hash, hook, and manifest rules of sections 14.2 to 14.6, with these paths:
+
+| Item | User scope | Project scope |
+| --- | --- | --- |
+| Skill copies | `~/.agents/skills/<name>` | `<root>/.agents/skills/<name>` |
+| Claude links | `<claudeConfigDir>/skills/<name>` | `<root>/.claude/skills/<name>`, relative link `../../.agents/skills/<name>` |
+| Gemini links | optional | none |
+| Config | `<configDir>/config.jsonc` (user starter) | `<root>/.omt/config.jsonc` (project starter), plus `.omt/plans/` |
+| Hook (`--hooks`) | `<claudeConfigDir>/settings.json` | `<root>/.claude/settings.local.json` |
+| Backups | `<configDir>/backups/<stamp>/...` | `<root>/.omt/backups/<stamp>/...` |
+| Manifest | `<configDir>/install.json` | `<root>/.omt/install.json` |
+| CLI shim | none | `<root>/.omt/bin/omt` |
+| Git exclude | none | a managed block in the repository's `info/exclude` |
+
+Skills and links that were in place before the install. A repository can track a setup that `--no-git-exclude` wrote, or hold a copy of a skill that the user made. A skill or link counts as existing when the plan finds it in place (`unchanged` or `update`) and no earlier install of this root created it. The manifest lists the existing skill names and link paths as `existing`, and its `skills` and `links` lists name only the skills and links that an install created or replaced. The block does not list an existing path, so git sees it as before the install. The uninstall keeps an existing skill or link with `keep (existed before the install)`, also with `--force`. So a clone of a committed setup can run `install --project` to get the shim, and `uninstall --project` leaves the tracked setup in place. When the install updates an outdated existing skill, git shows its files as modified, and the uninstall keeps the updated copy. Without a manifest, the uninstall cannot know which paths existed, and it removes every managed skill and link.
+
+`--targets` with `gemini` and `--project` is a usage error (exit 2). Antigravity reads `<root>/.agents/skills` directly. The default targets are `agents,claude`.
+
+The shim is `<root>/.omt/bin/omt`, with mode 0755:
+
+```sh
+#!/bin/sh
+# oh-my-t3code project shim
+node="<nodePath>"
+[ -x "$node" ] || node=node
+exec "$node" "<cliPath>" "$@"
+```
+
+The second line is the signature. The shim tries the recorded node first and falls back to `node` on `PATH`, so a Node upgrade does not break it or the project hook. The shim is `create` (absent), `update` (managed, different content), `unchanged`, or `conflict` (a path without the signature). With `--force`, a conflict becomes `replace`, and the old file moves to `<root>/.omt/backups/<stamp>/bin/omt`. `--project` is refused with exit 1 and a hint when `cliPath` is in a temp directory or a package-runner cache, with the check of section 14.4. A node or CLI path that contains `"`, `$`, a backquote, a backslash, or a newline is refused too.
+
+`.omt/.gitignore` holds the lines `ledger.jsonl`, `evidence/`, `bin/`, `install.json`, and `backups/`. When the file is missing, the install creates it with these lines. A dangling symlink at that path is the user's, the same as a dangling settings link: the install leaves it alone, with `keep (a dangling symlink; left alone)`, and never writes its target. With the git exclude step on, the install never edits an existing `.omt/.gitignore`, because the repository may track it. With `--no-git-exclude`, a setup meant to be committed, the install appends the missing lines and never removes a line. The manifest then records the file's old content and the hash of what the install wrote, as `gitignoreRestore`, and the uninstall writes the old content back while the file still has that hash.
+
+The git exclude step is on by default. `--no-git-exclude` turns it off: the install writes no block, removes a block that an earlier install wrote for this root (the plan shows `remove managed block in <file>  (--no-git-exclude)`), and the manifest records `"gitExcludeOff": true`. The installer finds the exclude file without running git:
+
+- Walk up from the root to the nearest directory `<top>` that holds `.git`. `<top>` is the repository top level, which is the root itself or a parent of it (a package in a monorepo).
+- When `<top>/.git` is a directory, the file is `<top>/.git/info/exclude`.
+- When `<top>/.git` is a file with a `gitdir: <path>` line (a worktree), the git directory is that path, resolved from `<top>`. When the git directory holds a `commondir` file, the common directory is its content, resolved from the git directory; otherwise it is the git directory. The file is `<common dir>/info/exclude`.
+- When no `.git` is found, the step is skipped. The plan shows `skip` with the reason, and the install prints a `note:` line.
+
+Each entry is anchored at `<top>`: the root's path relative to `<top>` prefixes it, as in `/pkg/.agents/skills/omt/`. A backslash goes before each `\`, `[`, `]`, `*`, and `?` in that path, and before a trailing space, so git reads the path literally. An entry starts with `/`, so a leading `!` or `#` cannot occur.
+
+Worktrees share one exclude file, so each root has its own block, with the root in both markers. The install replaces the block of its root in place, and every other line of the file stays unchanged. A new block goes at the end of the file:
+
+```text
+# >>> oh-my-t3code project install: <root> >>>
+/.agents/skills/<name>/
+/.claude/skills/<name>
+/.agents/.omt-*/
+/.omt/bin/
+/.omt/install.json
+/.omt/backups/
+/.omt/config.jsonc
+/.omt/.gitignore
+/.claude/settings.local.json
+# <<< oh-my-t3code project install: <root> <<<
+```
+
+The block runs from a BEGIN marker of the root to the next END marker of the root. A BEGIN marker without an END marker after it is no block: the install appends a new block, and no edit ever deletes to the end of the file.
+
+The block always lists each skill copy and each link that the manifest records, except the existing ones, the scratch directories `/.agents/.omt-*/` of section 14.3, then `/.omt/bin/`, `/.omt/install.json`, and `/.omt/backups/`. It also lists each file that an install created: `/.omt/config.jsonc`, `/.omt/.gitignore`, and `/.claude/settings.local.json`. It lists no directory that only holds those entries, such as `/.omt/` or `/.omt/plans/`, because git never shows an empty directory. So a plan that the user writes into `.omt/plans/` shows in git, and so does a new file in `.omt/` of another worktree.
+
+So after `install --project`, with or without `--hooks`, `git status --porcelain` shows nothing new. The one exception is a `settings.local.json` that the repository tracks: it shows as modified while the hook is installed. The manifest records what an install created, so a later run keeps the same block.
+
+Git applies the common exclude file to every worktree, with each entry anchored at that worktree's top level. So the block of one worktree also hides the same paths in the other worktrees, such as a `.omt/config.jsonc` that the user creates there. In a repository with worktrees, the plan marks the step `(shared by all worktrees)`. The install writes only files that git does not track, and `git worktree add` does not copy those, so each worktree needs its own `install --project`.
+
+Stale blocks. Install and uninstall also replace or remove a block that belongs to no live project:
+
+- the block of another spelling of the same root, a path whose real path equals the root's real path (a symlink, or `/tmp` and `/private/tmp`);
+- the block of a root that no longer exists, such as a removed worktree or a moved clone;
+- the block of the root that the manifest names, when it differs from the current root (a copied or moved project), and that root keeps no install of its own in this exclude file.
+
+Doctor warns about a block whose root no longer exists.
+
+The manifest records how the install changed the exclude file, as `excludeFile`: `created` (the file was missing), `dirCreated` (its `info/` directory was missing), and `addedNewline` (the install added a final newline before it appended the block). When the uninstall removes the last block, it removes that newline again, deletes a file that the install created and that is then empty, and removes an `info/` directory that the install created when it is empty. When the exclude file already holds the block of another root, such as another worktree, the install copies `excludeFile` from the manifest of that root, when that manifest names the same exclude file. Every root then holds the facts of the first install, so whichever root removes the last block undoes them. So the exclude file gets its exact bytes back, in any uninstall order.
+
+When the install makes a backup in `<root>/.omt/backups/`, it also writes `<root>/.omt/backups/.gitignore` with the single line `*` when that file is missing, so a backup never shows in git, even after an uninstall. A run that makes no backup does not write it. The uninstall writes it too when it makes a backup.
+
+`settingsCreated` is true only when nothing was at the settings path, so a dangling symlink there stays the user's: the block does not list it, and the uninstall keeps the link (section 14.6).
+
+Write order: the install writes the exclude block first, then a provisional manifest that lists what the run will create (the `dirs`, the `files` with their planned hashes, including `.omt/backups/.gitignore` when the run will make a backup, `omtDirCreated`, and `settingsCreated`), and only then any other path. At the end it rewrites the manifest with what it did create. So a run that fails midway leaves no file that git shows or that the next run takes for the user's. When the exclude write fails, the install stops before any other write, and the hint names `--no-git-exclude`. The uninstall uses the mirror order: it changes the exclude block last, after every delete and after the manifest. A delete that fails stops the run with an error that names the path and says to run the command again; the block still hides every path that stays, and the next run finishes the work.
+
+The exclude file and `.omt/.gitignore` can be symlinks, for example from a dotfiles setup. Each write goes to the real path (section 1), so the link stays a link. When the exact-bytes rule would delete a file that the install created and that is now a symlink, the uninstall writes the empty content to the target and keeps the link. Install and uninstall in project scope first delete the scratch directories `<root>/.agents/.omt-tmp-*` and `.omt-old-*` that an interrupted run left; the plan lists each one as `remove <path>  (left by an interrupted run)`.
+
+The manifest adds `"scope": "project"`, `"root": "<root>"`, and:
+
+```json
+"project": {
+  "omtDirCreated": true,
+  "settingsCreated": true,
+  "shim": "<shim path>",
+  "gitExclude": "<exclude path>",
+  "excludeFile": { "created": false, "dirCreated": false, "addedNewline": false },
+  "existing": { "skills": ["omt"], "links": ["<root>/.claude/skills/omt"] },
+  "files": [{ "path": "<root>/.omt/config.jsonc", "sha256": "<hash of the content the install wrote>" }],
+  "dirs": ["<root>/.omt", "<root>/.omt/plans", "<root>/.agents", "<root>/.agents/skills", "<root>/.claude", "<root>/.claude/skills"]
+}
+```
+
+`files` lists `.omt/config.jsonc`, `.omt/.gitignore`, and `.omt/backups/.gitignore` when an install created them. `dirs` lists each of `.omt`, `.omt/plans`, `.omt/bin`, `.omt/backups`, `.agents`, `.agents/skills`, `.claude`, and `.claude/skills` that was absent before an install and present after it. A later run merges both lists into the old ones. `gitExcludeOff` and `gitignoreRestore` are present only after a `--no-git-exclude` install. `existing` is present only when an install found an existing skill or link.
+
+Every command reads a project manifest relative to the current root. Each recorded path inside the recorded `root` maps to the same relative path under the current root, and each recorded path outside it is dropped. Then only the paths that a project install writes stay: `skillsRoot` only when it is `<root>/.agents/skills`, skill names and link names that are one path segment, links and `existing` links directly in `<root>/.claude/skills`, the config only at `<root>/.omt/config.jsonc`, the shim only at `<root>/.omt/bin/omt`, hooks only for `<root>/.claude/settings.local.json`, hook `backup` and `backups` paths only under `<root>/.omt/backups/`, `files` only for `.omt/.gitignore`, `.omt/config.jsonc`, and `.omt/backups/.gitignore`, and `dirs` only for the directories that the `dirs` list below names. So a copied or moved clone, or a manifest that the repository tracks or that someone copied in, never makes a run act on another project, on the user install, or on a project file that no install writes. The exclude file always comes from the current root.
+
+`omt uninstall --project` follows section 14.6 with the project paths, and also:
+
+- It removes the shim when it carries the signature, and the manifest.
+- It keeps each existing skill and link (see above). It removes only the links whose real target is a directory in `<root>/.agents/skills`, so a link to the user install, such as `<root>/.claude/skills/x -> ~/.agents/skills/x`, stays.
+- It removes the hook entry from `settings.local.json`, with the exact-restore rule of section 14.6. When an install created that file and only `{}` is left, it deletes the file without a backup.
+- It rewrites the root's exclude block with only the paths that stay: each kept skill and its kept link (not an existing one), each kept file that an install created, an edited config that an install created, a `settings.local.json` that an install created and that stays because other keys are left in it (Claude Code writes permissions there), and the manifest when it stays. It removes the block when nothing stays, with the exact-bytes rule above, and it removes stale blocks.
+- It removes each file in the manifest `files` list while its SHA-256 equals the recorded hash. A created `.omt/.gitignore` that was edited stays, with `keep (edited after the install)`. A created `.omt/.gitignore` also stays while `.omt/ledger.jsonl` or `.omt/evidence/` exists, with `keep (keeps the ledger and evidence that stay out of git)`, and the reduced block hides it.
+- With `gitignoreRestore`, it writes the old `.omt/.gitignore` back while the file still has the recorded hash, with `update (removes the lines that the install added)`. A created `.omt/config.jsonc` that was edited stays with `keep (edited after the install; add --purge to remove it)`, and `--purge` removes it. A config that no install created stays, with `keep (not created by omt install)`, also with `--purge`.
+- It removes `.omt/backups/.gitignore` when an install created it, it still holds what the install wrote, and it is the last file in `.omt/backups/`.
+- Then it removes each directory in the manifest `dirs` list when it is empty, in this order: `.omt/bin/`, `.omt/backups/`, `.omt/plans/`, `.agents/skills/`, `.agents/`, `.claude/skills/`, `.claude/`, `.omt/`. It never removes a directory that an install did not create, even an empty `.omt/bin/` or `.omt/backups/`.
+- It never removes the plans, the ledger, the evidence, or a backup other than the install-time backup that an exact restore wrote back.
+- When it keeps a locally modified skill, it keeps the manifest too, with `keep (a locally modified skill is kept)`, so that a later `uninstall --project --force` still knows the created directories.
+- When a file that an install created stays (a kept `.omt/.gitignore`, an edited created config, or a created `settings.local.json` with other keys left in it), it rewrites the manifest as a reduced manifest, with `keep (records the created files that stay)`. The reduced manifest lists no skill, link, hook, or backup. Its `files` lists the kept created files, `config` stays only for a kept created config, `settingsCreated` is true only while that settings file stays, and `omtDirCreated`, `gitExclude`, `excludeFile`, `existing`, and `dirs` stay as recorded. So a later install still counts these files as created and keeps their block entries, and a later uninstall keeps the same reduced block and every existing skill and link. When no created file stays, the uninstall removes the reduced manifest and the block. When the repository's exclude file holds no block of the root, as after a `--no-git-exclude` install, no block can hide a reduced manifest, so the uninstall removes the manifest. The kept files then count as the user's.
+- It removes every hook entry that has the omt signature (section 14.6), also one that was in the settings file before the install, such as a tracked `settings.local.json` that holds the entry of another clone. Such a file shows as modified in git after the uninstall.
+
+So the project tree after `uninstall --project`, and the exclude file, are byte for byte as before the install, apart from data that the user created meanwhile (plans, ledger, evidence), what keeps that data out of git (`.omt/.gitignore` and a reduced block), the reduced manifest that records the created files that stay, the exception for an omt entry that was in the settings file before the install, and an existing skill that the install updated. A file that the user edited stays, with its block entry. A backup that the uninstall could not restore exactly stays in `.omt/backups/`, hidden from git by its `.gitignore`. A path that `install --force` replaced stays in `.omt/backups/<stamp>/` too, and the uninstall does not move it back. Git does not show it there, so a replaced path that git showed before the install is gone from `git status`.
+
+User scope and project scope never read or write each other's files.
 
 ## 15. Skills
 
@@ -1026,7 +1171,7 @@ The `hooks` check reads the settings paths from the manifest. With no manifest h
     allow_implicit_invocation: false
   ```
 
-- Skills call the CLI as `omt` on `PATH`. That works after `npm install -g oh-my-t3code`, or `pnpm link --global` in a clone. When `omt` is not found, a skill falls back to the manual steps in `roles.md` and `brief.md`. Skills never use `npx`, which needs the network.
+- Skills call the CLI as `omt` on `PATH`. That works after `npm install -g oh-my-t3code`, or `pnpm link --global` in a clone. When `command -v omt` finds nothing, a skill uses `.omt/bin/omt` from the project root, which `omt install --project` creates. Without either, a skill falls back to the manual steps in `roles.md` and `brief.md`. The rule lives in the section "The CLI" of `skills/omt/references/delegation.md`. Skills never use `npx`, which needs the network.
 - Skills name T3 tools by their base names (`delegate_task`, `task_status`). The first skill text that names a tool says that harnesses may add a prefix, such as `mcp__t3-code__delegate_task`.
 - Shared reference lives in `skills/omt/references/`. Other skills link to it with relative paths such as `../omt/references/delegation.md`.
 - Every relative link in a skill must resolve to a file in the repository. A test checks this.
@@ -1081,9 +1226,10 @@ Required coverage:
 - Ledger: append, list, stats, a malformed line, and `requestId` sanitizing with round and attempt.
 - Hook: a detection matrix (inside a code block, inside quotes, `ulwx`, `$ulw`, `ULTRAWORK`, a prompt with `<!-- omt-brief`, a prompt that starts with `Act as the `, a prompt that starts with `/omt-ulw`), invalid JSON, and the output shape.
 - Install: create, idempotent rerun, conflict without and with `--force`, a locally modified managed skill, backups outside the skill roots, `--dry-run` and a declined prompt write nothing, non-TTY without `--yes`, roots that resolve to the same directory, hook add and update that keep other settings, an unchanged hook writes nothing, a symlinked `settings.json` stays a symlink, `--hooks` refused for a temp `cliPath`, uninstall removes only managed paths, and `--purge`.
+- Project install: the files of section 14.8, an idempotent rerun, `--dry-run`, the exclude file for a `.git` directory and a worktree `.git` file, block replacement, no `.git`, `--no-git-exclude` (also on a reinstall, and its `.omt/.gitignore` restore), the conditional `.omt` and `settings.local.json` lines, the hook in `settings.local.json`, uninstall with a locally modified skill and `--purge`, `--targets gemini` (exit 2), a temp `cliPath`, and the shim conflict and update. Also: a copied project, a moved clone round trip, a tracked manifest with paths outside the root, a symlinked path to the root, the home directory as the root (exit 2), a dangling settings symlink, a failed scratch delete, glob characters in a package path, worktrees, a block whose root is gone, the exact bytes of the exclude file, a kept created `settings.local.json`, and a kept ledger. Also: uninstall, reinstall, and a second uninstall after each kind of kept created file, each with an empty `git status`; an uninstall that fails midway; a symlinked exclude file and `.omt/.gitignore`; a crafted tracked manifest that names project files; a package copied inside the same repository; and the exact paths that stay after a failed install and its uninstall.
 - Doctor: each status that the table in section 14.7 defines, with `nodeVersion` injected through the context.
 - Skills: frontmatter rules, every relative link resolves, a persona file for every default role, a contract file for every result kind.
 - Schema: the committed schema equals the generated one, and it allows the same keys as the validator.
 - CLI: `--help`, `--version`, an unknown command (exit 2), and an unknown flag (exit 2), run as a child process.
 - Commands: `roles`, `route`, `brief`, and `doctor` in `test/commands/`, including the `brief --json` payload fields and the title rule.
-- End to end: one child-process flow in a temp `HOME` (`test/e2e.test.ts`) that installs, runs every command in a temp git project, and uninstalls. It runs the CLI with `process.execPath`, because a version-manager `node` shim can fail when `HOME` is a temp directory.
+- End to end: one child-process flow in a temp `HOME` (`test/e2e.test.ts`) that installs, runs every command in a temp git project, and uninstalls. It runs the CLI with `process.execPath`, because a version-manager `node` shim can fail when `HOME` is a temp directory. A second flow runs `install --project --hooks --yes` in a temp git project, runs `.omt/bin/omt`, checks that `git status --porcelain` is empty, and uninstalls.

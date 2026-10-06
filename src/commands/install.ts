@@ -7,15 +7,22 @@ import { usageError } from "../util/errors.ts";
 
 export const summary = "Install the omt skills, links, starter config, and optional Claude hook.";
 
-export const usage = `Usage: omt install [--targets <list>] [--hooks] [--yes] [--dry-run] [--force]
+export const usage = `Usage: omt install [--project [--no-git-exclude]] [--targets <list>] [--hooks] [--yes] [--dry-run] [--force]
 
 Install the bundled skills into ~/.agents/skills and link them into the
 selected agent skill roots. Shows the plan first, then asks to apply it.
+With --project, install into the current project instead: skills in
+.agents/skills, links in .claude/skills, the CLI shim .omt/bin/omt, and the
+hook in .claude/settings.local.json, all hidden from git.
 
 Options:
+  --project         install into the project root, not the home directory
+  --no-git-exclude  with --project, write no block to the repository's
+                    info/exclude, and remove an earlier one
   --targets <list>  comma-separated subset of agents, claude, gemini
                     (default: agents,claude, plus gemini when ~/.gemini exists;
-                    agents is always included)
+                    agents is always included; gemini is not available
+                    with --project)
   --hooks           also add the Claude Code UserPromptSubmit ultrawork hook
   --yes             apply the plan without asking
   --dry-run         print the plan and write nothing
@@ -30,13 +37,19 @@ export const run: CommandRun = async (ctx) => {
     yes: { type: "boolean" },
     "dry-run": { type: "boolean" },
     force: { type: "boolean" },
+    project: { type: "boolean" },
+    "no-git-exclude": { type: "boolean" },
   });
   if (positionals.length > 0) throw usageError(`unexpected argument "${positionals[0]}"`);
-  const targets = await parseTargets(values.targets, ctx.homedir);
+  const scope = values.project === true ? "project" : "user";
+  if (values["no-git-exclude"] === true && scope !== "project") throw usageError("--no-git-exclude needs --project");
+  const targets = await parseTargets(values.targets, ctx.homedir, scope);
   const plan = await buildInstallPlan(ctx, {
     targets,
     hooks: values.hooks === true,
     force: values.force === true,
+    scope,
+    gitExclude: values["no-git-exclude"] !== true,
   });
 
   ctx.stdout(renderInstallPlan(plan));
@@ -62,10 +75,18 @@ export const run: CommandRun = async (ctx) => {
   }
   ctx.stdout(`Applied ${result.changed.length} change${result.changed.length === 1 ? "" : "s"}.\n`);
   for (const backup of result.backups) ctx.stdout(`backup   ${backup}\n`);
+  if (plan.project?.excludeNote !== undefined && plan.project.excludeNote !== "--no-git-exclude") {
+    ctx.stdout(`note: ${plan.project.excludeNote}\n`);
+  }
   ctx.stdout(
-    "Next steps:\n" +
-      "  1. Restart agent sessions in T3 Code so they load the new skills.\n" +
-      "  2. Try $omt-ulw <task>.\n",
+    plan.project === undefined
+      ? "Next steps:\n" +
+          "  1. Restart agent sessions in T3 Code so they load the new skills.\n" +
+          "  2. Try $omt-ulw <task>.\n"
+      : "Next steps:\n" +
+          "  1. Restart agent sessions in T3 Code for this project so they load the new skills.\n" +
+          "  2. Agents in this project call the CLI as .omt/bin/omt.\n" +
+          "  3. Try $omt-ulw <task>.\n",
   );
   return 0;
 };

@@ -35,7 +35,7 @@ ELECTRON_RUN_AS_NODE=1 "$T3_ACP_MCP_NODE" ${T3_ACP_MCP_ENTRYPOINT:+"$T3_ACP_MCP_
 
 ## Resolve by hand
 
-When `omt` is not on `PATH`, use the default chains below, or the chains in `.omt/config.jsonc` and `~/.config/oh-my-t3code/config.jsonc` when they exist (the project file wins).
+When neither `omt` nor `.omt/bin/omt` is found (see [The CLI](delegation.md#the-cli)), use the default chains below, or the chains in `.omt/config.jsonc` and `~/.config/oh-my-t3code/config.jsonc` when they exist (the project file wins).
 
 | Role | Rung 1 | Rung 2 |
 | --- | --- | --- |

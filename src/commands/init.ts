@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { PROJECT_STARTER_CONFIG } from "../config/starter.ts";
+import { OMT_GITIGNORE_LINES } from "../install/project.ts";
 import { findProjectRoot, omtDir, plansDir, projectConfigPath } from "../paths.ts";
 import type { CommandRun } from "../types.ts";
 import { parseArgs } from "../util/args.ts";
@@ -17,7 +18,7 @@ Options:
   -h, --help        print this help
 `;
 
-export const GITIGNORE = "ledger.jsonl\nevidence/\n";
+export const GITIGNORE = `${OMT_GITIGNORE_LINES.join("\n")}\n`;
 
 export const run: CommandRun = async (ctx) => {
   const { positionals } = parseArgs(ctx.argv, {});
