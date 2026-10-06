@@ -46,6 +46,7 @@ test("a resolved role uses the first ok rung and keeps later ok rungs as fallbac
     t3Role: "implementation",
     interactionMode: "default",
     runtimeMode: "inherit",
+    crossFamily: false,
     status: "resolved",
     delegateTask: {
       target: { providerInstanceId: "claudeAgent", model: "claude-opus-5-5", options: { effort: "medium" } },
@@ -53,7 +54,7 @@ test("a resolved role uses the first ok rung and keeps later ok rungs as fallbac
       interactionMode: "default",
       runtimeMode: "inherit",
     },
-    fallbacks: [{ providerInstanceId: "codex", model: "gpt-6.1-sol", options: { reasoningEffort: "medium" } }],
+    fallbacks: [{ providerInstanceId: "codex", model: "gpt-6.1-sol", options: { reasoningEffort: "xhigh" } }],
     attempts: [
       {
         index: 0,
@@ -67,7 +68,7 @@ test("a resolved role uses the first ok rung and keeps later ok rungs as fallbac
         rung: execute.chain[1],
         ok: true,
         notes: [],
-        target: { providerInstanceId: "codex", model: "gpt-6.1-sol", options: { reasoningEffort: "medium" } },
+        target: { providerInstanceId: "codex", model: "gpt-6.1-sol", options: { reasoningEffort: "xhigh" } },
       },
     ],
   });
@@ -127,6 +128,44 @@ test("an unknown provider, an unknown driver, and a driver mismatch fail the run
       "provider instance claudeWork is not registered in T3",
       "no provider instance with driver gemini",
       "provider instance codex has driver codex, not claudeAgent",
+    ],
+  );
+});
+
+test("a rung whose provider instance is not registered falls back to its driver, with a note", () => {
+  const c = caps({ inheritedProviderInstanceId: "claude-main" });
+  provider(c, "claudeAgent").providerInstanceId = "claude-main";
+  provider(c, "codex").providerInstanceId = "codex-main";
+  const execute = DEFAULT_CONFIG.roles.execute as RoleConfig;
+  const resolution = resolveRole("execute", execute, c);
+  assert.equal(resolution.status, "resolved");
+  assert.deepEqual(resolution.delegateTask?.target, {
+    providerInstanceId: "claude-main",
+    model: "claude-opus-5-5",
+    options: { effort: "medium" },
+  });
+  assert.deepEqual(resolution.fallbacks, [
+    { providerInstanceId: "codex-main", model: "gpt-6.1-sol", options: { reasoningEffort: "xhigh" } },
+  ]);
+  assert.deepEqual(toRouteOutput(resolution).notes, [
+    "rung 1: provider instance claudeAgent is not registered; using instance claude-main of driver claudeAgent",
+    "rung 2: provider instance codex is not registered; using instance codex-main of driver codex",
+  ]);
+
+  const failed = resolveRole(
+    "r",
+    role([
+      { provider: "claudeAgent", model: "claude-opus-5-5" },
+      { provider: "ghost", driver: "gemini", model: "gemini-4" },
+    ]),
+    c,
+  );
+  assert.equal(failed.status, "unavailable");
+  assert.deepEqual(
+    failed.attempts.map((a) => a.reason),
+    [
+      "provider instance claudeAgent is not registered in T3",
+      "provider instance ghost is not registered in T3; no provider instance with driver gemini",
     ],
   );
 });
@@ -339,17 +378,17 @@ test("driver-only rungs prefer the inherited provider instance", () => {
 
 test("every default role resolves against the fixture", () => {
   const expected: Record<string, [string, string, Record<string, string>]> = {
-    explore: ["claudeAgent", "claude-sonnet-5-5", { effort: "low" }],
-    research: ["claudeAgent", "claude-sonnet-5-5", { effort: "medium" }],
-    plan: ["claudeAgent", "claude-opus-5-5", { effort: "high" }],
+    explore: ["codex", "gpt-6-luna", { reasoningEffort: "low" }],
+    research: ["codex", "gpt-6.1-sol", { reasoningEffort: "low" }],
+    plan: ["claudeAgent", "claude-opus-5-5", { effort: "xhigh" }],
     "plan-review": ["codex", "gpt-6-astra", { reasoningEffort: "high" }],
     execute: ["claudeAgent", "claude-opus-5-5", { effort: "medium" }],
-    quick: ["claudeAgent", "claude-sonnet-5-5", { effort: "low" }],
-    deep: ["claudeAgent", "claude-opus-5-5", { effort: "xhigh" }],
-    review: ["claudeAgent", "claude-opus-5-5", { effort: "high" }],
+    quick: ["codex", "gpt-6-luna", { reasoningEffort: "high" }],
+    deep: ["claudeAgent", "claude-opus-5-5", { effort: "max" }],
+    review: ["codex", "gpt-6-astra", { reasoningEffort: "high" }],
     oracle: ["codex", "gpt-6-astra", { reasoningEffort: "high" }],
-    test: ["claudeAgent", "claude-sonnet-5-5", { effort: "medium" }],
-    writing: ["claudeAgent", "claude-opus-5-5", { effort: "medium" }],
+    test: ["codex", "gpt-6.1-sol", { reasoningEffort: "low" }],
+    writing: ["claudeAgent", "claude-opus-5-5", { effort: "high" }],
   };
   const report = resolveAll(DEFAULT_CONFIG, caps());
   assert.equal(report.version, 1);
@@ -370,7 +409,7 @@ test("every default role resolves against the fixture", () => {
   }
 });
 
-test("every default role is unverified with driver targets without capabilities", () => {
+test("every default role is unverified with provider instance targets without capabilities", () => {
   const report = resolveAll(DEFAULT_CONFIG);
   assert.equal(report.verified, false);
   for (const [name, resolution] of Object.entries(report.roles)) {
@@ -380,11 +419,23 @@ test("every default role is unverified with driver targets without capabilities"
     const optionId = first.driver === "codex" ? "reasoningEffort" : "effort";
     assert.deepEqual(
       resolution.delegateTask?.target,
-      { driverKind: first.driver, model: first.model, options: { [optionId]: first.effort } },
+      { providerInstanceId: first.driver, model: first.model, options: { [optionId]: first.effort } },
       name,
     );
-    assert.equal(resolution.fallbacks[0]?.driverKind !== undefined, true, name);
+    assert.equal(resolution.fallbacks[0]?.providerInstanceId, DEFAULT_CONFIG.roles[name]?.chain[1]?.driver, name);
   }
+});
+
+test("a user rung that names only a driver still resolves to a driverKind target without capabilities", () => {
+  const role: RoleConfig = {
+    ...(DEFAULT_CONFIG.roles.execute as RoleConfig),
+    chain: [{ driver: "codex", model: "gpt-6.1-sol", effort: "high" }],
+  };
+  assert.deepEqual(resolveRole("execute", role).delegateTask?.target, {
+    driverKind: "codex",
+    model: "gpt-6.1-sol",
+    options: { reasoningEffort: "high" },
+  });
 });
 
 test("resolveAll filters by name and rejects unknown roles", () => {

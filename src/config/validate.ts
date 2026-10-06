@@ -9,6 +9,7 @@ export const ROLE_KEYS: readonly string[] = [
   "t3Role",
   "interactionMode",
   "runtimeMode",
+  "crossFamily",
   "chain",
 ];
 export const RUNG_KEYS: readonly string[] = ["provider", "driver", "model", "effort", "options"];
@@ -136,6 +137,9 @@ function validateRole(value: unknown, path: string, out: Collector): Partial<Rol
     } else if (key === "description") {
       if (typeof item === "string" && item.length > 0 && item.length <= DESCRIPTION_MAX) role[key] = item;
       else out.error(keyPath, `must be a non-empty string of at most ${DESCRIPTION_MAX} characters`);
+    } else if (key === "crossFamily") {
+      if (typeof item === "boolean") role[key] = item;
+      else out.error(keyPath, `must be a boolean, got ${describe(item)}`);
     } else if (key === "chain") {
       if (!Array.isArray(item) || item.length < CHAIN_MIN || item.length > CHAIN_MAX) {
         out.error(keyPath, `must be an array of ${CHAIN_MIN} to ${CHAIN_MAX} rungs`);

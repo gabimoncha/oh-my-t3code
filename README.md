@@ -120,19 +120,23 @@ The agent frames the goal, explores the code, writes a plan in `.omt/plans/`, di
 
 | Role | Use | First choice | Fallback |
 | --- | --- | --- | --- |
-| `explore` | Answer one narrow question about this repository | Claude Sonnet 5.5, low | GPT-6-Luna, low |
-| `research` | Answer a question from docs, the web, and code | Claude Sonnet 5.5, medium | GPT-6.1-Sol, medium |
-| `plan` | Turn a goal into a plan file | Claude Opus 5.5, high | GPT-6-Astra, high |
+| `explore` | Answer one narrow question about this repository | GPT-6-Luna, low | Claude Sonnet 5.5, low |
+| `research` | Answer a question from docs, the web, and code | GPT-6.1-Sol, low | Claude Opus 5.5, low |
+| `plan` | Turn a goal into a plan file | Claude Opus 5.5, xhigh | GPT-6-Astra, xhigh |
 | `plan-review` | Check a plan for gaps | GPT-6-Astra, high | Claude Opus 5.5, high |
-| `execute` | Implement one planned unit | Claude Opus 5.5, medium | GPT-6.1-Sol, medium |
-| `quick` | Make a small, mechanical change | Claude Sonnet 5.5, low | GPT-6-Luna, low |
-| `deep` | Solve a hard or cross-cutting problem | Claude Opus 5.5, xhigh | GPT-6-Astra, xhigh |
-| `review` | Review a diff against its brief | Claude Opus 5.5, high | GPT-6-Astra, high |
-| `oracle` | Attack finished work from another model family | GPT-6-Astra, high | Claude Opus 5.5, high |
-| `test` | Write and run tests, then report a verdict | Claude Sonnet 5.5, medium | GPT-6.1-Sol, medium |
-| `writing` | Write or edit documentation | Claude Opus 5.5, medium | GPT-6.1-Sol, medium |
+| `execute` | Implement one planned unit | Claude Opus 5.5, medium | GPT-6.1-Sol, xhigh |
+| `quick` | Make a small, mechanical change | GPT-6-Luna, high | Claude Sonnet 5.5, low |
+| `deep` | Solve a hard or cross-cutting problem | Claude Opus 5.5, max | GPT-6-Astra, xhigh |
+| `review` | Review a diff against its brief | GPT-6-Astra, high | Claude Opus 5.5, high |
+| `oracle` | Attack the finished change before it counts as done | GPT-6-Astra, high | Claude Opus 5.5, high |
+| `test` | Write and run tests, then report a verdict | GPT-6.1-Sol, low | Claude Sonnet 5.5, low |
+| `writing` | Write or edit documentation | Claude Opus 5.5, high | GPT-6-Astra, medium |
 
-Claude models run on the `claudeAgent` driver. GPT models run on the `codex` driver. The read-only roles (`explore`, `research`, `plan-review`, `review`, `oracle`) run in T3 plan mode. On Claude, Codex, Cursor, and OpenCode, plan mode keeps the child from editing files. T3 has no plan-mode handling for Pi, so a Pi child in a read-only role is held back only by its brief. No default role uses Pi.
+The fallback runs only when T3 refuses the first choice. For the cross-family roles below, the first choice depends on the worker.
+
+`plan-review`, `review`, and `oracle` are cross-family roles. A reviewer comes from the other model family than the worker whose change it reviews. GPT-6-Astra reviews Claude work, and Claude Opus 5.5 reviews GPT work. The skills pass the worker to `omt brief --against`, and the CLI puts the rungs of the other family first. When the other family is not available, the same family reviews. The oracle runs on the family other than the main implementer's.
+
+Claude models run on the `claudeAgent` driver. GPT models run on the `codex` driver. Each default rung also names the T3 built-in provider instance of its driver, whose id is `claudeAgent` or `codex`. T3 checks a named instance again before it refuses it, but it can refuse a driver-only target because of a stale provider snapshot. The read-only roles (`explore`, `research`, `plan-review`, `review`, `oracle`) run in T3 plan mode. On Claude, Codex, Cursor, and OpenCode, plan mode keeps the child from editing files. T3 has no plan-mode handling for Pi, so a Pi child in a read-only role is held back only by its brief. No default role uses Pi.
 
 Run `omt roles` to see how each role resolves with your config.
 
@@ -140,7 +144,7 @@ Run `omt roles` to see how each role resolves with your config.
 
 Your config is `~/.config/oh-my-t3code/config.jsonc`. `omt install` creates it. A project config in `.omt/config.jsonc` overrides it for one project.
 
-This example runs reviews on Codex first and falls back to Claude:
+This example turns off cross-family review. Then `review` always starts on GPT-6-Astra and falls back to Claude Opus 5.5, also when GPT made the change.
 
 ```jsonc
 {
@@ -148,16 +152,13 @@ This example runs reviews on Codex first and falls back to Claude:
   "version": 1,
   "roles": {
     "review": {
-      "chain": [
-        { "driver": "codex", "model": "gpt-6-astra", "effort": "high" },
-        { "driver": "claudeAgent", "model": "claude-opus-5-5", "effort": "high" }
-      ]
+      "crossFamily": false
     }
   }
 }
 ```
 
-A `chain` replaces the old chain as a whole. Other fields of the role keep their values. Use `provider` instead of `driver` to name one T3 provider instance. Set a role to `null` to remove it.
+A `chain` replaces the old chain as a whole. Other fields of the role keep their values. In a rung, `provider` names one T3 provider instance and `driver` names its driver. Set a role to `null` to remove it.
 
 Useful commands:
 
@@ -189,7 +190,7 @@ The agent can pick the first four on its own. You start the last three by name.
 | `omt init` | Creates `.omt/` in the project with a starter config. |
 | `omt config` | Shows, locates, validates, or creates the config. |
 | `omt roles` | Prints how every role resolves. |
-| `omt route <role>` | Prints the `delegate_task` arguments for one role as JSON. |
+| `omt route <role>` | Prints the `delegate_task` arguments for one role as JSON. `--against <provider>` names the worker that a cross-family role reviews. |
 | `omt brief <role> --task <text>` | Renders a child brief, or a full `delegate_task` payload with `--json`. |
 | `omt plan` | Creates plan files and shows their progress. `plan new <slug> --light` leaves out the oracle item. `plan mark <slug> <id> <done\|open\|blocked>` ticks one item. |
 | `omt ledger` | Records and counts delegated tasks in `.omt/ledger.jsonl`. A result entry (`completed`, `failed`, and the other terminal statuses) closes the dispatch with the same `--task-id`, or with the same plan, unit, role, round, and attempt. |

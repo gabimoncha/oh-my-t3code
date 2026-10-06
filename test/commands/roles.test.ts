@@ -9,7 +9,7 @@ test("roles prints every role unverified with the unverified footer", async (t) 
   const { code, ctx } = await makeProject(t).run(["roles"]);
   assert.equal(code, 0);
   const lines = ctx.out().split("\n");
-  assert.match(lines[0] ?? "", /^ROLE\s+STATUS\s+TARGET\s+ACCESS\s+MODE$/);
+  assert.match(lines[0] ?? "", /^ROLE\s+STATUS\s+TARGET\s+ACCESS\s+MODE\s+CROSS$/);
   for (const name of Object.keys(DEFAULT_CONFIG.roles)) {
     assert.ok(lines.some((line) => line.startsWith(`${name} `) && line.includes("unverified")), name);
   }
@@ -21,7 +21,7 @@ test("roles --capabilities verifies the chains, from a file or stdin", async (t)
   const project = makeProject(t);
   const fromFile = await project.run(["roles", "--capabilities", CAPS_FILE]);
   assert.equal(fromFile.code, 0);
-  assert.match(fromFile.ctx.out(), /^execute\s+resolved\s+claudeAgent\/claude-opus-5-5 effort=medium\s+edit\s+default$/m);
+  assert.match(fromFile.ctx.out(), /^execute\s+resolved\s+claudeAgent\/claude-opus-5-5 effort=medium\s+edit\s+default\s+no$/m);
   assert.ok(fromFile.ctx.out().endsWith("\nverified against orchestrator_capabilities\n"));
   const fromStdin = await project.run(["roles", "--capabilities", "-"], { stdin: readFileSync(CAPS_FILE, "utf8") });
   assert.equal(fromStdin.ctx.out(), fromFile.ctx.out());
@@ -38,6 +38,18 @@ test("roles --role keeps the given order, drops duplicates, and --json prints th
   assert.equal(report.roles.review?.interactionMode, "plan");
   assert.equal(report.roles.review?.t3Role, "review");
   assert.equal(report.roles.review?.runtimeMode, "inherit");
+  assert.equal(report.roles.review?.crossFamily, true);
+  assert.equal(report.roles.explore?.crossFamily, false);
+});
+
+test("roles shows the CROSS column for each role", async (t) => {
+  const { ctx } = await makeProject(t).run(["roles"]);
+  const lines = ctx.out().split("\n");
+  for (const [name, role] of Object.entries(DEFAULT_CONFIG.roles)) {
+    const line = lines.find((l) => l.startsWith(`${name} `));
+    assert.ok(line, name);
+    assert.ok(line.endsWith(role.crossFamily === true ? "  yes" : "  no"), line);
+  }
 });
 
 test("roles prints config issues to stderr and fails on an unknown role", async (t) => {

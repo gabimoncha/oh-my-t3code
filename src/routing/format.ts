@@ -1,9 +1,9 @@
 import type { ResolvedTarget, RoleResolution, RolesReport, Rung, RungAttempt } from "../types.ts";
 
-const HEADER = ["ROLE", "STATUS", "TARGET", "ACCESS", "MODE"];
+const HEADER = ["ROLE", "STATUS", "TARGET", "ACCESS", "MODE", "CROSS"];
 // Minimum widths and gaps reproduce the example table in docs/spec.md section 5.3.
-const MIN_WIDTHS = [13, 12, 47, 11];
-const GAPS = [2, 1, 2, 2];
+const MIN_WIDTHS = [13, 12, 47, 11, 9];
+const GAPS = [2, 1, 2, 2, 2];
 
 export const VERIFIED_FOOTER = "verified against orchestrator_capabilities";
 export const UNVERIFIED_FOOTER = "unverified: pass --capabilities <file> to check the chains against T3";
@@ -43,6 +43,7 @@ export function formatRolesTable(report: RolesReport): string {
     r.delegateTask === undefined ? "-" : formatTarget(r.delegateTask.target),
     r.access,
     r.interactionMode,
+    r.crossFamily ? "yes" : "no",
   ]);
   const widths = MIN_WIDTHS.map((min, col) =>
     Math.max(min, ...[HEADER, ...rows].map((row) => (row[col] ?? "").length + (GAPS[col] ?? 2))),

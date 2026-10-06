@@ -32,21 +32,46 @@ test("the defaults hold the 11 roles with the values from spec section 6.4", () 
   }
 });
 
-test("every default rung uses driver, a model, and an effort", () => {
+test("every default rung names the built-in provider instance of its driver, a model, and an effort", () => {
   for (const [name, role] of Object.entries(DEFAULT_CONFIG.roles)) {
     assert.equal(role.chain.length, 2, name);
     for (const rung of role.chain) {
-      assert.equal(rung.provider, undefined, name);
+      assert.equal(rung.provider, rung.driver, name);
       assert.ok(rung.driver === "claudeAgent" || rung.driver === "codex", name);
       assert.ok(rung.model.length > 0, name);
       assert.ok(rung.effort !== undefined && EFFORT_LADDER.includes(rung.effort), name);
     }
   }
-  assert.deepEqual(DEFAULT_CONFIG.roles.review?.chain, [
-    { driver: "claudeAgent", model: "claude-opus-5-5", effort: "high" },
-    { driver: "codex", model: "gpt-6-astra", effort: "high" },
-  ]);
-  assert.deepEqual(DEFAULT_CONFIG.roles.oracle?.chain[0], { driver: "codex", model: "gpt-6-astra", effort: "high" });
+});
+
+// [rung 1, rung 2, crossFamily]; each rung is "driver/model/effort", and its provider is the driver.
+const CHAINS: Record<string, [string, string, boolean]> = {
+  explore: ["codex/gpt-6-luna/low", "claudeAgent/claude-sonnet-5-5/low", false],
+  research: ["codex/gpt-6.1-sol/low", "claudeAgent/claude-opus-5-5/low", false],
+  plan: ["claudeAgent/claude-opus-5-5/xhigh", "codex/gpt-6-astra/xhigh", false],
+  "plan-review": ["codex/gpt-6-astra/high", "claudeAgent/claude-opus-5-5/high", true],
+  execute: ["claudeAgent/claude-opus-5-5/medium", "codex/gpt-6.1-sol/xhigh", false],
+  quick: ["codex/gpt-6-luna/high", "claudeAgent/claude-sonnet-5-5/low", false],
+  deep: ["claudeAgent/claude-opus-5-5/max", "codex/gpt-6-astra/xhigh", false],
+  review: ["codex/gpt-6-astra/high", "claudeAgent/claude-opus-5-5/high", true],
+  oracle: ["codex/gpt-6-astra/high", "claudeAgent/claude-opus-5-5/high", true],
+  test: ["codex/gpt-6.1-sol/low", "claudeAgent/claude-sonnet-5-5/low", false],
+  writing: ["claudeAgent/claude-opus-5-5/high", "codex/gpt-6-astra/medium", false],
+};
+
+test("the default chains and crossFamily flags match spec section 6.4 exactly", () => {
+  assert.deepEqual(Object.keys(CHAINS).sort(), Object.keys(DEFAULT_CONFIG.roles).sort());
+  for (const [name, [first, second, crossFamily]] of Object.entries(CHAINS)) {
+    const role = DEFAULT_CONFIG.roles[name];
+    assert.ok(role, name);
+    const chain = [first, second].map((text) => {
+      const [driver, model, effort] = text.split("/");
+      return { provider: driver, driver, model, effort };
+    });
+    assert.deepEqual(role.chain, chain, name);
+    assert.equal(role.crossFamily, crossFamily, name);
+  }
+  assert.match(DEFAULT_CONFIG.roles.review?.description ?? "", /family that did not make the change/);
 });
 
 test("the default limits match the spec", () => {

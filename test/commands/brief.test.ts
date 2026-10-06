@@ -54,9 +54,10 @@ test("brief --json holds exactly the delegate_task fields, without clientRequest
   assert.equal(output.delegateTask.interactionMode, "plan");
   assert.equal(output.delegateTask.runtimeMode, "inherit");
   assert.equal(output.delegateTask.title, "review: Check the diff.");
-  assert.deepEqual(output.delegateTask.target, { driverKind: "claudeAgent", model: "claude-opus-5-5", options: { effort: "high" } });
-  assert.deepEqual(output.fallbacks, [{ driverKind: "codex", model: "gpt-6-astra", options: { reasoningEffort: "high" } }]);
+  assert.deepEqual(output.delegateTask.target, { providerInstanceId: "codex", model: "gpt-6-astra", options: { reasoningEffort: "high" } });
+  assert.deepEqual(output.fallbacks, [{ providerInstanceId: "claudeAgent", model: "claude-opus-5-5", options: { effort: "high" } }]);
   assert.match(output.delegateTask.task, /^<!-- omt-brief v1 role=review round=1 depth=1\/1 -->/);
+  assert.equal(ctx.err(), "");
 });
 
 test("brief --json adds clientRequestId only with both --plan and --unit", async (t) => {
@@ -180,4 +181,46 @@ test("brief exits 1 when the rendered task is longer than 120,000 characters", a
   assert.equal(code, 1);
   assert.equal(ctx.out(), "");
   assert.match(ctx.err(), /^hint: shorten --context or --prior-file/m);
+});
+
+test("brief --json --against puts the other family first and prints the notes to stderr", async (t) => {
+  const project = makeProject(t);
+  const codex = await project.run(["brief", "review", "--task", "Check U1.", "--against", "codex", "--json"]);
+  assert.equal(codex.code, 0);
+  const output = parse(codex.ctx.out());
+  assert.deepEqual(Object.keys(output), ["delegateTask", "fallbacks"]);
+  assert.deepEqual(output.delegateTask.target, { providerInstanceId: "claudeAgent", model: "claude-opus-5-5", options: { effort: "high" } });
+  assert.deepEqual(output.fallbacks, [{ providerInstanceId: "codex", model: "gpt-6-astra", options: { reasoningEffort: "high" } }]);
+  assert.equal(codex.ctx.err(), "note: cross-family: worker family codex; other families first\n");
+
+  const claude = await project.run(["brief", "review", "--task", "Check U1.", "--against", "claudeAgent", "--json"]);
+  assert.deepEqual(parse(claude.ctx.out()).delegateTask.target, {
+    providerInstanceId: "codex",
+    model: "gpt-6-astra",
+    options: { reasoningEffort: "high" },
+  });
+});
+
+test("brief --json --against auto takes the unit's worker from the ledger", async (t) => {
+  const project = makeProject(t);
+  project.projectConfig('{ "version": 1 }\n');
+  writeFileSync(
+    join(project.cwd, ".omt", "ledger.jsonl"),
+    `${JSON.stringify({ ts: "2026-10-06T00:00:00.000Z", role: "execute", status: "dispatched", plan: "p", unit: "U1", provider: "codex", model: "gpt-6.1-sol" })}\n`,
+  );
+  const { code, ctx } = await project.run(
+    ["brief", "review", "--task", "Check U1.", "--plan", "p", "--unit", "U1", "--against", "auto", "--json"],
+  );
+  assert.equal(code, 0);
+  const output = parse(ctx.out());
+  assert.equal(output.delegateTask.target.providerInstanceId, "claudeAgent");
+  assert.equal(output.delegateTask.clientRequestId, "omt:p:U1:review:r1:a1");
+  assert.match(ctx.err(), /^note: --against auto: worker codex from the last work dispatch of unit U1$/m);
+});
+
+test("brief --against auto without --plan is a usage error", async (t) => {
+  const { code, ctx } = await makeProject(t).run(["brief", "review", "--task", "x", "--against", "auto", "--json"]);
+  assert.equal(code, 2);
+  assert.equal(ctx.out(), "");
+  assert.match(ctx.err(), /--against auto needs --plan <slug>/);
 });

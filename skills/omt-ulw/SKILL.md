@@ -79,7 +79,7 @@ For each unit whose dependencies are done, until a limit is reached:
 1. Run `omt ledger stats --plan <slug>`. Dispatch only while it reports `can dispatch: yes`. When it reports `can dispatch: no` and `active: 0`, the run is stalled: stop and follow [delegation.md](../omt/references/delegation.md#limits).
 2. Build the arguments: `omt brief <role> --task-file - --title "<role> <unit>: <short unit title>" --scope ... --done ... --verify ... --plan <slug> --unit <id> --round 1 --attempt 1 --json`.
 3. Call `delegate_task` with `delegateTask`. Keep `fallbacks`, `taskId`, `childThreadId`, and `childRunId`.
-4. Record it: `omt ledger add --plan <slug> --unit <id> --role <role> --round 1 --attempt 1 --status dispatched --task-id <taskId> --client-request-id <id>`.
+4. Record it: `omt ledger add --plan <slug> --unit <id> --role <role> --round <n> --attempt <a> --status dispatched --task-id <taskId> --client-request-id <id> --provider <provider> --model <model>`. Copy each value from the `omt brief` command and the `delegate_task` call that returned the task. In this step `<n>` is 1, and `<a>` is 1 for the first call. A retry or a fallback call after a failure code has its own higher attempt ([delegation.md](../omt/references/delegation.md#failure-codes)). `<provider>` is `target.providerInstanceId`, or `target.driverKind` when the target has no instance id. `<model>` is `target.model`.
 
 Then end your turn. When a goal or a stop hook keeps your turn running, wait as [delegation.md](../omt/references/delegation.md#waiting) says instead, then go to step 6.
 
@@ -104,7 +104,7 @@ For each unit that passed step 6, dispatch a fresh `review` task for the same ro
 - Write the unit's task text, scope, and done conditions, and the worker's result block, to a temp file such as `$TMPDIR/omt-<slug>-<unit>-r<n>.md`. Pass it with `--context-file`. Pass the brief's data, never the rendered execute brief: that text holds its own brief marker and `Final message` block.
 - The task names the scope paths, not git refs: workers do not commit. The reviewer runs `git status --porcelain -- <scope paths>` and `git diff HEAD -- <scope paths>` and reads every untracked file in full.
 - From round 2, pass every prior finding with its response in `--prior-file`.
-- Use `--plan <slug> --unit <id> --round <n> --attempt 1 --title "review <unit>: <short unit title>"`, and record the dispatch as in step 5.
+- Use `--plan <slug> --unit <id> --round <n> --attempt 1 --against auto --title "review <unit>: <short unit title>"`, and record the dispatch as in step 5. `--against auto` puts the reviewer on the family other than the unit's worker.
 
 Done when: the unit has a recorded review verdict for this round. `APPROVE` moves it to step 8. `REQUEST_CHANGES` moves it to step 9. `BLOCK` means a P0 finding or a wrong approach: run `omt plan mark <slug> <unit> blocked`, then re-plan the unit (step 4) or ask the user.
 
@@ -118,7 +118,7 @@ Done when: the unit is marked done in the plan with a `verified` ledger entry, o
 
 ### 9. Fix
 
-Send the findings or failures, verbatim, to a new fix task for the next round `<n+1>`, with all earlier rounds in `--prior-file`. Use `--plan <slug> --unit <id> --round <n+1> --attempt 1 --title "fix <unit>: <short unit title>"`, and record the dispatch as in step 5. Then return to step 7 for that unit.
+Send the findings or failures, verbatim, to a new fix task for the next round `<n+1>`, with all earlier rounds in `--prior-file`. Use `--plan <slug> --unit <id> --round <n+1> --attempt 1 --title "fix <unit>: <short unit title>"`, and record the dispatch with its `--provider` and `--model` as in step 5. Then return to step 7 for that unit.
 
 | Round | Worker | Next step when its review or test fails |
 | --- | --- | --- |
@@ -135,7 +135,7 @@ Done when: the unit is back in review with a higher round, or it is marked block
 When every unit is done:
 
 1. Run every final check in the plan yourself (`F1`, the full test suite and typecheck). Mark each `D` and `F` item with `omt plan mark <slug> <id> done` after its command passes. A failing final check goes to step 9 as a fix task for the unit that owns the code.
-2. HEAVY: dispatch one `oracle` task over the whole change, with the objective, every done condition, and the scope paths (or the base ref when the work is committed). Build it with `omt brief oracle --task-file - --title "oracle: <slug>" --plan <slug> --unit F2 --round <n> --attempt 1 --json`, and record the dispatch and the result as in steps 5 and 6. Fix its findings through step 9, then run the oracle again. Count oracle rounds against `maxReviewRounds`; at the limit, stop and report the open findings to the user. Mark `F2` done when it returns `APPROVE`.
+2. HEAVY: dispatch one `oracle` task over the whole change, with the objective, every done condition, and the scope paths (or the base ref when the work is committed). Build it with `omt brief oracle --task-file - --title "oracle: <slug>" --plan <slug> --unit F2 --round <n> --attempt 1 --against auto --json`, and record the dispatch and the result as in steps 5 and 6. `--against auto` puts the oracle on the family other than the main implementer's. Fix its findings through step 9, then run the oracle again. Count oracle rounds against `maxReviewRounds`; at the limit, stop and report the open findings to the user. Mark `F2` done when it returns `APPROVE`.
 
 LIGHT plans have no `F2` item and no oracle round.
 

@@ -60,6 +60,10 @@ export const CONFIG_SCHEMA = {
         t3Role: { enum: [...T3_ROLE_VALUES] },
         interactionMode: { enum: [...INTERACTION_MODE_VALUES] },
         runtimeMode: { enum: [...RUNTIME_MODE_VALUES] },
+        crossFamily: {
+          type: "boolean",
+          description: "With --against, try the rungs outside the worker's family first.",
+        },
         chain: {
           type: "array",
           minItems: CHAIN_MIN,

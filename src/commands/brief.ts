@@ -8,10 +8,9 @@ import { resolveRole, toRouteOutput } from "../routing/resolve.ts";
 import type { BriefJsonOutput, CliContext, CommandRun } from "../types.ts";
 import { parseArgs } from "../util/args.ts";
 import { OmtError, usageError } from "../util/errors.ts";
-import { checkPlanSlug, checkUnitId } from "../util/ids.ts";
 import { printJson } from "../util/output.ts";
 import { formatIssue } from "./config.ts";
-import { readCapabilities, readInput } from "./route.ts";
+import { againstOptions, checkAgainst, findRole, readCapabilities, readInput } from "./route.ts";
 
 export const summary = "Render a task brief for a role, or a delegate_task payload.";
 
@@ -36,6 +35,8 @@ Options:
   --attempt <n>            attempt number for the request id (default 1)
   --title <text>           thread title for --json output
   --capabilities <file>    with --json: resolve the target against T3
+  --against <value>        the provider or driver of the worker whose change the task
+                           reviews, used with --json; auto reads it from the ledger and needs --plan
   --json                   print a ready delegate_task payload
   -h, --help               print this help
 `;
@@ -82,6 +83,7 @@ export const run: CommandRun = async (ctx) => {
     attempt: { type: "string" },
     title: { type: "string" },
     capabilities: { type: "string" },
+    against: { type: "string" },
     json: { type: "boolean" },
   });
   const [name, extra] = positionals;
@@ -95,8 +97,7 @@ export const run: CommandRun = async (ctx) => {
   const stdinFlags = [values["task-file"], values["context-file"], values["prior-file"], values.capabilities];
   if (stdinFlags.filter((file) => file === "-").length > 1) throw usageError("only one flag can read stdin (-)");
   const json = values.json === true;
-  if (values.plan !== undefined) checkPlanSlug(values.plan, "--plan");
-  if (values.unit !== undefined) checkUnitId(values.unit);
+  checkAgainst(values);
 
   const round = positiveInt("round", values.round, 1);
   const depth = positiveInt("depth", values.depth, 1);
@@ -108,10 +109,7 @@ export const run: CommandRun = async (ctx) => {
 
   const { config, issues } = await loadConfig({ cwd: ctx.cwd, env: ctx.env, homedir: ctx.homedir });
   for (const issue of issues) ctx.stderr(formatIssue(issue));
-  const role = Object.hasOwn(config.roles, name) ? config.roles[name] : undefined;
-  if (role === undefined) {
-    throw new OmtError("unknown_role", `unknown role ${name}; known roles: ${Object.keys(config.roles).join(", ")}`);
-  }
+  const role = findRole(config, name);
 
   const maxDepth = maxDepthFlag === undefined ? config.limits.maxDepth : Number(maxDepthFlag);
   if (depth > maxDepth) {
@@ -159,7 +157,9 @@ export const run: CommandRun = async (ctx) => {
     return 0;
   }
 
-  const resolution = resolveRole(name, role, await readCapabilities(ctx, values.capabilities));
+  const caps = await readCapabilities(ctx, values.capabilities);
+  const resolution = resolveRole(name, role, caps, await againstOptions(ctx, config, role, values));
+  for (const note of resolution.notes ?? []) ctx.stderr(`note: ${note}\n`);
   const args = resolution.delegateTask;
   if (args === undefined) {
     throw new OmtError("role_unavailable", `role ${name} is unavailable: no rung in its chain can run`, {

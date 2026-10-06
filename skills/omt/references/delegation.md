@@ -108,6 +108,17 @@ T3 returns these as tool results. Act on each one as follows.
 | `thread_not_sendable`, `thread_not_interruptible` | The thread is archived or idle. Read it instead. |
 | `orchestration_error` | Check for the child with `t3_thread_list` (`includeSubagents`), then retry once with the same `clientRequestId`. If it fails again, report it. |
 
+On `provider_unavailable` for a target that names only `driverKind`, retry that target once before you fall back. T3 checks a named provider instance again before it refuses it, but it takes a `driverKind`-only target from a cached snapshot that can be stale.
+
+1. Keep the exact target that failed. It is `delegateTask.target` of the first call, or the fallback that you sent.
+2. Run the same `omt brief ... --json` command again with `--attempt <n+1>`. This gives a new `clientRequestId`.
+3. Set `delegateTask.target` to the kept target, with `driverKind` replaced by `providerInstanceId` set to the same value. Change nothing else.
+4. Call `delegate_task` with that payload. Record it as a new `dispatched` entry with `--attempt <n+1>`, its `--task-id`, and the `--provider` and `--model` of the target you sent ([results.md](results.md#recording)).
+
+When the retry fails too, send the next unused fallback with the next attempt number ([roles.md](roles.md#fall-back-to-the-next-rung)). The retry does not use up a fallback.
+
+Record a fallback dispatch with the fallback's provider and model, not the provider and model of the failed rung.
+
 A failed child run (a provider error in `summary`) counts as a failed attempt. Record it as `failed`, then dispatch the same round again with the next attempt number, on the next rung if the error names the provider.
 
 ## Top-level threads

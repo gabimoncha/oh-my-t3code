@@ -28,9 +28,15 @@ T3 does not give us roles, model routing, briefs, review loops, or done criteria
 
 Skills and plans name a role such as `execute`, `review`, or `test`. One config maps each role to an ordered chain of rungs. A rung is a provider, a model, and an effort level. The first rung that T3 can run wins.
 
-This comes from omp model roles and OmO categories. It matters more in T3 than in either source, because T3 can reach several providers at once. A role chain such as "Opus 5.5 at high effort, then GPT-6-Astra at high effort" survives a missing subscription or a disabled provider.
+This comes from omp model roles and OmO categories. It matters more in T3 than in either source, because T3 can reach several providers at once. A role chain such as "Opus 5.5 at medium effort, then GPT-6.1-Sol at xhigh effort" survives a missing subscription or a disabled provider.
 
 T3 validates `target.options` strictly. An unknown option id or a value outside the list fails the whole call. Each driver also names effort differently: Claude uses `effort`, Codex uses `reasoningEffort`, Pi uses `thinking`. So the CLI maps one effort ladder (`off` to `max`) onto the option that each model advertises, and picks the nearest supported value.
+
+### Reviewers come from the other family
+
+The `plan-review`, `review`, and `oracle` roles are cross-family. The skill passes the worker's provider to `omt brief --against`, and the CLI tries the rungs of the other family first. A reviewer from another family misses fewer of the worker's blind spots. The owner chose this rule. When the other family is not available, the same family reviews, because a review from the same family is better than no review. The family is the driver, so a driver that runs models of several vendors (Cursor, OpenCode) counts as its own family.
+
+The ledger records the provider of each dispatch. So `--against auto` finds the worker of a unit, or the main implementer of a plan, without help from the agent.
 
 ### A CLI for the deterministic parts, skills for the judgment
 

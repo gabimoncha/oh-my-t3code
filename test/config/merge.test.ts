@@ -47,6 +47,31 @@ test("a field-only override keeps the old chain", () => {
   assert.deepEqual(config.roles.execute?.chain, DEFAULT_CONFIG.roles.execute?.chain);
 });
 
+test("a layer keeps, sets, or overrides crossFamily on an existing role", () => {
+  const { config } = mergeLayer(
+    DEFAULT_CONFIG,
+    { roles: { review: { crossFamily: false }, test: { crossFamily: true }, oracle: { description: "Gate." } } },
+    "src",
+  );
+  assert.equal(config.roles.review?.crossFamily, false);
+  assert.deepEqual(config.roles.review?.chain, DEFAULT_CONFIG.roles.review?.chain);
+  assert.equal(config.roles.test?.crossFamily, true);
+  assert.equal(config.roles.oracle?.crossFamily, true);
+  const second = mergeLayer(config, { roles: { review: { crossFamily: true } } }, "project");
+  assert.equal(second.config.roles.review?.crossFamily, true);
+});
+
+test("a new role keeps a given crossFamily and leaves it unset otherwise", () => {
+  const { config } = mergeLayer(
+    DEFAULT_CONFIG,
+    { roles: { audit: { description: "Audit.", access: "read-only", crossFamily: true, chain: [RUNG] } } },
+    "src",
+  );
+  assert.equal(config.roles.audit?.crossFamily, true);
+  const plain = mergeLayer(DEFAULT_CONFIG, { roles: { audit: { description: "A.", access: "edit", chain: [RUNG] } } }, "src");
+  assert.equal("crossFamily" in (plain.config.roles.audit ?? {}), false);
+});
+
 test("a new edit role gets the edit defaults", () => {
   const { config, issues } = mergeLayer(
     DEFAULT_CONFIG,

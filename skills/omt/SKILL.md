@@ -29,8 +29,8 @@ To find the CLI (`omt`, `.omt/bin/omt`, or the manual steps), follow [The CLI](r
 | --- | --- |
 | `omt init` | creates `.omt/config.jsonc`, `.omt/plans/`, `.omt/.gitignore` |
 | `omt roles` | every role with its target, access, and mode |
-| `omt route <role>` | `delegateTask` and `fallbacks` for one role, as JSON |
-| `omt brief <role> --task-file - --title "<role> <unit>: <title>" --scope <p> --done <c> --verify <cmd> --plan <slug> --unit <id> --round <n> --attempt <n> --json` | `{ delegateTask, fallbacks }`; pass `delegateTask` to `delegate_task` unchanged |
+| `omt route <role> [--against <provider\|driver\|auto>]` | `delegateTask` and `fallbacks` for one role, as JSON; `--against` names the worker that a cross-family role reviews ([roles.md](references/roles.md#cross-family-roles)) |
+| `omt brief <role> --task-file - --title "<role> <unit>: <title>" --scope <p> --done <c> --verify <cmd> --plan <slug> --unit <id> --round <n> --attempt <n> [--against <provider\|driver\|auto>] --json` | `{ delegateTask, fallbacks }`; pass `delegateTask` to `delegate_task` unchanged |
 | `omt plan new <slug> [--light]` | path of a new plan file under `.omt/plans/`; `--light` leaves out the `F2` oracle item |
 | `omt plan mark <slug> <id> <done\|open\|blocked>` | ticks one plan item, for example `omt plan mark auth U3 done` |
 | `omt plan status [<slug>]` | unit counts and the next open unit |

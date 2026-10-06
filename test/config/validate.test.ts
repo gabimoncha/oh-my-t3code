@@ -117,6 +117,9 @@ test("every role field rejects invalid values", () => {
     ["t3Role", "worker"],
     ["interactionMode", "auto"],
     ["runtimeMode", "yolo"],
+    ["crossFamily", "yes"],
+    ["crossFamily", 1],
+    ["crossFamily", null],
     ["chain", []],
     ["chain", Array.from({ length: 11 }, () => RUNG)],
     ["chain", RUNG],
@@ -128,6 +131,19 @@ test("every role field rejects invalid values", () => {
     assert.equal(issues[0]?.severity, "error");
   }
   assert.deepEqual(paths({ roles: { r: { description: "x".repeat(300), chain: Array(10).fill(RUNG) } } }), []);
+});
+
+test("crossFamily accepts only a boolean", () => {
+  for (const value of [true, false]) {
+    const { layer, issues } = validateLayer({ roles: { review: { crossFamily: value } } }, "src");
+    assert.deepEqual(issues, []);
+    assert.deepEqual(layer.roles, { review: { crossFamily: value } });
+  }
+  const { issues } = validateLayer({ roles: { review: { crossFamily: "true" } } }, "src");
+  assert.deepEqual(
+    issues.map((issue) => [issue.path, issue.message]),
+    [["roles.review.crossFamily", 'must be a boolean, got "true"']],
+  );
 });
 
 test("every rung rule is checked with an indexed path", () => {

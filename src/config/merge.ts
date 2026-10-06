@@ -14,6 +14,7 @@ function completeRole(partial: Partial<RoleConfig>): RoleConfig | string[] {
     t3Role: partial.t3Role ?? (edit ? "implementation" : "research"),
     interactionMode: partial.interactionMode ?? (edit ? "default" : "plan"),
     runtimeMode: partial.runtimeMode ?? "inherit",
+    ...(partial.crossFamily === undefined ? {} : { crossFamily: partial.crossFamily }),
     chain,
   };
 }

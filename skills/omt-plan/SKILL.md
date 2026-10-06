@@ -11,9 +11,9 @@ You write a plan that a worker can execute without making a design decision, and
 
 ### 0. Check your mode
 
-Call `t3_thread_configuration` with no `threadId` and read your `interactionMode` ([delegation.md](../omt/references/delegation.md#your-interaction-mode)). In `plan` mode, dispatch only `explore` and `plan-review`, write no plan file and no ledger entry, put the plan text in the review briefs instead of a path, and deliver the finished plan in your final message.
+Call `t3_thread_configuration` with no `threadId` and read your `interactionMode` ([delegation.md](../omt/references/delegation.md#your-interaction-mode)). Also keep `modelSelection.instanceId`. It is your provider instance, and step 4 passes it to `--against`. In `plan` mode, dispatch only `explore` and `plan-review`, write no plan file and no ledger entry, put the plan text in the review briefs instead of a path, and deliver the finished plan in your final message.
 
-Done when: you know your mode.
+Done when: you know your mode and your provider instance.
 
 ### 1. Pick the slug and explore
 
@@ -47,8 +47,8 @@ Done when: `omt plan status <slug>` lists every unit, and each unit has all five
 Run up to `maxReviewRounds` rounds (default 3). Each round is a fresh `plan-review` task; reuse no reviewer thread.
 
 1. Compute the hash: `shasum -a 256 .omt/plans/<slug>.md`. In plan mode no file exists: write the exact plan text you put in the brief to `$TMPDIR/omt-<slug>-plan.md` with a quoted heredoc (`<<'EOF'`), then hash it with `shasum -a 256 < "$TMPDIR/omt-<slug>-plan.md"`.
-2. Build the brief with `omt brief plan-review --task-file - --title "plan-review: <title>" --round <n> --attempt 1 --plan <slug> --unit plan --json`. The task names the plan path and its SHA-256, and asks the reviewer to confirm the hash before it reads. From round 2, pass `--prior-file` with the blocker list and your response to each blocker.
-3. Run `omt ledger stats --plan <slug>`, dispatch, record the dispatch with `--task-id`, and end the turn. On wake, read the verdict and record it ([results.md](../omt/references/results.md#recording)).
+2. Build the brief with `omt brief plan-review --task-file - --title "plan-review: <title>" --round <n> --attempt 1 --plan <slug> --unit plan --against <your provider instance> --json`. You wrote the plan, so `--against` with your provider instance from step 0 puts the reviewer on the other family. When a `plan` task wrote the plan, pass that task's provider instead. The task names the plan path and its SHA-256, and asks the reviewer to confirm the hash before it reads. From round 2, pass `--prior-file` with the blocker list and your response to each blocker.
+3. Run `omt ledger stats --plan <slug>`, dispatch, record the dispatch with `--task-id`, `--provider`, and `--model`, and end the turn. On wake, read the verdict and record it ([results.md](../omt/references/results.md#recording)).
 4. Round 1: its blocking findings become the frozen blocker list. Write them under `Log` in the plan.
 5. Round 2 and later: count a finding only when it is on the frozen list, is a regression from your fixes, or cites a requirement, a regression, or a concrete risk. Record anything else as a note.
 6. Fix the plan for each counted finding, then run the next round.

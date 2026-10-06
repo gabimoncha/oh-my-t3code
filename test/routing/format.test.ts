@@ -40,10 +40,10 @@ test("formatRolesTable matches the section 5.3 layout", () => {
   assert.equal(
     formatRolesTable(resolveAll(config, CAPS)),
     [
-      "ROLE         STATUS      TARGET                                         ACCESS     MODE",
-      "execute      resolved    claudeAgent/claude-opus-5-5 effort=medium      edit       default",
-      "review       resolved    claudeAgent/claude-opus-5-5 effort=high        read-only  plan",
-      "oracle       unavailable -                                              read-only  plan",
+      "ROLE         STATUS      TARGET                                         ACCESS     MODE     CROSS",
+      "execute      resolved    claudeAgent/claude-opus-5-5 effort=medium      edit       default  no",
+      "review       resolved    codex/gpt-6-astra reasoningEffort=high         read-only  plan     yes",
+      "oracle       unavailable -                                              read-only  plan     yes",
       "  rung 1 grok/grok-build: provider grok cannot run child tasks: Provider instance is disabled.; Provider executable is not installed.",
       "",
       "verified against orchestrator_capabilities",
@@ -67,7 +67,7 @@ test("formatRolesTable shows skipped rungs and the chosen rung's notes, not late
     },
   };
   const lines = formatRolesTable(resolveAll(config, CAPS)).split("\n");
-  assert.equal(lines[1]?.trimEnd(), "deep         resolved    codex/gpt-6-luna reasoningEffort=xhigh         edit       default");
+  assert.equal(lines[1], "deep         resolved    codex/gpt-6-luna reasoningEffort=xhigh         edit       default  no");
   assert.deepEqual(lines.slice(2, 4), [
     "  rung 1 grok/grok-build: provider grok cannot run child tasks: Provider instance is disabled.; Provider executable is not installed.",
     "  rung 2 codex/gpt-6-luna: effort max mapped to xhigh for option reasoningEffort",
@@ -83,7 +83,7 @@ test("formatRolesTable widens columns and prints the unverified footer", () => {
   const planReview = lines.find((line) => line.startsWith("plan-review"));
   assert.equal(
     planReview,
-    "plan-review  unverified  codex(driver)/gpt-6-astra reasoningEffort=high       read-only  plan",
+    "plan-review  unverified  codex/gpt-6-astra reasoningEffort=high         read-only  plan     yes",
   );
   const long: OmtConfig = {
     ...DEFAULT_CONFIG,
@@ -95,10 +95,13 @@ test("formatRolesTable widens columns and prints the unverified footer", () => {
     },
   };
   const longLines = formatRolesTable(resolveAll(long, CAPS)).split("\n");
-  assert.equal(longLines[0], "ROLE                   STATUS      TARGET                                                      ACCESS     MODE");
+  assert.equal(
+    longLines[0],
+    "ROLE                   STATUS      TARGET                                                      ACCESS     MODE     CROSS",
+  );
   assert.equal(
     longLines[1],
-    "a-very-long-role-name  resolved    claudeAgent/claude-opus-5-5 contextWindow=1m fastMode=true  read-only  plan",
+    "a-very-long-role-name  resolved    claudeAgent/claude-opus-5-5 contextWindow=1m fastMode=true  read-only  plan     yes",
   );
 });
 
@@ -114,5 +117,5 @@ test("formatRolesTable takes MODE from the role's interactionMode, also when una
     },
   };
   const lines = formatRolesTable(resolveAll(config, CAPS)).split("\n");
-  assert.match(lines[1] ?? "", /^odd\s+unavailable\s+-\s+edit\s+inherit$/);
+  assert.match(lines[1] ?? "", /^odd\s+unavailable\s+-\s+edit\s+inherit\s+no$/);
 });

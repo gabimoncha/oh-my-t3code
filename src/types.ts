@@ -24,6 +24,7 @@ export interface RoleConfig {
   t3Role: T3Role;
   interactionMode: InteractionMode;
   runtimeMode: RuntimeMode;
+  crossFamily?: boolean; // review from the family other than the worker's when --against names the worker
   chain: Rung[];
 }
 
@@ -136,10 +137,12 @@ export interface RoleResolution {
   t3Role: T3Role;
   interactionMode: InteractionMode;
   runtimeMode: RuntimeMode;
+  crossFamily: boolean; // the role's crossFamily, false when unset
   status: RoleStatus;
   delegateTask?: DelegateTaskArgs; // from the first ok rung
-  fallbacks: ResolvedTarget[]; // later ok rungs, in chain order
-  attempts: RungAttempt[];
+  fallbacks: ResolvedTarget[]; // later ok rungs, in the order they were tried
+  attempts: RungAttempt[]; // in the order they were tried; index is the configured position
+  notes?: string[]; // role-level routing notes, such as the cross-family notes; omitted when empty
 }
 
 export interface RolesReport {
@@ -157,7 +160,7 @@ export interface RouteOutput {
   result: ResultKind;
   delegateTask?: DelegateTaskArgs;
   fallbacks: ResolvedTarget[];
-  notes: string[]; // every attempt note and failure reason in chain order, each prefixed "rung <n>: "
+  notes: string[]; // the role-level notes, then every attempt note and failure reason in the order tried, each prefixed "rung <n>: "
 }
 
 export interface BriefJsonOutput {

@@ -136,3 +136,30 @@ test("each mode-check step calls t3_thread_configuration, and no skill reads mod
   }
   assert.deepEqual(offenders, []);
 });
+
+test("the resolve-by-hand table in roles.md matches the default chains", () => {
+  const text = readFileSync(join(SKILLS_DIR, "omt", "references", "roles.md"), "utf8");
+  const section = text.slice(text.indexOf("## Resolve by hand"), text.indexOf("Build the target as"));
+  const rows: Record<string, string[]> = {};
+  for (const match of section.matchAll(/^\| `([a-z-]+)` \| ([^|]+) \| ([^|]+) \|$/gm)) {
+    rows[match[1] ?? ""] = [(match[2] ?? "").trim(), (match[3] ?? "").trim()];
+  }
+  const expected: Record<string, string[]> = {};
+  for (const [name, role] of Object.entries(DEFAULT_CONFIG.roles)) {
+    for (const rung of role.chain) assert.equal(rung.provider, rung.driver, name);
+    expected[name] = role.chain.map((rung) => `${rung.driver ?? ""} / ${rung.model} / ${rung.effort ?? ""}`);
+  }
+  assert.deepEqual(rows, expected);
+  assert.match(text, /Build the target as `\{ "providerInstanceId": "<driver>", /);
+  const crossFamily = Object.entries(DEFAULT_CONFIG.roles)
+    .filter(([, role]) => role.crossFamily === true)
+    .map(([name]) => `\`${name}\``);
+  assert.match(section, new RegExp(`The cross-family roles are ${crossFamily.slice(0, -1).join(", ")}, and ${crossFamily.at(-1)}\\.`));
+});
+
+test("no skill text says that review runs on the same family as execute", () => {
+  const offenders = walk(SKILLS_DIR)
+    .filter((path) => path.endsWith(".md"))
+    .filter((path) => /same family as `execute`/i.test(readFileSync(path, "utf8")));
+  assert.deepEqual(offenders, []);
+});
