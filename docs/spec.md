@@ -897,7 +897,7 @@ On a match the command prints one line of JSON and exits 0:
 {"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"<pointer>"}}
 ```
 
-The pointer text is at most 1,000 characters. It says that ultrawork is on for this request, that the agent loads the `omt-ulw` skill and follows it from step 1 before anything else, and that done needs evidence from checks that ran.
+The pointer text is at most 1,000 characters. It says that ultrawork is on for this request, that the agent loads the `omt-ulw` skill before anything else and follows it in order (the banner, then step 0 and step 1), that the full loop runs even for a small task, that children make every product edit, and that done needs evidence from checks that ran.
 
 On no match, on empty input, or on invalid JSON, the command prints nothing and exits 0. It ignores arguments after the hook name and never exits non-zero. Only `omt hook` with no hook name or an unknown one is a usage error.
 
@@ -1191,6 +1191,7 @@ User scope and project scope never read or write each other's files.
 
 Rules that the skills must carry:
 
+- `omt-ulw` runs the full loop for every task, however small. The conductor edits no product files (code, tests, docs, config). Its own writes go only to `.omt/` (plan, ledger, evidence) and to brief temp files in `$TMPDIR`. A LIGHT run may skip only step 3 (explore), the test child (step 8), and the oracle. It still has the banner, steps 0 to 2, a plan from `omt plan new <slug> --light`, one `execute` child and one `review` child per unit with each dispatch and result in the ledger, the conductor's own run of the verify commands and the final checks, and the report. When no child can do an edit (role `unavailable`, no `delegate_task`, a stop code, or a limit), the conductor stops and tells the user; it does not make the edit itself.
 - Before each dispatch, the conductor runs `omt ledger stats --plan <slug>` and dispatches only while it reports `can dispatch: yes`. Without the CLI, it counts the open task ids in the plan's log.
 - A read-only role's brief carries the plan-mode line (section 9.2). When a summary is `Child task completed without an assistant result.`, the conductor reads the child with `t3_thread_read` (view `messages`, which includes proposed plans) before it re-dispatches.
 - The conductor keeps its own turn short: dispatch async work, then end the turn and let the wake start the next one. When the turn cannot end (a goal or a stop hook keeps it running), it uses `delegate_task` with `mode: "wait"` and a `timeoutMs` of at most 3,600,000 for one blocking task. For parallel tasks, it uses `t3_thread_wait` on each child thread, then `task_status` for each. A later wake that names tasks it already read needs no action.

@@ -37,8 +37,9 @@ export function detectUltrawork(prompt: string): boolean {
 export function ultraworkContext(): string {
   return [
     "omt ultrawork is on for this request.",
-    "Before anything else, load the omt-ulw skill and follow it from step 1.",
-    "Do not answer or start the work until the skill is loaded.",
+    "Load the omt-ulw skill before anything else and follow it in order: the banner first, then step 0 and step 1.",
+    "Run the full loop even for a small task.",
+    "Children make every product edit; you edit no code, tests, docs, or config yourself.",
     "Done needs evidence: report done only after the checks ran and passed, and quote their output.",
   ].join(" ");
 }

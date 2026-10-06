@@ -5,15 +5,23 @@ description: ulw / ultrawork in T3 Code. Use when the user says ulw or ultrawork
 
 # Ultrawork
 
-Print this banner as your first line, then start step 1:
+Print this banner as your first line, then start step 0:
 
 `omt ultrawork: plan, delegate, review, test, verify.`
+
+## Contract
+
+The user typed ulw to get the loop. Run the full loop for every task, however small. A small task gets a LIGHT run, not a shortcut.
+
+- You edit no product files: code, tests, docs, or config. Your own writes go only to `.omt/` (plan, ledger, evidence) and to brief temp files in `$TMPDIR`.
+- A LIGHT run may skip only step 3 (explore), the test child (step 8), and the oracle. It still has the banner, steps 0 to 2, a plan from `omt plan new <slug> --light`, one `execute` child and one `review` child per unit with each dispatch and result in the ledger, your own run of the verify commands and the final checks, and the report.
+- When no child can do an edit (role `unavailable`, no `delegate_task`, a stop code, or a limit), stop and tell the user. Do not make the edit yourself.
 
 You are the conductor. The shared T3 rules are in [delegation.md](../omt/references/delegation.md); read it before your first dispatch. T3 tools appear here by base name; your harness may prefix them, for example `mcp__t3-code__delegate_task`.
 
 ## Conductor rules
 
-- Workers edit; you plan, read, and verify. A trivial one-line edit you may make yourself.
+- You plan, dispatch, read, and verify (see Contract).
 - One brief per task. Each brief stands alone ([brief.md](../omt/references/brief.md)).
 - Parallel editing units have disjoint scopes. Children share your checkout.
 - Done means a check that can fail ran and passed. A worker's claim is not done ([results.md](../omt/references/results.md)).
@@ -35,7 +43,7 @@ Done when: you run in `default` mode, or the user has the question.
 Write down the objective in one sentence, the done conditions, the tier, and the plan slug.
 
 - Each done condition is a check that can fail: a command, a test, or an observable result.
-- Tier LIGHT: one or two units, one area of code, no design decision left. Tier HEAVY: anything else.
+- Tier LIGHT: one or two units, one area of code, no design decision left. LIGHT changes how much review and testing runs, not whether children run (see Contract). Tier HEAVY: anything else.
 - The slug matches `^[a-z0-9][a-z0-9-]{0,63}$`, for example `http-retry`. Explore briefs and `omt ledger stats` need it before the plan file exists.
 - Ask the user only for a decision you cannot make from the code; give 2 to 4 options and your recommendation.
 
@@ -104,7 +112,7 @@ Done when: the unit has a recorded review verdict for this round. `APPROVE` move
 
 Dispatch a `test` task with the unit's scope, done conditions, and verify commands (`--plan <slug> --unit <id> --round <n> --attempt 1 --title "test <unit>: <short unit title>"`), and record the dispatch as in step 5. HEAVY runs it for every unit; LIGHT may run the verify commands yourself instead and save the output under `.omt/evidence/`.
 
-On `VERIFIED` with evidence, record the result, run `omt plan mark <slug> <unit> done`, and record `--status verified` for the unit. `NOT VERIFIED` or `INCONCLUSIVE` moves it to step 9.
+On `VERIFIED` with evidence, record the result, run `omt plan mark <slug> <unit> done`, and record `--status verified` for the unit. `NOT VERIFIED` or `INCONCLUSIVE` moves it to step 9. When you run the verify commands yourself, a pass with saved output counts as `VERIFIED`; a failure counts as `NOT VERIFIED` and goes to step 9.
 
 Done when: the unit is marked done in the plan with a `verified` ledger entry, or it is in step 9.
 
@@ -126,7 +134,7 @@ Done when: the unit is back in review with a higher round, or it is marked block
 
 When every unit is done:
 
-1. Run every final check in the plan yourself (`F1`, the full test suite and typecheck). Mark each `D` and `F` item with `omt plan mark <slug> <id> done` after its command passes.
+1. Run every final check in the plan yourself (`F1`, the full test suite and typecheck). Mark each `D` and `F` item with `omt plan mark <slug> <id> done` after its command passes. A failing final check goes to step 9 as a fix task for the unit that owns the code.
 2. HEAVY: dispatch one `oracle` task over the whole change, with the objective, every done condition, and the scope paths (or the base ref when the work is committed). Build it with `omt brief oracle --task-file - --title "oracle: <slug>" --plan <slug> --unit F2 --round <n> --attempt 1 --json`, and record the dispatch and the result as in steps 5 and 6. Fix its findings through step 9, then run the oracle again. Count oracle rounds against `maxReviewRounds`; at the limit, stop and report the open findings to the user. Mark `F2` done when it returns `APPROVE`.
 
 LIGHT plans have no `F2` item and no oracle round.
