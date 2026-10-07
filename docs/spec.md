@@ -386,7 +386,9 @@ Creates, in the project root, only what is missing:
 - `.omt/plans/`
 - `.omt/.gitignore` with the six lines `ledger.jsonl`, `evidence/`, `bin/`, `install.json`, `backups/`, and `plans/`. A live plan is shared state of all worktrees (section 4), not source, so git does not see it.
 
-It prints one line per path: `create <path>` or `exists <path>`. It never overwrites a file.
+When `.omt/.gitignore` exists and lacks some of these lines, `init` appends the missing lines and keeps every other line. An older omt wrote fewer lines, so this brings an existing project up to date. A symlinked `.gitignore` is updated through its target, and a dangling symlink is left alone.
+
+It prints one line per path: `create <path>`, `update <path>`, or `exists <path>`. It never overwrites the config, and it never removes a line.
 
 ### 5.3 `omt roles` and `omt route`
 

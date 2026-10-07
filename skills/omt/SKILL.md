@@ -28,7 +28,7 @@ To find the CLI (`omt`, `.omt/bin/omt`, or the manual steps), follow [The CLI](r
 
 | Command | Prints |
 | --- | --- |
-| `omt init` | creates `.omt/config.jsonc`, `.omt/plans/`, `.omt/.gitignore` |
+| `omt init` | creates `.omt/config.jsonc`, `.omt/plans/`, `.omt/.gitignore`; adds missing `.gitignore` lines |
 | `omt roles` | every role with its target, access, and mode |
 | `omt route <role> [--against <provider\|driver\|auto>]` | `delegateTask` and `fallbacks` for one role, as JSON; `--against` names the worker that a cross-family role reviews ([roles.md](references/roles.md#cross-family-roles)) |
 | `omt brief <role> --task-file - --title "<role> <unit>: <title>" --scope <p> --done <c> --verify <cmd> --plan <slug> --unit <id> --round <n> --attempt <n> [--against <provider\|driver\|auto>] --json` | `{ delegateTask, fallbacks }`; pass `delegateTask` to `delegate_task` unchanged |

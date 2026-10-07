@@ -182,7 +182,7 @@ test("init creates the config, plans dir, and .gitignore in the project root", a
   assert.equal(readFileSync(join(omt, ".gitignore"), "utf8"), "ledger.jsonl\nevidence/\nbin/\ninstall.json\nbackups/\nplans/\n");
 });
 
-test("init creates only what is missing and never overwrites a file", async (t) => {
+test("init creates only what is missing and never overwrites the config", async (t) => {
   const { project, ctx, write, projectPath } = setup(t);
   write(projectPath, "{ /* mine */ }");
   const omt = join(project, ".omt");
@@ -199,6 +199,46 @@ test("init creates only what is missing and never overwrites a file", async (t) 
     again.out(),
     `exists ${projectPath}\nexists ${join(omt, "plans")}\nexists ${join(omt, ".gitignore")}\n`,
   );
+});
+
+test("init adds the missing lines to an existing .gitignore and keeps the user's lines", async (t) => {
+  const { project, ctx, write, projectPath } = setup(t);
+  const ignore = join(project, ".omt", ".gitignore");
+  write(ignore, "ledger.jsonl\nevidence/\nbin/\ninstall.json\nbackups/\n# mine\nscratch/");
+  const c = ctx([]);
+  assert.equal(await init(c), 0);
+  assert.equal(
+    c.out(),
+    `create ${projectPath}\ncreate ${join(project, ".omt", "plans")}\nupdate ${ignore}\n`,
+  );
+  assert.equal(
+    readFileSync(ignore, "utf8"),
+    "ledger.jsonl\nevidence/\nbin/\ninstall.json\nbackups/\n# mine\nscratch/\nplans/\n",
+  );
+  const again = ctx([]);
+  assert.equal(await init(again), 0);
+  assert.match(again.out(), new RegExp(`^exists ${ignore.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "m"));
+});
+
+test("init updates a symlinked .gitignore through its target and leaves a dangling one alone", async (t) => {
+  const { root, project, ctx, write } = setup(t);
+  const ignore = join(project, ".omt", ".gitignore");
+  const target = join(root, "dotfiles", "omt-gitignore");
+  write(target, "ledger.jsonl\n");
+  mkdirSync(join(project, ".omt"), { recursive: true });
+  symlinkSync(target, ignore);
+  assert.equal(await init(ctx([])), 0);
+  assert.ok(lstatSync(ignore).isSymbolicLink());
+  assert.equal(readFileSync(target, "utf8"), "ledger.jsonl\nevidence/\nbin/\ninstall.json\nbackups/\nplans/\n");
+
+  const other = setup(t);
+  const dangling = join(other.project, ".omt", ".gitignore");
+  mkdirSync(join(other.project, ".omt"), { recursive: true });
+  symlinkSync(join(other.root, "missing"), dangling);
+  const c = other.ctx([]);
+  assert.equal(await init(c), 0);
+  assert.match(c.out(), /^exists .*\.gitignore$/m);
+  assert.ok(lstatSync(dangling).isSymbolicLink());
 });
 
 test("init rejects arguments", async (t) => {
