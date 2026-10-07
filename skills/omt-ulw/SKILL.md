@@ -90,7 +90,7 @@ For each unit whose dependencies are done, until a limit is reached:
 3. Call `delegate_task` with `delegateTask`. Keep `fallbacks`, `taskId`, `childThreadId`, and `childRunId`.
 4. Record it: `omt ledger add --plan <slug> --unit <id> --role <role> --round <n> --attempt <a> --status dispatched --task-id <taskId> --client-request-id <id> --provider <provider> --model <model>`. Copy each value from the `omt brief` command and the `delegate_task` call that returned the task. In this step `<n>` is 1, and `<a>` is 1 for the first call. A retry or a fallback call after a failure code has its own higher attempt ([delegation.md](../omt/references/delegation.md#failure-codes)). `<provider>` is `target.providerInstanceId`, or `target.driverKind` when the target has no instance id. `<model>` is `target.model`.
 
-Then end your turn. When a goal or a stop hook keeps your turn running, wait as [delegation.md](../omt/references/delegation.md#waiting) says instead, then go to step 6.
+Before you end a turn with an active task, start the stall heartbeat once ([delegation.md](../omt/references/delegation.md#stalled-tasks)). Then end your turn. When a goal or a stop hook keeps your turn running, wait as [delegation.md](../omt/references/delegation.md#waiting) says instead, then go to step 6.
 
 Done when: every ready unit is dispatched or waits on a limit, each dispatched task has a ledger entry, and your turn has ended or you are waiting.
 
@@ -119,7 +119,7 @@ Done when: the unit has a recorded review verdict for this round. `APPROVE` move
 
 ### 8. Test
 
-Dispatch a `test` task with the unit's scope, done conditions, and verify commands (`--plan <slug> --unit <id> --round <n> --attempt 1 --title "test <unit>: <short unit title>"`), and record the dispatch as in step 5. HEAVY runs it for every unit; LIGHT may run the verify commands yourself instead and save the output in the evidence directory that `omt paths --evidence` prints.
+Dispatch a `test` task with the unit's scope, done conditions, and verify commands (`--plan <slug> --unit <id> --round <n> --attempt 1 --title "test <unit>: <short unit title>"`), and record the dispatch as in step 5. The test task checks the unit's done conditions and verify commands. Ask it for extra tests only when a done condition has no check that can fail. HEAVY runs it for every unit; LIGHT may run the verify commands yourself instead and save the output in the evidence directory that `omt paths --evidence` prints.
 
 Design exclusion: for a `ui` unit, leave `docs/design/` out of the test scope paths, and leave out every done condition and every piece of context that compares the result with the design, such as screens, screenshots, or a visual match. Keep the code and behavior checks: build, unit tests, and `agent-device` flows that check behavior, not looks. The `ui` task and the owner do the visual comparison. Review briefs (step 7) and the oracle brief (step 10) apply the same exclusion.
 
@@ -131,15 +131,15 @@ Done when: the unit is marked done in the plan with a `verified` ledger entry, o
 
 Relevance check: before each fix round, check each finding against the plan. Keep a finding when it breaks a done condition, a plan requirement, or the correctness of the changed code for inputs the plan covers. Drop the others, for example a style preference, an input the plan rules out, or a hypothetical case. Record each dropped finding with its reason under `Log` in the plan and in the next `--prior-file`. When you drop every finding, the unit goes to step 8. When you drop every finding of an oracle round, record the drops under `Log` in the plan and mark `F2` done. The step 11 report lists the dropped oracle findings.
 
-Send the kept findings or failures, verbatim, to a new fix task for the next round `<n+1>`, with all earlier rounds in `--prior-file`. Use `--plan <slug> --unit <id> --round <n+1> --attempt 1 --title "fix <unit>: <short unit title>"`, and record the dispatch with its `--provider` and `--model` as in step 5. Then return to step 7 for that unit.
+Send the kept findings or failures, verbatim, to a new fix task for the next round `<n+1>`, with all earlier rounds in `--prior-file`. Use `--plan <slug> --unit <id> --round <n+1> --attempt 1 --title "fix <unit>: <short unit title>"`, and record the dispatch with its `--provider` and `--model` as in step 5. Do not ask a fix task to prove that its tests can fail; the test task does that. Then return to step 7 for that unit.
 
 | Round | Worker | Next step when its review or test fails |
 | --- | --- | --- |
 | 1 | `execute` | round 2 |
-| 2 | `execute` fix | round 3 |
-| 3 | `deep` fix or `execute` fix | stop |
+| 2 | `execute` fix or `deep` fix | round 3 |
+| 3 | `execute` fix or `deep` fix | stop |
 
-Round 3 uses a `deep` fix only when an open finding needs investigation: its cause is unknown, the round 2 fix failed for the same reason, or the fix changes the design. Otherwise round 3 uses an `execute` fix.
+Round 2 or 3 uses a `deep` fix only when an open finding needs investigation: its cause is unknown, the previous fix failed for the same reason, or the fix changes the design. Otherwise the round uses an `execute` fix.
 
 A `ui` unit uses `ui` in every round, never `execute` or `deep`. When `ui` cannot run, stop and tell the user; do not fall back to another role or family.
 
@@ -166,6 +166,8 @@ Tell the user:
 - Each done condition with its evidence: the command and its result line, or the evidence file.
 - Review, test, and oracle verdicts per unit.
 - Open items: blocked units, notes, and decisions left.
+
+Delete the stall heartbeat with `delete_scheduled_task`.
 
 Commit only when the user asked for a commit.
 

@@ -280,10 +280,10 @@ test("omt-ulw step 9 runs a relevance check before each fix round", () => {
   assert.match(fix, /When you drop every finding, the unit goes to step 8\./);
 });
 
-test("omt-ulw round 3 uses deep only when a finding needs investigation", () => {
+test("omt-ulw round 2 or 3 uses deep only when a finding needs investigation", () => {
   const fix = section(readSkill("omt-ulw"), "### 9. ");
-  assert.match(fix, /Round 3 uses a `deep` fix only when an open finding needs investigation/);
-  assert.match(fix, /Otherwise round 3 uses an `execute` fix\./);
+  assert.match(fix, /Round 2 or 3 uses a `deep` fix only when an open finding needs investigation/);
+  assert.match(fix, /Otherwise the round uses an `execute` fix\./);
 });
 
 test("omt-plan asks for the task budget and sets it with omt plan limit --tasks", () => {
@@ -315,4 +315,15 @@ test("omt-design asks for 3 variants per screen in a new Paper file and a pick p
   assert.match(persona, /The first variants task makes a new Paper file named after the project\. Do not reuse a file that is already open\./);
   assert.match(persona, /Every later task works in the Paper file that the task names\./);
   assert.match(persona, /make 3 variants of each screen/);
+});
+
+test("omt-ulw starts a stall heartbeat, and the test role proves failures in a working-tree copy", () => {
+  const delegation = readFileSync(join(SKILLS_DIR, "omt", "references", "delegation.md"), "utf8");
+  assert.match(section(delegation, "## Stalled tasks"), /`updatedAt` is more than 30 minutes old/);
+  assert.match(section(delegation, "## Stalled tasks"), /call `task_cancel`, record `--status interrupted --note "stalled"`/);
+  assert.match(section(readSkill("omt-ulw"), "### 5. "), /delegation\.md#stalled-tasks/);
+  const test = readFileSync(join(SKILLS_DIR, "omt", "references", "roles", "test.md"), "utf8");
+  assert.match(test, /git ls-files -co --exclude-standard -z/);
+  assert.doesNotMatch(test, /git archive HEAD/);
+  assert.match(test, /Never add an exit code to a log afterwards\./);
 });

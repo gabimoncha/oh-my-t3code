@@ -106,6 +106,16 @@ When your turn cannot end (a goal or a stop hook keeps it running):
 - For one blocking task, call `delegate_task` with `mode: "wait"` and `timeoutMs` at most 3,600,000. On `waitTimedOut: true`, the task still runs; read it later with `task_status`.
 - For parallel tasks, call `t3_thread_wait` with `threadId: childThreadId` and `runId: childRunId` for each task (default 10 minutes, max 60), then `task_status` for each. Without `runId`, `t3_thread_wait` returns at once on a thread that is idle between runs. It does not cancel on timeout and does not acknowledge the result.
 
+## Stalled tasks
+
+A child can go silent: its run hangs, or T3 stops it and no wake comes. Nothing wakes you then, so check active tasks on a timer.
+
+1. Before you first end a turn with an active task, call `schedule_task` once with `schedule: {"type":"interval","everyMs":600000}`, bound to your thread. The prompt names the plan slug and says: "Stall check for plan <slug>. Follow delegation.md#stalled-tasks." Keep the returned id.
+2. On each tick, read `omt ledger list --plan <slug>`. For each dispatched task without a terminal entry, call `t3_thread_read` on its child thread with `limit: 1`. The task is stalled when the thread's `updatedAt` is more than 30 minutes old.
+3. For a stalled task, call `task_status`. When it has a result block, record it and continue at step 6 of your skill. Otherwise read the child's last items with view `activity`. A result block in the thread counts as the result; check its claims as for any result. Otherwise call `task_cancel`, record `--status interrupted --note "stalled"`, check the scope files for half-done edits, and dispatch the next attempt with the same round. Tell that attempt what the stalled attempt left in the files.
+4. A tick with no stalled task ends at once, with no message to the user.
+5. When the run ends or stops for the owner, call `delete_scheduled_task` with the id.
+
 ## `task_status` and `task_cancel`
 
 - `task_status` returns `summary`: the child's last assistant message, or the provider error for a failed run. `workState` is `working`, `waiting_for_children`, or `result_available`. Reading a terminal result acknowledges its delivery.

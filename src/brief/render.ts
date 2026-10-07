@@ -68,6 +68,8 @@ export function renderBrief(input: BriefInput, persona: string, contract: string
       : []),
     "You do not see the parent conversation. This brief is your full context. If you need something that is missing, say so in your final message.",
     "Other agents may edit other files in this repository at the same time. Leave changes outside your scope alone. Do not commit, push, or create branches.",
+    "Processes: do not run `pkill`, `killall`, or another kill by name, because it can stop your own run. Stop only a process that you started, by its PID. Give each command that can run long a time limit, for example `timeout 900 <command>`.",
+    "Shared files: never break and restore files in the shared checkout, for example to prove that a test can fail. The test role makes that proof in a private copy.",
   ];
 
   const blocks: string[] = [header, `# Role: ${input.role}`];

@@ -12,7 +12,7 @@ A role names a kind of work. The config maps each role to a chain of rungs (prov
 | `plan-review` | read-only | review | Checking a plan for gaps before any unit runs. Cross-family. Pass the plan author's provider with `--against`. |
 | `execute` | edit | work | One planned unit inside its scope. The default worker. |
 | `quick` | edit | work | A small mechanical change: a rename, a typo, a one-file edit. |
-| `deep` | edit | work | A hard or cross-cutting problem that needs investigation first, also a round 3 fix whose cause is unknown or whose round 2 fix failed for the same reason. |
+| `deep` | edit | work | A hard or cross-cutting problem that needs investigation first, also a round 2 or 3 fix whose cause is unknown or whose previous fix failed for the same reason. |
 | `review` | read-only | review | One review round of a diff against its brief. Cross-family. Pass the worker with `--against`. |
 | `oracle` | read-only | review | The final gate. Attack the finished change from the family other than the main implementer's. Cross-family. |
 | `test` | edit | test | Writing and running tests and real checks for a verdict with evidence. |
