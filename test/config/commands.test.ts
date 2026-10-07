@@ -179,7 +179,7 @@ test("init creates the config, plans dir, and .gitignore in the project root", a
   );
   assert.equal(readFileSync(join(omt, "config.jsonc"), "utf8"), PROJECT_STARTER_CONFIG);
   assert.ok(statSync(join(omt, "plans")).isDirectory());
-  assert.equal(readFileSync(join(omt, ".gitignore"), "utf8"), "ledger.jsonl\nevidence/\nbin/\ninstall.json\nbackups/\n");
+  assert.equal(readFileSync(join(omt, ".gitignore"), "utf8"), "ledger.jsonl\nevidence/\nbin/\ninstall.json\nbackups/\nplans/\n");
 });
 
 test("init creates only what is missing and never overwrites a file", async (t) => {

@@ -22,6 +22,7 @@ export interface PlanStatus {
   title: string;
   slug?: string;
   maxParallel?: number;
+  maxTasks?: number;
   items: PlanItem[];
   counts: Record<PlanItemKind, PlanCounts>;
   next?: PlanItem;
@@ -32,6 +33,7 @@ const ITEM_RE = /^- \[( |x|X|~)\] (U|D|F)(\d+)\. (.*)$/;
 const HEADER_LINE_RE = /^[ \t]*(<!--[ \t]*omt-plan v1\b[^>\n]*-->)[ \t]*\r?$/m;
 const SLUG_RE = /\bslug=([^\s>]+)/;
 const MAX_PARALLEL_RE = /\bmax-parallel=([^\s>]+)/;
+const MAX_TASKS_RE = /\bmax-tasks=([^\s>]+)/;
 
 export interface PlanHeader {
   text: string;
@@ -49,6 +51,13 @@ export function findPlanHeader(markdown: string): PlanHeader | undefined {
 export function parseMaxParallel(value: string): number | undefined {
   if (!/^[1-9]\d*$/.test(value)) return undefined;
   const [min, max] = LIMIT_RANGES.maxParallel;
+  const number = Number(value);
+  return number >= min && number <= max ? number : undefined;
+}
+
+export function parseMaxTasks(value: string): number | undefined {
+  if (!/^[1-9]\d*$/.test(value)) return undefined;
+  const [min, max] = LIMIT_RANGES.maxTasksPerRun;
   const number = Number(value);
   return number >= min && number <= max ? number : undefined;
 }
@@ -89,6 +98,8 @@ export function parsePlan(markdown: string): PlanStatus {
   const slug = SLUG_RE.exec(header)?.[1];
   const maxParallelText = MAX_PARALLEL_RE.exec(header)?.[1];
   const maxParallel = maxParallelText === undefined ? undefined : parseMaxParallel(maxParallelText);
+  const maxTasksText = MAX_TASKS_RE.exec(header)?.[1];
+  const maxTasks = maxTasksText === undefined ? undefined : parseMaxTasks(maxTasksText);
   const next = items.find((item) => item.kind === "U" && item.state === "open");
   const status: PlanStatus = {
     title,
@@ -98,6 +109,7 @@ export function parsePlan(markdown: string): PlanStatus {
   };
   if (slug !== undefined) status.slug = slug;
   if (maxParallel !== undefined) status.maxParallel = maxParallel;
+  if (maxTasks !== undefined) status.maxTasks = maxTasks;
   if (next !== undefined) status.next = next;
   return status;
 }

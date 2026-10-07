@@ -86,7 +86,7 @@ test("omt paths prints text lines, JSON, or one path per flag", async (t) => {
   assert.equal((await p.run(["paths", "extra"])).code, 2);
 });
 
-test("a worktree .omt with plans gives one shadowed-state warning; other state gives none", async (t) => {
+test("a worktree .omt with plans gives one shadowed-state warning and a hint; other state gives none", async (t) => {
   const p = worktreeProject(t);
   mkdirSync(join(p.worktree, ".omt", "plans"), { recursive: true });
   writeFileSync(join(p.worktree, ".omt", "config.jsonc"), "{}\n");
@@ -100,8 +100,12 @@ test("a worktree .omt with plans gives one shadowed-state warning; other state g
   const warned = await p.run(["plan", "list"]);
   assert.equal(warned.code, 0, warned.ctx.err());
   const lines = warned.ctx.err().trimEnd().split("\n");
-  assert.equal(lines.length, 1, warned.ctx.err());
+  assert.equal(lines.length, 2, warned.ctx.err());
   assert.match(lines[0] ?? "", WARNING);
+  assert.equal(
+    lines[1],
+    'hint: if git tracks them, untrack them with "git rm --cached" and commit; .omt/.gitignore keeps plans out of git',
+  );
   assert.equal((await p.run(["paths"])).ctx.err(), "", "paths does not warn");
   assert.equal((await p.run(["plan", "list"], p.project)).ctx.err(), "", "no warning from the main checkout");
 });

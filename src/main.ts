@@ -154,6 +154,7 @@ function warnShadowedState(ctx: CliContext): void {
   ctx.stderr(
     `warning: ${omtDir(shadowed.worktree)} holds plans or a ledger that omt no longer reads; move them to ${omtDir(shadowed.main)}\n`,
   );
+  ctx.stderr(`hint: if git tracks them, untrack them with "git rm --cached" and commit; .omt/.gitignore keeps plans out of git\n`);
 }
 
 export async function main(argv: string[], overrides: Partial<CliContext> = {}): Promise<number> {

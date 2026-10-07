@@ -29,6 +29,7 @@ You are the conductor. The shared T3 rules are in [delegation.md](../omt/referen
 - On a T3 failure code, follow the table in [delegation.md](../omt/references/delegation.md#failure-codes).
 - Tick plan items only with `omt plan mark <slug> <id> <done|open|blocked>`.
 - After a context reset, re-read the plan (`omt plan status <slug>`) and the ledger (`omt ledger list --plan <slug>`) before you act.
+- Ask each owner question once. Later status messages do not repeat open questions. Only the message that stops the run to wait for the answers lists them again.
 
 ## Steps
 
@@ -128,13 +129,17 @@ Done when: the unit is marked done in the plan with a `verified` ledger entry, o
 
 ### 9. Fix
 
-Send the findings or failures, verbatim, to a new fix task for the next round `<n+1>`, with all earlier rounds in `--prior-file`. Use `--plan <slug> --unit <id> --round <n+1> --attempt 1 --title "fix <unit>: <short unit title>"`, and record the dispatch with its `--provider` and `--model` as in step 5. Then return to step 7 for that unit.
+Relevance check: before each fix round, check each finding against the plan. Keep a finding when it breaks a done condition, a plan requirement, or the correctness of the changed code for inputs the plan covers. Drop the others, for example a style preference, an input the plan rules out, or a hypothetical case. Record each dropped finding with its reason under `Log` in the plan and in the next `--prior-file`. When you drop every finding, the unit goes to step 8. When you drop every finding of an oracle round, record the drops under `Log` in the plan and mark `F2` done. The step 11 report lists the dropped oracle findings.
+
+Send the kept findings or failures, verbatim, to a new fix task for the next round `<n+1>`, with all earlier rounds in `--prior-file`. Use `--plan <slug> --unit <id> --round <n+1> --attempt 1 --title "fix <unit>: <short unit title>"`, and record the dispatch with its `--provider` and `--model` as in step 5. Then return to step 7 for that unit.
 
 | Round | Worker | Next step when its review or test fails |
 | --- | --- | --- |
 | 1 | `execute` | round 2 |
 | 2 | `execute` fix | round 3 |
-| 3 | `deep` fix | stop |
+| 3 | `deep` fix or `execute` fix | stop |
+
+Round 3 uses a `deep` fix only when an open finding needs investigation: its cause is unknown, the round 2 fix failed for the same reason, or the fix changes the design. Otherwise round 3 uses an `execute` fix.
 
 A `ui` unit uses `ui` in every round, never `execute` or `deep`. When `ui` cannot run, stop and tell the user; do not fall back to another role or family.
 
@@ -147,7 +152,7 @@ Done when: the unit is back in review with a higher round, or it is marked block
 When every unit is done:
 
 1. Run every final check in the plan yourself (`F1`, the full test suite and typecheck). Mark each `D` and `F` item with `omt plan mark <slug> <id> done` after its command passes. A failing final check goes to step 9 as a fix task for the unit that owns the code.
-2. HEAVY: dispatch one `oracle` task over the whole change, with the objective, every done condition except those that the [design exclusion](#8-test) of step 8 leaves out, and the scope paths without `docs/design/` (or the base ref when the work is committed, with `docs/design/` excluded from its diff). Leave design context out of the task text too. Build it with `omt brief oracle --task-file - --title "oracle: <slug>" --plan <slug> --unit F2 --round <n> --attempt 1 --against auto --json`, and record the dispatch and the result as in steps 5 and 6. `--against auto` puts the oracle on the family other than the main implementer's. Fix its findings through step 9, then run the oracle again. Count oracle rounds against `maxReviewRounds`; at the limit, stop and report the open findings to the user. Mark `F2` done when it returns `APPROVE`.
+2. HEAVY: dispatch one `oracle` task over the whole change, with the objective, every done condition except those that the [design exclusion](#8-test) of step 8 leaves out, and the scope paths without `docs/design/` (or the base ref when the work is committed, with `docs/design/` excluded from its diff). Leave design context out of the task text too. Build it with `omt brief oracle --task-file - --title "oracle: <slug>" --plan <slug> --unit F2 --round <n> --attempt 1 --against auto --json`, and record the dispatch and the result as in steps 5 and 6. `--against auto` puts the oracle on the family other than the main implementer's. Fix its findings through step 9, then run the oracle again. From oracle round 2, pass the earlier oracle findings with your response to each in `--prior-file`. Count oracle rounds against `maxReviewRounds`; at the limit, stop and report the open findings to the user. Mark `F2` done when it returns `APPROVE`.
 
 LIGHT plans have no `F2` item and no oracle round.
 

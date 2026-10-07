@@ -1,9 +1,10 @@
-export function planTemplate(slug: string, title: string, createdAt: string, options: { light?: boolean; maxParallel?: number } = {}): string {
+export function planTemplate(slug: string, title: string, createdAt: string, options: { light?: boolean; maxParallel?: number; maxTasks?: number } = {}): string {
   const oracle = options.light === true ? "" : "- [ ] F2. The oracle role approves the whole change.\n";
-  const limit = options.maxParallel === undefined ? "" : ` max-parallel=${options.maxParallel}`;
+  const parallel = options.maxParallel === undefined ? "" : ` max-parallel=${options.maxParallel}`;
+  const tasks = options.maxTasks === undefined ? "" : ` max-tasks=${options.maxTasks}`;
   return `# ${title}
 
-<!-- omt-plan v1 slug=${slug} created=${createdAt}${limit} -->
+<!-- omt-plan v1 slug=${slug} created=${createdAt}${parallel}${tasks} -->
 
 ## Objective
 

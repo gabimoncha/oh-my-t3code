@@ -12,7 +12,7 @@ import {
   requestId,
 } from "../ledger/ledger.ts";
 import { parsePlan } from "../plan/parse.ts";
-import type { CliContext, CommandRun, LedgerEntry } from "../types.ts";
+import type { CliContext, CommandRun, LedgerEntry, LedgerStats } from "../types.ts";
 import { usageError } from "../util/errors.ts";
 import { formatIssue } from "./config.ts";
 import { parseArgs } from "../util/args.ts";
@@ -32,7 +32,8 @@ Subcommands:
   list              print the entries
   stats             print dispatched, active, and terminal counts, the limits,
                     and whether another task can be dispatched; with --plan,
-                    a max-parallel limit in the plan header lowers max parallel
+                    a max-parallel limit in the plan header lowers max parallel,
+                    and a max-tasks key replaces max tasks per run
   request-id        print the canonical clientRequestId
 
 Options for add:
@@ -157,13 +158,17 @@ async function stats(ctx: CliContext, root: string, values: Values) {
   const { config, issues } = await loadConfig({ cwd: ctx.cwd, env: ctx.env, homedir: ctx.homedir });
   for (const issue of issues) ctx.stderr(formatIssue(issue));
   const markdown = values.plan === undefined ? undefined : await readFileIfExists(join(plansDir(root), `${values.plan}.md`));
-  const planMaxParallel = markdown === undefined ? undefined : parsePlan(markdown).maxParallel;
+  const plan = markdown === undefined ? undefined : parsePlan(markdown);
+  const planMaxParallel = plan?.maxParallel;
+  const planMaxTasks = plan?.maxTasks;
   const limits = {
     maxParallel: Math.min(config.limits.maxParallel, planMaxParallel ?? config.limits.maxParallel),
-    maxTasksPerRun: config.limits.maxTasksPerRun,
+    maxTasksPerRun: planMaxTasks ?? config.limits.maxTasksPerRun,
   };
   const stats = ledgerStats(await load(ctx, root, values.plan), limits, values.plan);
-  const result = planMaxParallel === undefined ? stats : { ...stats, planMaxParallel };
+  const result: LedgerStats = { ...stats };
+  if (planMaxParallel !== undefined) result.planMaxParallel = planMaxParallel;
+  if (planMaxTasks !== undefined) result.planMaxTasks = planMaxTasks;
   if (values.json === true) {
     printJson(ctx.stdout, result);
     return 0;
@@ -176,7 +181,9 @@ async function stats(ctx: CliContext, root: string, values: Values) {
     planMaxParallel === undefined
       ? `max parallel: ${result.limits.maxParallel}`
       : `max parallel: ${result.limits.maxParallel} (plan ${planMaxParallel}, config ${config.limits.maxParallel})`,
-    `max tasks per run: ${result.limits.maxTasksPerRun}`,
+    planMaxTasks === undefined
+      ? `max tasks per run: ${result.limits.maxTasksPerRun}`
+      : `max tasks per run: ${result.limits.maxTasksPerRun} (plan ${planMaxTasks}, config ${config.limits.maxTasksPerRun})`,
     `can dispatch: ${result.canDispatch ? "yes" : "no"}`,
   ];
   ctx.stdout(lines.map((line) => `${line}\n`).join(""));

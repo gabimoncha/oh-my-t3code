@@ -104,7 +104,7 @@ test("install --project writes copies, relative links, config, shim, .gitignore,
   assert.ok(statSync(join(f.project, ".omt", "plans")).isDirectory());
   assert.equal(
     readFileSync(join(f.project, ".omt", ".gitignore"), "utf8"),
-    "ledger.jsonl\nevidence/\nbin/\ninstall.json\nbackups/\n",
+    "ledger.jsonl\nevidence/\nbin/\ninstall.json\nbackups/\nplans/\n",
   );
 
   const shim = join(f.project, ".omt", "bin", "omt");
@@ -127,7 +127,7 @@ test("install --project writes copies, relative links, config, shim, .gitignore,
     gitExclude: f.exclude,
     excludeFile: { created: false, dirCreated: false, addedNewline: false },
     files: [
-      { path: join(omt, ".gitignore"), sha256: sha256("ledger.jsonl\nevidence/\nbin/\ninstall.json\nbackups/\n") },
+      { path: join(omt, ".gitignore"), sha256: sha256("ledger.jsonl\nevidence/\nbin/\ninstall.json\nbackups/\nplans/\n") },
       { path: join(omt, "config.jsonc"), sha256: sha256(PROJECT_STARTER_CONFIG) },
     ],
     dirs: [omt, join(omt, "plans"), join(omt, "bin"), ...[".agents", ".agents/skills", ".claude", ".claude/skills"].map((dir) => join(f.project, dir))],
@@ -399,9 +399,9 @@ test("a directory at the shim path is a conflict", async (t) => {
 });
 
 test("withGitignoreLines appends the missing lines and keeps the others", () => {
-  assert.equal(withGitignoreLines(undefined), "ledger.jsonl\nevidence/\nbin/\ninstall.json\nbackups/\n");
-  assert.equal(withGitignoreLines("ledger.jsonl\nevidence/\nmine"), "ledger.jsonl\nevidence/\nmine\nbin/\ninstall.json\nbackups/\n");
-  const full = "x\nbackups/\nbin/\ninstall.json\nevidence/\nledger.jsonl\n";
+  assert.equal(withGitignoreLines(undefined), "ledger.jsonl\nevidence/\nbin/\ninstall.json\nbackups/\nplans/\n");
+  assert.equal(withGitignoreLines("ledger.jsonl\nevidence/\nmine"), "ledger.jsonl\nevidence/\nmine\nbin/\ninstall.json\nbackups/\nplans/\n");
+  const full = "x\nbackups/\nbin/\ninstall.json\nevidence/\nledger.jsonl\nplans/\n";
   assert.equal(withGitignoreLines(full), full);
 });
 
@@ -419,8 +419,47 @@ test("install --project leaves an existing .omt/.gitignore alone; --no-git-exclu
   assert.equal((await g.run(["install", "--project", "--no-git-exclude", "--yes"])).code, 0);
   assert.equal(
     readFileSync(join(g.project, ".omt", ".gitignore"), "utf8"),
-    "ledger.jsonl\nevidence/\nnotes/\nbin/\ninstall.json\nbackups/\n",
+    "ledger.jsonl\nevidence/\nnotes/\nbin/\ninstall.json\nbackups/\nplans/\n",
   );
+});
+
+const OLD_GITIGNORE = "ledger.jsonl\nevidence/\nbin/\ninstall.json\nbackups/\n";
+
+function gitignoreRecord(manifest: Record<string, unknown>, gitignore: string): { path: string; sha256: string } | undefined {
+  const project = manifest.project as { files: { path: string; sha256: string }[] };
+  return project.files.find((file) => file.path === gitignore);
+}
+
+// Writes the .gitignore and manifest hash that an earlier install with five lines left.
+function downgradeGitignore(f: ProjectFixture, text: string, recorded: string): void {
+  const gitignore = join(f.project, ".omt", ".gitignore");
+  writeFileSync(gitignore, text);
+  const manifestPath = join(f.project, ".omt", "install.json");
+  const manifest = readJson(manifestPath);
+  const record = gitignoreRecord(manifest, gitignore);
+  if (record !== undefined) record.sha256 = sha256(recorded);
+  writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+}
+
+test("a reinstall appends plans/ to an unedited .omt/.gitignore that an earlier install created", async (t) => {
+  const f = projectFixture(t);
+  assert.equal((await f.run(["install", "--project", "--yes"])).code, 0);
+  downgradeGitignore(f, OLD_GITIGNORE, OLD_GITIGNORE);
+  const { code, ctx } = await f.run(["install", "--project", "--yes"]);
+  assert.equal(code, 0, ctx.err());
+  assert.match(ctx.out(), /update {3}.*\.gitignore/);
+  const gitignore = join(f.project, ".omt", ".gitignore");
+  assert.equal(readFileSync(gitignore, "utf8"), `${OLD_GITIGNORE}plans/\n`);
+  const record = gitignoreRecord(readJson(join(f.project, ".omt", "install.json")), gitignore);
+  assert.equal(record?.sha256, sha256(`${OLD_GITIGNORE}plans/\n`));
+});
+
+test("a reinstall leaves an edited .omt/.gitignore alone", async (t) => {
+  const f = projectFixture(t);
+  assert.equal((await f.run(["install", "--project", "--yes"])).code, 0);
+  downgradeGitignore(f, `${OLD_GITIGNORE}mine\n`, OLD_GITIGNORE);
+  assert.equal((await f.run(["install", "--project", "--yes"])).code, 0);
+  assert.equal(readFileSync(join(f.project, ".omt", ".gitignore"), "utf8"), `${OLD_GITIGNORE}mine\n`);
 });
 
 async function doctor(f: Fixture, options = {}) {
@@ -601,7 +640,7 @@ function excludeBlockCount(text: string): number {
 }
 
 test("a monorepo package with its own .omt uses the repository's exclude file with prefixed entries", async (t) => {
-  const f = gitFixture(t, { "pkg/.omt/plans/x.md": "# x\n", "pkg/index.ts": "export {};\n" });
+  const f = gitFixture(t, { "pkg/.omt/notes.md": "# x\n", "pkg/index.ts": "export {};\n" });
   const pkg = join(f.project, "pkg");
   const before = f.status();
   const installed = await f.run(["install", "--project", "--yes"], { cwd: pkg });
@@ -888,11 +927,10 @@ test("the block names only the files the install writes, so new files in .omt of
   const installed = await f.run(["install", "--project", "--yes"], { cwd: wt });
   assert.equal(installed.code, 0, installed.ctx.err());
   assert.match(installed.ctx.out(), /managed block in .*\(shared by all worktrees\)/);
-  mkdirSync(join(f.project, ".omt", "plans"), { recursive: true });
-  writeFileSync(join(f.project, ".omt", "plans", "p.md"), "# p\n");
+  writeFileSync(join(f.project, ".omt", "notes.md"), "# p\n");
   mkdirSync(join(wt, ".omt", "plans"), { recursive: true });
   writeFileSync(join(wt, ".omt", "plans", "mine.md"), "# mine\n");
-  assert.match(f.git(["status", "--porcelain", "-uall"]), /^\?\? \.omt\/plans\/p\.md$/m);
+  assert.match(f.git(["status", "--porcelain", "-uall"]), /^\?\? \.omt\/notes\.md$/m);
   assert.match(f.git(["status", "--porcelain", "-uall"], wt), /^\?\? \.omt\/plans\/mine\.md$/m);
 });
 
@@ -916,7 +954,7 @@ test("--no-git-exclude: uninstall removes the lines it appended to a tracked .om
   const f = gitFixture(t, { ".omt/.gitignore": "foo\n" });
   const statusBefore = f.status();
   assert.equal((await f.run(["install", "--project", "--no-git-exclude", "--yes"])).code, 0);
-  assert.equal(readFileSync(join(f.project, ".omt", ".gitignore"), "utf8"), "foo\nledger.jsonl\nevidence/\nbin/\ninstall.json\nbackups/\n");
+  assert.equal(readFileSync(join(f.project, ".omt", ".gitignore"), "utf8"), "foo\nledger.jsonl\nevidence/\nbin/\ninstall.json\nbackups/\nplans/\n");
   const removed = await f.run(["uninstall", "--project", "--yes"]);
   assert.equal(removed.code, 0, removed.ctx.err());
   assert.match(removed.ctx.out(), /update {3}.*\.gitignore {2}\(removes the lines that the install added\)/);

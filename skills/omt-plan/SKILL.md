@@ -31,6 +31,8 @@ List the decisions the plan needs. Settle each one from the code, the docs, or t
 
 Ask the user only owner decisions. Before you ask, finish all work that does not depend on the answers: the research and a draft plan. Then ask every owner decision in one message. Give each one 2 to 4 options and your recommendation.
 
+For a HEAVY plan, the owner decisions include the task budget. Recommend your estimate: the tasks the plan already used (`dispatched` in `omt ledger stats --plan <slug>`), plus 4 for the plan-review rounds, plus 4 per unit, plus 3 for the final gate, plus 5 when the plan has an `omt-design` step. Round the sum up to a multiple of 10.
+
 Done when: every decision is settled from evidence or answered by the user.
 
 ### 3. Write the plan
@@ -44,6 +46,7 @@ Done when: every decision is settled from evidence or answered by the user.
 - Under `## Research`, write each research question, its answer, and its sources.
 - When units build or change UI and no spec for that UI exists under `docs/design/`, plan an `omt-design` step before those units. UI units cite the spec (`docs/design/<slug>.md`) and use the `ui` role.
 - When units share build state that parallel workers would race on (one project file, one build folder, a generated file), run `omt plan limit <slug> 1` and say why in the plan.
+- For a HEAVY plan, run `omt plan limit <slug> --tasks <n>` with the task budget from step 2. In plan mode, give the budget in your final message instead.
 
 Done when: `omt plan status <slug>` lists every unit, and each unit has all five fields.
 
@@ -51,7 +54,7 @@ Done when: `omt plan status <slug>` lists every unit, and each unit has all five
 
 Run up to `maxReviewRounds` rounds (default 3). Each round dispatches fresh `plan-review` tasks; reuse no reviewer thread.
 
-1. Compute the hash: `shasum -a 256 <plan path>`, with the path from step 3. In plan mode no file exists: write the exact plan text you put in the brief to `$TMPDIR/omt-<slug>-plan.md` with a quoted heredoc (`<<'EOF'`), then hash it with `shasum -a 256 < "$TMPDIR/omt-<slug>-plan.md"`.
+1. Make every plan edit first, `omt plan limit` included. Then compute the hash: `shasum -a 256 <plan path>`, with the path from step 3. In plan mode no file exists: write the exact plan text you put in the brief to `$TMPDIR/omt-<slug>-plan.md` with a quoted heredoc (`<<'EOF'`), then hash it with `shasum -a 256 < "$TMPDIR/omt-<slug>-plan.md"`.
 2. Build each brief with `omt brief plan-review --task-file - --title "plan-review: <title>" --round <n> --attempt 1 --plan <slug> --unit <unit> --against <provider> --json`. The task names the plan path and its SHA-256, and asks the reviewer to confirm the hash before it reads. From round 2, pass `--prior-file` with the blocker list and your response to each blocker.
    - Round 1 has two tasks, one per family: `--unit plan.claude --against codex` (an Opus reviewer) and `--unit plan.codex --against claudeAgent` (an Astra reviewer).
    - From round 2, one task: `--unit plan --against <the plan author's provider>`. You wrote the plan, so pass your provider instance from step 0. When a `plan` task wrote the plan, pass that task's provider instead.
@@ -60,6 +63,8 @@ Run up to `maxReviewRounds` rounds (default 3). Each round dispatches fresh `pla
 4. Round 1: the frozen blocker list is the union of the blocking findings of both reviewers, without duplicates. Round 1 approves only when both reviewers approve. Write the list under `Log` in the plan.
 5. Round 2 and later: count a finding only when it is on the frozen list, is a regression from your fixes, or cites a requirement, a regression, or a concrete risk. Record anything else as a note.
 6. Fix the plan for each counted finding, then run the next round.
+
+After any edit to the plan, header edits included, compute the hash again before the next brief.
 
 `APPROVE` with notes counts as approval. Stop at `maxReviewRounds`: report the blockers still open to the user.
 

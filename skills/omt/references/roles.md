@@ -12,12 +12,12 @@ A role names a kind of work. The config maps each role to a chain of rungs (prov
 | `plan-review` | read-only | review | Checking a plan for gaps before any unit runs. Cross-family. Pass the plan author's provider with `--against`. |
 | `execute` | edit | work | One planned unit inside its scope. The default worker. |
 | `quick` | edit | work | A small mechanical change: a rename, a typo, a one-file edit. |
-| `deep` | edit | work | A hard or cross-cutting problem that needs investigation first, or the last fix round of a unit whose review failed twice. |
+| `deep` | edit | work | A hard or cross-cutting problem that needs investigation first, also a round 3 fix whose cause is unknown or whose round 2 fix failed for the same reason. |
 | `review` | read-only | review | One review round of a diff against its brief. Cross-family. Pass the worker with `--against`. |
 | `oracle` | read-only | review | The final gate. Attack the finished change from the family other than the main implementer's. Cross-family. |
 | `test` | edit | test | Writing and running tests and real checks for a verdict with evidence. |
 | `writing` | edit | work | Documentation and other prose. |
-| `design` | edit | work | Design directions and the design spec for screens and flows ([omt-design](../../omt-design/SKILL.md)). Opus only, no fallback. |
+| `design` | edit | work | Design variants of each screen and the design spec for screens and flows ([omt-design](../../omt-design/SKILL.md)). Opus only, no fallback. |
 | `ui` | edit | work | One UI unit built from its design spec, in every round of that unit. Opus only, no fallback. |
 
 Read-only roles run in `plan` interaction mode; edit roles run in `default`. Every default role inherits your runtime mode. The persona for each role is `roles/<role>.md`, for example [roles/execute.md](roles/execute.md). The result block for each kind is `results/<kind>.md`, for example [results/work.md](results/work.md).

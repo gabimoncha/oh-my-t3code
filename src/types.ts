@@ -209,6 +209,7 @@ export interface LedgerStats {
   terminal: number; // entries with a terminal status: every status except "dispatched"
   limits: { maxParallel: number; maxTasksPerRun: number };
   planMaxParallel?: number; // the plan header max-parallel; set only when the plan has one
+  planMaxTasks?: number; // the plan header max-tasks; set only when the plan has one
   canDispatch: boolean; // active < maxParallel && dispatched < maxTasksPerRun
 }
 

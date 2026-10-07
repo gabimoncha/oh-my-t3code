@@ -268,3 +268,51 @@ test("the design check runs before any ui dispatch, also after the omt-plan hand
   const handOff = section(readSkill("omt-plan"), "### 5. ");
   assert.match(handOff, /return to its step 5 with the plan slug\. Step 5 starts with the design check/);
 });
+
+test("omt-ulw asks each owner question once", () => {
+  assert.match(section(readSkill("omt-ulw"), "## Conductor rules"), /Ask each owner question once\. Later status messages do not repeat open questions\./);
+});
+
+test("omt-ulw step 9 runs a relevance check before each fix round", () => {
+  const fix = section(readSkill("omt-ulw"), "### 9. ");
+  assert.match(fix, /Relevance check: before each fix round/);
+  assert.match(fix, /Record each dropped finding with its reason under `Log` in the plan and in the next `--prior-file`/);
+  assert.match(fix, /When you drop every finding, the unit goes to step 8\./);
+});
+
+test("omt-ulw round 3 uses deep only when a finding needs investigation", () => {
+  const fix = section(readSkill("omt-ulw"), "### 9. ");
+  assert.match(fix, /Round 3 uses a `deep` fix only when an open finding needs investigation/);
+  assert.match(fix, /Otherwise round 3 uses an `execute` fix\./);
+});
+
+test("omt-plan asks for the task budget and sets it with omt plan limit --tasks", () => {
+  const text = readSkill("omt-plan");
+  assert.match(section(text, "### 2. "), /plus 4 for the plan-review rounds, plus 4 per unit, plus 3 for the final gate/);
+  assert.match(section(text, "### 3. "), /run `omt plan limit <slug> --tasks <n>`/);
+});
+
+test("omt-plan hashes the plan after every edit", () => {
+  const rounds = section(readSkill("omt-plan"), "### 4. ");
+  assert.match(rounds, /Make every plan edit first, `omt plan limit` included\. Then compute the hash/);
+  assert.match(rounds, /After any edit to the plan, header edits included, compute the hash again before the next brief\./);
+});
+
+test("delegation.md names the plan task budget in the limits and the stalled-run text", () => {
+  const limits = section(readFileSync(join(SKILLS_DIR, "omt", "references", "delegation.md"), "utf8"), "## Limits");
+  assert.match(limits, /a `max-tasks` key in the plan header replaces `maxTasksPerRun` for that plan/);
+  assert.match(limits, /the `dispatched` count/);
+  assert.match(limits, /recommend `omt plan limit <slug> --tasks <n>` first, or `limits\.maxTasksPerRun`/);
+});
+
+test("omt-design asks for 3 variants per screen in a new Paper file and a pick per screen", () => {
+  const design = readSkill("omt-design");
+  assert.match(section(design, "### 2. "), /3 distinct variants of each screen/);
+  assert.match(section(design, "### 2. "), /make a new Paper file named after the project/);
+  assert.match(section(design, "### 3. "), /Group the screenshots by screen, with one line on each variant/);
+  assert.match(section(design, "### 3. "), /The owner may mix variants across screens\./);
+  const persona = readFileSync(join(SKILLS_DIR, "omt", "references", "roles", "design.md"), "utf8");
+  assert.match(persona, /The first variants task makes a new Paper file named after the project\. Do not reuse a file that is already open\./);
+  assert.match(persona, /Every later task works in the Paper file that the task names\./);
+  assert.match(persona, /make 3 variants of each screen/);
+});

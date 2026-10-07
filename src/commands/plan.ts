@@ -2,7 +2,7 @@ import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { writeTargetFor } from "../install/fsops.ts";
 import { findProjectRoot, plansDir } from "../paths.ts";
-import { findPlanHeader, parseMaxParallel, parsePlan } from "../plan/parse.ts";
+import { findPlanHeader, parseMaxParallel, parseMaxTasks, parsePlan } from "../plan/parse.ts";
 import type { PlanStatus } from "../plan/parse.ts";
 import { planTemplate } from "../plan/template.ts";
 import type { CliContext, CommandRun } from "../types.ts";
@@ -14,9 +14,10 @@ import { printJson } from "../util/output.ts";
 
 export const summary = "Create plan files and show their progress.";
 
-export const usage = `Usage: omt plan new <slug> [--title <text>] [--light] [--max-parallel <n>] [--force]
+export const usage = `Usage: omt plan new <slug> [--title <text>] [--light] [--max-parallel <n>]
+                    [--max-tasks <n>] [--force]
        omt plan mark <slug> <id> <done|open|blocked>
-       omt plan limit <slug> <n|none>
+       omt plan limit <slug> [<n|none>] [--tasks <n|none>]
        omt plan status [<slug>] [--json]
        omt plan list [--json]
 
@@ -25,7 +26,7 @@ Subcommands:
   mark <slug> <id>  set the checkbox of an item such as U3, D1, or F2, and
                     append a line to the log
   limit <slug> <n>  set the plan's max-parallel header key (1 to 32), or
-                    remove it with none
+                    remove it with none; --tasks sets or removes max-tasks
   status [<slug>]   print counts and the next open unit (default: newest plan)
   list              print one line per plan
 
@@ -34,6 +35,9 @@ Options:
   --light           with new: leave out the oracle line (F2)
   --max-parallel <n>
                     with new: cap parallel dispatch for this plan (1 to 32)
+  --max-tasks <n>   with new: the task budget of this plan (1 to 500); it
+                    replaces limits.maxTasksPerRun for this plan
+  --tasks <n|none>  with limit: set or remove the max-tasks header key
   --force           with new: overwrite an existing plan
   --json            print JSON
   -h, --help        print this help
@@ -88,6 +92,17 @@ function maxParallelArg(value: string, flag: string): number {
   return number;
 }
 
+function maxTasksArg(value: string, flag: string): number {
+  const number = parseMaxTasks(value);
+  if (number === undefined) throw usageError(`${flag} must be an integer from 1 to 500, got "${value}"`);
+  return number;
+}
+
+function setHeaderKey(header: string, key: string, value: number | undefined): string {
+  const kept = header.replace(new RegExp(`\\s+${key}=[^\\s>]*`, "g"), "").replace(/\s*-->$/, "");
+  return value === undefined ? `${kept} -->` : `${kept} ${key}=${value} -->`;
+}
+
 async function readPlan(path: string, slug: string): Promise<string> {
   const markdown = await readFileIfExists(path);
   if (markdown === undefined) {
@@ -111,18 +126,19 @@ async function planNew(
   ctx: CliContext,
   root: string,
   positionals: string[],
-  options: { title: string | undefined; light: boolean; maxParallel: string | undefined; force: boolean },
+  options: { title: string | undefined; light: boolean; maxParallel: string | undefined; maxTasks: string | undefined; force: boolean },
 ) {
   const slug = positionals[1];
   if (slug === undefined) throw usageError("plan new needs a <slug>");
   extraPositional(positionals, 2);
   checkPlanSlug(slug);
   const maxParallel = options.maxParallel === undefined ? undefined : maxParallelArg(options.maxParallel, "--max-parallel");
+  const maxTasks = options.maxTasks === undefined ? undefined : maxTasksArg(options.maxTasks, "--max-tasks");
   const path = join(plansDir(root), `${slug}.md`);
   if (!options.force && (await pathExists(path))) {
     throw new OmtError("plan_exists", `plan already exists: ${path}`, { hint: "pass --force to overwrite it" });
   }
-  const template = planTemplate(slug, options.title ?? slug, ctx.now().toISOString(), { light: options.light, maxParallel });
+  const template = planTemplate(slug, options.title ?? slug, ctx.now().toISOString(), { light: options.light, maxParallel, maxTasks });
   await writeFileAtomic(await writeTargetFor(path), template);
   ctx.stdout(`${path}\n`);
   return 0;
@@ -152,20 +168,25 @@ async function planMark(ctx: CliContext, root: string, positionals: string[]) {
   return 0;
 }
 
-async function planLimit(ctx: CliContext, root: string, positionals: string[]) {
+async function planLimit(ctx: CliContext, root: string, positionals: string[], tasks: string | undefined) {
   const [, slug, value] = positionals;
-  if (slug === undefined || value === undefined) throw usageError("plan limit needs <slug> <n|none>");
+  if (slug === undefined || (value === undefined && tasks === undefined)) {
+    throw usageError("plan limit needs <slug> <n|none> or --tasks <n|none>");
+  }
   extraPositional(positionals, 3);
   checkPlanSlug(slug);
-  const limit = value === "none" ? undefined : maxParallelArg(value, "the limit");
+  const changes: { key: string; limit: number | undefined }[] = [];
+  if (value !== undefined) changes.push({ key: "max-parallel", limit: value === "none" ? undefined : maxParallelArg(value, "the limit") });
+  if (tasks !== undefined) changes.push({ key: "max-tasks", limit: tasks === "none" ? undefined : maxTasksArg(tasks, "--tasks") });
   const path = join(plansDir(root), `${slug}.md`);
   const markdown = await readPlan(path, slug);
   const header = findPlanHeader(markdown);
   if (header === undefined) throw new OmtError("plan_header_not_found", `plan "${slug}" has no omt-plan header comment`);
-  const kept = header.text.replace(/\s+max-parallel=[^\s>]*/g, "").replace(/\s*-->$/, "");
-  const updated = limit === undefined ? `${kept} -->` : `${kept} max-parallel=${limit} -->`;
+  const updated = changes.reduce((text, change) => setHeaderKey(text, change.key, change.limit), header.text);
   await writeFileAtomic(await writeTargetFor(path), markdown.slice(0, header.index) + updated + markdown.slice(header.index + header.text.length));
-  ctx.stdout(limit === undefined ? `removed the max-parallel limit of ${slug}\n` : `set max-parallel=${limit} for ${slug}\n`);
+  for (const { key, limit } of changes) {
+    ctx.stdout(limit === undefined ? `removed the ${key} limit of ${slug}\n` : `set ${key}=${limit} for ${slug}\n`);
+  }
   return 0;
 }
 
@@ -201,6 +222,7 @@ async function planStatus(ctx: CliContext, root: string, positionals: string[], 
       `done-when: ${status.counts.D.done}/${status.counts.D.total}`,
       `final: ${status.counts.F.done}/${status.counts.F.total}`,
       ...(status.maxParallel === undefined ? [] : [`max parallel: ${status.maxParallel}`]),
+      ...(status.maxTasks === undefined ? [] : [`max tasks: ${status.maxTasks}`]),
       `next: ${nextText(status)}`,
       "",
     ].join("\n"),
@@ -229,6 +251,8 @@ export const run: CommandRun = async (ctx) => {
     title: { type: "string" },
     light: { type: "boolean" },
     "max-parallel": { type: "string" },
+    "max-tasks": { type: "string" },
+    tasks: { type: "string" },
     force: { type: "boolean" },
     json: { type: "boolean" },
   });
@@ -240,12 +264,13 @@ export const run: CommandRun = async (ctx) => {
         title: values.title,
         light: values.light === true,
         maxParallel: values["max-parallel"],
+        maxTasks: values["max-tasks"],
         force: values.force === true,
       });
     case "mark":
       return planMark(ctx, root, positionals);
     case "limit":
-      return planLimit(ctx, root, positionals);
+      return planLimit(ctx, root, positionals, values.tasks);
     case "status":
       return planStatus(ctx, root, positionals, json);
     case "list":

@@ -254,6 +254,26 @@ test("ledger stats --plan ignores a max-parallel key quoted in the plan body", a
   assert.match(ctx.out(), /^max parallel: 4$/m);
 });
 
+test("ledger stats --plan uses the plan max-tasks also when it is above the config value", async (t) => {
+  const ctx = projectContext(t, ["stats", "--plan", "auth"]);
+  mkdirSync(join(ctx.cwd, ".omt", "plans"), { recursive: true });
+  writeFileSync(join(ctx.cwd, ".omt", "config.jsonc"), '{ "version": 1, "limits": { "maxTasksPerRun": 1 } }\n');
+  writeFileSync(
+    join(ctx.cwd, ".omt", "plans", "auth.md"),
+    "# Auth\n\n<!-- omt-plan v1 slug=auth created=2026-01-01T00:00:00.000Z max-tasks=80 -->\n",
+  );
+  await appendLedger(join(ctx.cwd, ".omt", "ledger.jsonl"), entry({ plan: "auth", taskId: "t1" }));
+  assert.equal(await run(ctx), 0);
+  assert.match(ctx.out(), /^max tasks per run: 80 \(plan 80, config 1\)$/m);
+  assert.match(ctx.out(), /^can dispatch: yes$/m);
+
+  const json = fakeContext({ homedir: ctx.homedir, cwd: ctx.cwd, argv: ["stats", "--plan", "auth", "--json"] });
+  assert.equal(await run(json), 0);
+  const parsed = JSON.parse(json.out());
+  assert.equal(parsed.limits.maxTasksPerRun, 80);
+  assert.equal(parsed.planMaxTasks, 80);
+});
+
 test("ledger add accepts any role name, such as swarm and loop", async (t) => {
   for (const role of ["swarm", "loop", "Not A Config Role"]) {
     const ctx = projectContext(t, ["add", "--role", role, "--status", "dispatched", "--unit", "U1"]);

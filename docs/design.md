@@ -40,7 +40,7 @@ The ledger records the provider of each dispatch. So `--against auto` finds the 
 
 ### Designs come from Opus, and the owner steers
 
-The `design` role makes design directions and the design spec, and the `ui` role implements a UI unit from that spec. Both run only on Claude Opus 5.5: `design` at high effort, `ui` at medium. Neither has a fallback to another family. The owner chose this rule, because Opus is far better at design, and a human steers taste. No model reviews a design: `review`, `oracle`, and `plan-review` tasks leave `docs/design/` out. The owner picks a direction, steers it in their own words, and approves the spec. Code review of `ui` units still runs as for any other unit.
+The `design` role makes design variants and the design spec, and the `ui` role implements a UI unit from that spec. Both run only on Claude Opus 5.5: `design` at high effort, `ui` at medium. Neither has a fallback to another family. The owner chose this rule, because Opus is far better at design, and a human steers taste. No model reviews a design: `review`, `oracle`, and `plan-review` tasks leave `docs/design/` out. The designer makes a new Paper file for each project and 3 variants of each screen, so the owner compares real options side by side. The owner picks one variant per screen, may mix variants across screens, steers them in their own words, and approves the spec. Code review of `ui` units still runs as for any other unit.
 
 ### A CLI for the deterministic parts, skills for the judgment
 
@@ -70,9 +70,13 @@ A delegated child works in the parent's project, branch, and worktree. Two editi
 
 T3 has no cap on concurrent tasks or nesting depth. The config sets four limits: parallel tasks, tasks per run, depth, and review rounds. Every brief states the child's depth. At the maximum depth a child does the work itself.
 
+One config limit on tasks does not fit every plan. A dogfood run hit the task limit after 2 of 16 units. So `omt-plan` asks the owner for a task budget per HEAVY plan, with an estimate from the unit count, and stores it in the plan header. When a run stalls, the conductor names the plan budget first, because raising it changes no other plan.
+
 ### State lives in the repository
 
 A long run outlives the agent's context. The plan (`.omt/plans/<slug>.md`) and the ledger (`.omt/ledger.jsonl`) hold the state: units, scopes, done conditions, task ids, rounds, and verdicts. After compaction the conductor re-reads both files. The plan uses checkbox grammar that people can read and that `omt plan status` can count.
+
+Live plans stay out of git. All worktrees share the one `.omt` in the main checkout, and omt reads and edits only that copy. A committed plan gives every worktree branch a tracked copy that goes stale, and that copy makes every omt command warn about shadowed state. So `.omt/.gitignore` holds `plans/`. To keep a finished plan as a record, copy it to a path outside `.omt/`, such as `docs/`, and commit it there.
 
 ### Continuation uses T3, not new hooks
 

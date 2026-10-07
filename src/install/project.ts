@@ -4,7 +4,7 @@ import { OmtError } from "../util/errors.ts";
 import { readFileIfExists } from "../util/fs.ts";
 
 export const SHIM_SIGNATURE = "# oh-my-t3code project shim";
-export const OMT_GITIGNORE_LINES: readonly string[] = ["ledger.jsonl", "evidence/", "bin/", "install.json", "backups/"];
+export const OMT_GITIGNORE_LINES: readonly string[] = ["ledger.jsonl", "evidence/", "bin/", "install.json", "backups/", "plans/"];
 export const BACKUPS_GITIGNORE = "*\n";
 
 // The markers carry the project root, because worktrees of one repository share one exclude file.

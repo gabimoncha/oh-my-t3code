@@ -420,10 +420,13 @@ async function planProjectInstall(
   // A dangling symlink is the user's, like a dangling settings link: the install leaves it alone, so it
   // never creates a file outside the project.
   const gitignoreDangling = gitignoreBefore === undefined && (await pathExists(gitignorePath));
+  const gitignoreRecord = (previous?.files ?? []).find((file) => file.path === gitignorePath);
+  // An earlier install created this file and nobody edited it, so the upgrade can append to it.
+  const gitignoreUnedited = gitignoreBefore !== undefined && gitignoreRecord?.sha256 === sha256(gitignoreBefore);
   // With the exclude step on, an existing .gitignore stays untouched, because it may be tracked.
-  const gitignoreAfter = gitExclude && gitignoreBefore !== undefined ? gitignoreBefore : withGitignoreLines(gitignoreBefore);
-  const gitignoreCreated =
-    !gitignoreDangling && (gitignoreBefore === undefined || (previous?.files ?? []).some((file) => file.path === gitignorePath));
+  const gitignoreAfter =
+    gitExclude && gitignoreBefore !== undefined && !gitignoreUnedited ? gitignoreBefore : withGitignoreLines(gitignoreBefore);
+  const gitignoreCreated = !gitignoreDangling && (gitignoreBefore === undefined || gitignoreRecord !== undefined);
   let gitignoreRestore = previous?.gitignoreRestore;
   if (!gitignoreCreated && gitignoreBefore !== undefined && gitignoreAfter !== gitignoreBefore) {
     gitignoreRestore = { before: gitignoreRestore?.before ?? gitignoreBefore, sha256: sha256(gitignoreAfter) };
