@@ -4,5 +4,5 @@ CHECKS:
 - `<command>` -> exit <code>: <key output line>
 FAILURES:
 - <test or scenario>: observed <x>, expected <y>; or none
-EVIDENCE: <path under .omt/evidence/, or none>
+EVIDENCE: <path in the evidence directory, or none>
 ```

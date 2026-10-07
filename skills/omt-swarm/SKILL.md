@@ -43,7 +43,7 @@ For a stacked track, `baseRef` is the previous track's branch and `startFromOrig
 
 The launch message is a plain task, not an `omt brief`. It says:
 
-1. Set `limits.maxParallel` to <k> in `.omt/config.jsonc` of this worktree (run `omt init` first when the file is missing), and leave that file out of your commits. Pick `<k>` so that the tracks together stay near this thread's `maxParallel`, for example 2.
+1. Use the plan slug `<slug>-<track>` for this track. After the plan exists, run `omt plan limit <slug>-<track> <k>`. Pick `<k>` so that the tracks together stay near this thread's `maxParallel`, for example 2. The `.omt/` config is shared by all worktrees, so do not change `limits` in it.
 2. Run the `omt-ulw` skill for this objective: <objective, scope, done conditions>. Give absolute paths when a scope is outside this worktree.
 3. Commit each verified unit on branch `omt/<slug>/<track>`.
 4. Push the branch and open a PR against `<base>`.

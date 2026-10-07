@@ -47,6 +47,6 @@ Answer the user:
 - An UNKNOWN list: what nobody found, and what was searched.
 - Your own inference marked as inference.
 
-Write the answer to a file only when the user asks for one; use the path they give, or `.omt/evidence/research-<slug>.md`.
+Write the answer to a file only when the user asks for one; use the path they give, or `research-<slug>.md` in the evidence directory that `omt paths --evidence` prints.
 
 Done when: every fact in the answer has a citation, and the UNKNOWN list is present (or says none).

@@ -53,7 +53,7 @@ End your work with the block below as your final message. Keep it under 60 lines
 <the content of results/<kind>.md>
 ```
 
-For edit roles, `omt brief` also gives the absolute path of the evidence directory, so the child saves evidence in your `.omt/evidence/` even when it runs in another checkout. Give that path by hand when you write a brief without the CLI.
+For edit roles, `omt brief` also gives the absolute path of the evidence directory, so the child saves evidence in the shared evidence directory (`omt paths --evidence`) even when it runs in another checkout. Give that path by hand when you write a brief without the CLI.
 
 The first line marks the text as a brief. The omt ultrawork hook skips any prompt that holds it, so a brief that mentions ultrawork does not start a nested run.
 

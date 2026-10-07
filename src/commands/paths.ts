@@ -1,0 +1,62 @@
+import { evidenceDir, findProjectRoot, ledgerPath, omtDir, plansDir, projectConfigPath, projectShimPath } from "../paths.ts";
+import type { CommandRun } from "../types.ts";
+import { parseArgs } from "../util/args.ts";
+import { usageError } from "../util/errors.ts";
+import { printJson } from "../util/output.ts";
+
+export const summary = "Print the absolute paths of the project's .omt state.";
+
+export const usage = `Usage: omt paths [--json] [--root|--plans|--ledger|--evidence|--config|--shim]
+
+Print the project root, .omt, plans, ledger, evidence, project config, and
+shim paths, one "name: path" line each. From a linked git worktree, the
+paths are in the main checkout.
+
+Options:
+  --json      print an object with the keys root, omt, plans, ledger,
+              evidence, config, and shim
+  --root      print only the project root
+  --plans     print only the plans directory
+  --ledger    print only the ledger file
+  --evidence  print only the evidence directory
+  --config    print only the project config file
+  --shim      print only the project shim
+  -h, --help  print this help
+`;
+
+const SINGLE = ["root", "plans", "ledger", "evidence", "config", "shim"] as const;
+
+export const run: CommandRun = async (ctx) => {
+  const { values, positionals } = parseArgs(ctx.argv, {
+    json: { type: "boolean" },
+    root: { type: "boolean" },
+    plans: { type: "boolean" },
+    ledger: { type: "boolean" },
+    evidence: { type: "boolean" },
+    config: { type: "boolean" },
+    shim: { type: "boolean" },
+  });
+  if (positionals.length > 0) throw usageError(`unexpected argument "${positionals[0]}"`);
+  const picked = SINGLE.filter((name) => values[name] === true);
+  if (picked.length > 1) throw usageError(`give at most one path flag, not ${picked.map((name) => `--${name}`).join(" and ")}`);
+  if (picked.length === 1 && values.json === true) throw usageError(`--json and --${picked[0]} cannot be used together`);
+  const root = findProjectRoot(ctx.cwd);
+  const paths = {
+    root,
+    omt: omtDir(root),
+    plans: plansDir(root),
+    ledger: ledgerPath(root),
+    evidence: evidenceDir(root),
+    config: projectConfigPath(root),
+    shim: projectShimPath(root),
+  };
+  const one = picked[0];
+  if (one !== undefined) {
+    ctx.stdout(`${paths[one]}\n`);
+  } else if (values.json === true) {
+    printJson(ctx.stdout, paths);
+  } else {
+    for (const [name, path] of Object.entries(paths)) ctx.stdout(`${name}: ${path}\n`);
+  }
+  return 0;
+};

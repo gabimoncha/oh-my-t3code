@@ -115,6 +115,18 @@ export const DEFAULT_CONFIG: OmtConfig = {
       "implementation",
       [rung("claudeAgent", OPUS, "high"), rung("codex", ASTRA, "medium")],
     ),
+    design: editRole(
+      "Design screens and flows in Paper, and write a design spec that UI units cite.",
+      "work",
+      "design",
+      [rung("claudeAgent", OPUS, "high")],
+    ),
+    ui: editRole(
+      "Implement one UI unit from its design spec, inside its scope.",
+      "work",
+      "implementation",
+      [rung("claudeAgent", OPUS, "medium")],
+    ),
   },
   limits: {
     maxParallel: 4,

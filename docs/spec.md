@@ -53,7 +53,7 @@ schema/
   omt.schema.json        JSON Schema for config files
 skills/
   omt/                   router skill and shared references
-  omt-ulw/ omt-plan/ omt-review/ omt-research/ omt-swarm/ omt-loop/
+  omt-ulw/ omt-plan/ omt-design/ omt-review/ omt-research/ omt-swarm/ omt-loop/
 test/
   helpers.ts             temp dirs and a fake CliContext
   fixtures/capabilities.json
@@ -267,7 +267,8 @@ export interface LedgerStats {
   dispatched: number; // entries with status "dispatched"
   active: number; // dispatched entries that no terminal entry closes (section 5.6)
   terminal: number; // entries with a terminal status
-  limits: { maxParallel: number; maxTasksPerRun: number }; // from the effective config
+  limits: { maxParallel: number; maxTasksPerRun: number }; // from the effective config; with a plan limit, maxParallel is the lower of the two (section 5.6)
+  planMaxParallel?: number; // the plan header max-parallel; set only when the plan has one
   canDispatch: boolean; // active < maxParallel && dispatched < maxTasksPerRun
 }
 
@@ -317,7 +318,9 @@ export class OmtError extends Error {
 | `userConfigPath(env, homedir)` | `<configDir>/config.jsonc` |
 | `manifestPath(env, homedir)` | `<configDir>/install.json` |
 | `userRolesDir(env, homedir)` | `<configDir>/roles` |
-| `findProjectRoot(cwd)` | the nearest ancestor of `cwd` (or `cwd` itself) that contains `.omt` or `.git` (a directory or a file); `cwd` when none exists |
+| `mainCheckoutOf(root)` | the main checkout of a linked worktree. When `<root>/.git` is a file whose first line is `gitdir: <path>`, it resolves `<path>` against `root`, reads `<gitdir>/commondir` (relative or absolute, resolved against `<gitdir>`), and returns `dirname(<common dir>)` when `basename(<common dir>)` is `.git` and the repository is not bare; `undefined` for a normal checkout (`.git` is a directory), a submodule, a bare or unknown layout, or any read error. It reads `core.bare` in the plain form that git writes: the repository is bare when the `[core]` section of `<common dir>/config` sets `bare` to true (`true`, `yes`, `on`, `1`, or no value). Hand-edited forms, such as quoted values, repeated keys, or an entry on the section line, are not supported. A missing `config` counts as not bare. So a bare repository stored at `<repo>/.git` gives `undefined` |
+| `findProjectRoot(cwd)` | the nearest ancestor of `cwd` (or `cwd` itself) that contains `.omt` or `.git` (a directory or a file); when that directory has a `.git` file and `mainCheckoutOf` returns a main checkout, the main checkout, whether or not it has `.omt` yet; `cwd` when none exists |
+| `shadowedWorktreeState(cwd)` | `{ worktree, main }` when the directory that `findProjectRoot` stops at is a linked worktree whose own `.omt/plans` holds a regular file whose name ends in `.md`, or whose own `.omt/ledger.jsonl` is a regular file; else `undefined` |
 | `omtDir(root)` | `<root>/.omt` |
 | `projectConfigPath(root)` | `<root>/.omt/config.jsonc` |
 | `projectRolesDir(root)` | `<root>/.omt/roles` |
@@ -334,7 +337,11 @@ export class OmtError extends Error {
 | `t3HomeDir(env, homedir)` | `$T3CODE_HOME`, else `<home>/.t3` |
 | `t3SettingsPath(env, homedir)` | `<t3HomeDir>/userdata/settings.json` |
 
-`findProjectRoot` is the only function that reads the file system.
+`mainCheckoutOf`, `findProjectRoot`, and `shadowedWorktreeState` are the only functions that read the file system. None of them starts a `git` process.
+
+All worktrees of one repository share one `.omt` in the main checkout. It holds the config, the plans, the ledger, the evidence, and the shim. So a build thread in one worktree finds the plan that a planning thread wrote in another. A worktree's own `.omt` never wins. Git writes `gitdir:` as a real path. `findProjectRoot` rebuilds the main checkout under the nearest ancestor of the worktree whose real path holds it, so a cwd in a worktree and a cwd in the main checkout give the same root string, such as `/var/...` and not `/private/var/...`.
+
+Shadowed state. Before `plan`, `ledger`, `brief`, `route`, and `init` run, the CLI calls `shadowedWorktreeState(cwd)`. When it returns a value, the CLI prints one line to stderr: `warning: <worktree>/.omt holds plans or a ledger that omt no longer reads; move them to <main>/.omt`. It moves no file.
 
 ## 5. CLI
 
@@ -354,6 +361,7 @@ Argument parsing uses `node:util` `parseArgs` with `strict: true` and `allowPosi
 | `brief` | `omt brief <role> (--task <text> \| --task-file <file>) [options]` |
 | `plan` | `omt plan new <slug> [--title <text>] [--light] [--force]`, `omt plan mark <slug> <id> <done\|open\|blocked>`, `omt plan status [<slug>] [--json]`, `omt plan list [--json]` |
 | `ledger` | `omt ledger add [options]`, `omt ledger list [--plan <slug>] [--json]`, `omt ledger stats [--plan <slug>] [--json]`, `omt ledger request-id --plan <slug> --unit <id> --role <role> [--round <n>] [--attempt <n>]` |
+| `paths` | `omt paths [--json] [--root \| --plans \| --ledger \| --evidence \| --config \| --shim]` |
 | `hook` | `omt hook user-prompt-submit` |
 
 In every flag that takes a file, `-` means standard input.
@@ -480,9 +488,10 @@ Without `--json`, the command prints the rendered brief (section 9). With `--jso
 
 ### 5.5 `omt plan`
 
-- `new <slug>` writes `.omt/plans/<slug>.md` from the template in section 12. A slug matches `^[a-z0-9][a-z0-9-]{0,63}$`. An existing file is an error unless `--force` is given. `--light` leaves the `F2` oracle line out. It prints the path.
+- `new <slug>` writes `.omt/plans/<slug>.md` from the template in section 12. A slug matches `^[a-z0-9][a-z0-9-]{0,63}$`. An existing file is an error unless `--force` is given. `--light` leaves the `F2` oracle line out. `--max-parallel <n>` writes the `max-parallel=<n>` header key (section 12.2). An integer outside 1 to 32 is a usage error (exit 2). It prints the path.
 - `mark <slug> <id> <done|open|blocked>` sets the checkbox of the column-zero item line for `<id>` (such as `U3`, `D1`, or `F2`) to `x`, a space, or `~`. It appends `- <ISO timestamp> <id> -> <state>` to the end of the file (the `## Log` section is last), writes atomically, prints `marked <id> <state>`, and exits 0. A missing plan or id exits 1. A bad state exits 2.
-- `status [<slug>]` parses one plan and prints its counts and the next open unit (section 12). Without a slug it uses the most recently modified plan. `--json` prints the parsed `PlanStatus`.
+- `limit <slug> <n|none>` sets the `max-parallel` key in the header comment of an existing plan to `<n>`, or removes it with `none`. It changes only the header comment (section 12.2), not a later omt-plan comment in the body, keeps `slug=` and `created=`, and writes atomically. A missing plan exits 1. A value that is not `none` or an integer from 1 to 32 exits 2.
+- `status [<slug>]` parses one plan and prints its counts and the next open unit (section 12). The first line has the absolute path of the plan file, so a skill can hash and edit the shared plan from any worktree. When the plan has `maxParallel`, it prints `max parallel: <n>` after the `final` line. Without a slug it uses the most recently modified plan. `--json` prints the parsed `PlanStatus` with an added `path`, the absolute path.
 - `list` prints one line per plan: slug, unit counts, and the next open unit. `--json` prints an array of `PlanStatus` items, each with an added `path`.
 - `list` and `status` skip a `*.md` entry whose `stat` fails with ENOENT, such as a dangling symlink.
 
@@ -493,11 +502,22 @@ Without `--json`, the command prints the rendered brief (section 9). With `--jso
 - Terminal statuses are `completed`, `failed`, `cancelled`, `interrupted`, `verified`, and `rejected`. A terminal entry T closes a dispatched entry D when T has a `taskId` equal to D's, or when T has no `taskId`, both T and D have a `unit`, and T and D have the same `plan`, `unit`, `role`, `round` (default 1), and `attempt` (default 1). A terminal entry with neither `taskId` nor `unit` closes nothing. `active` counts dispatched entries that no terminal entry closes, in any order.
 - `list` prints a table with the columns `TIME` (HH:MM:SS of `ts`, in UTC), `PLAN`, `UNIT`, `ROLE`, `ROUND`, `STATUS`, `VERDICT`, `TASK` (the last 12 characters of `taskId`). It filters by `--plan` when given. `--json` prints an array of entries. A malformed line is skipped with a warning on stderr.
 - `stats` loads the config and prints a `LedgerStats` (section 3). Text mode prints one line per field: `plan` (with `--plan`), `dispatched`, `active`, `terminal`, `max parallel`, `max tasks per run`, and `can dispatch: yes` or `can dispatch: no`. `--json` prints the object. The skills dispatch only while it reports `can dispatch: yes`.
+- With `--plan <slug>`, when `.omt/plans/<slug>.md` exists and its header has `max-parallel` (section 12.2), the effective `maxParallel` is the lower of the config value and the plan value. `limits.maxParallel` holds the effective value, `planMaxParallel` holds the plan value, and `canDispatch` uses the effective value. Text mode then prints `max parallel: <effective> (plan <n>, config <m>)`. Without a plan file or a plan limit, the output does not change.
 - `request-id` prints the canonical `clientRequestId` (section 10).
 
 ### 5.7 `omt hook user-prompt-submit`
 
 See section 13.
+
+### 5.8 `omt paths`
+
+Prints the absolute paths of the project state, resolved through `findProjectRoot`. So from a linked worktree it prints the paths in the main checkout.
+
+- Without a flag it prints one `name: path` line for each path. The order is `root` (the project root), `omt` (`omtDir`), `plans` (`plansDir`), `ledger` (`ledgerPath`), `evidence` (`evidenceDir`), `config` (`projectConfigPath`), and `shim` (`projectShimPath`).
+- `--json` prints an object with the same keys.
+- One of `--root`, `--plans`, `--ledger`, `--evidence`, `--config`, or `--shim` prints only that path and a newline, for use as `$(omt paths --evidence)`.
+- Two path flags, a path flag with `--json`, or a positional argument is a usage error (exit 2).
+- It reads no file and creates no path.
 
 ## 6. Config
 
@@ -556,6 +576,8 @@ Every default rung sets `driver` and also sets `provider` to the same value (`cl
 
 For a role without `crossFamily`, rung 2 runs only when T3 refuses rung 1. For a cross-family role, `--against` can put rung 2 first (section 8.3).
 
+`design` and `ui` have one rung each, on Opus, and no fallback. The owner rules that OpenAI models do not design, implement designs, or review designs (`docs/design.md`).
+
 | Role | Access | Result | t3Role | Mode | crossFamily | Chain (driver/model effort) |
 | --- | --- | --- | --- | --- | --- | --- |
 | `explore` | read-only | research | research | plan | false | codex/gpt-6-luna low, claudeAgent/claude-sonnet-5-5 low |
@@ -569,6 +591,8 @@ For a role without `crossFamily`, rung 2 runs only when T3 refuses rung 1. For a
 | `oracle` | read-only | review | review | plan | true | codex/gpt-6-astra high, claudeAgent/claude-opus-5-5 high |
 | `test` | edit | test | test | default | false | codex/gpt-6.1-sol low, claudeAgent/claude-sonnet-5-5 low |
 | `writing` | edit | work | implementation | default | false | claudeAgent/claude-opus-5-5 high, codex/gpt-6-astra medium |
+| `design` | edit | work | design | default | false | claudeAgent/claude-opus-5-5 high |
+| `ui` | edit | work | implementation | default | false | claudeAgent/claude-opus-5-5 medium |
 
 Every default role has `runtimeMode: "inherit"` and an explicit `crossFamily`. Without `--against`, the cross-family roles start on codex, which fits the default worker (`execute` on claudeAgent).
 
@@ -585,6 +609,8 @@ Role descriptions (shown to agents in `omt roles` and in skills):
 - `oracle`: Attack the finished change from the family other than the main implementer's before it counts as done.
 - `test`: Write and run tests and real checks, then return a verdict with evidence.
 - `writing`: Write or edit documentation and other prose.
+- `design`: Design screens and flows in Paper, and write a design spec that UI units cite.
+- `ui`: Implement one UI unit from its design spec, inside its scope.
 
 Default limits: `maxParallel` 4, `maxTasksPerRun` 24, `maxDepth` 1, `maxReviewRounds` 3.
 
@@ -864,6 +890,10 @@ Severity meanings for review findings: P0 breaks the build, loses data, or opens
 
 - [ ] D1. <a check that can fail: a command, a test, or an observable result>
 
+## Research
+
+<research questions, their cited answers, and sources; or "none">
+
 ## Roles
 
 <paste the output of `omt roles` here>
@@ -887,11 +917,13 @@ Severity meanings for review findings: P0 breaks the build, loses data, or opens
 - <ISO timestamp> plan created
 ```
 
-`--light` leaves out the `F2` line. `omt plan mark` appends its log lines after the last line.
+`--light` leaves out the `F2` line. The `## Research` section is in both forms. `--max-parallel <n>` adds ` max-parallel=<n>` before the `-->` of the header comment. `omt plan mark` appends its log lines after the last line.
 
 ### 12.2 Grammar and status
 
 Checkbox lines start at column zero and match `^- \[( |x|X|~)\] (U|D|F)(\d+)\. (.*)$`. A space means open, `x` or `X` means done, and `~` means blocked.
+
+The header comment is the first line of the file that is only an `<!-- omt-plan v1 ... -->` comment; the template writes it as line 3. The parser reads `slug` and `max-parallel` only from this header, so an example header that the body quotes later does not change them. The header comment `<!-- omt-plan v1 slug=<slug> created=<ISO timestamp> -->` can have an optional `max-parallel=<n>` key. `<n>` is an integer from 1 to 32, the same range as `limits.maxParallel`. The parser ignores a missing or invalid value. The parser does not read the `## Research` section.
 
 `parsePlan(markdown)` returns:
 
@@ -900,6 +932,7 @@ interface PlanItem { kind: "U" | "D" | "F"; id: string; title: string; state: "o
 interface PlanStatus {
   title: string;
   slug?: string;
+  maxParallel?: number; // the header max-parallel key, when it is valid
   items: PlanItem[];
   counts: Record<"U" | "D" | "F", { open: number; done: number; blocked: number; total: number }>;
   next?: PlanItem; // the first open U item in file order
@@ -910,7 +943,7 @@ interface PlanStatus {
 Human output of `omt plan status`:
 
 ```text
-plan: auth-refactor (.omt/plans/auth-refactor.md)
+plan: auth-refactor (/home/me/app/.omt/plans/auth-refactor.md)
 units: 3/7 done, 1 blocked, 3 open
 done-when: 0/2
 final: 0/2
@@ -1137,7 +1170,7 @@ The block always lists each skill copy and each link that the manifest records, 
 
 So after `install --project`, with or without `--hooks`, `git status --porcelain` shows nothing new. The one exception is a `settings.local.json` that the repository tracks: it shows as modified while the hook is installed. The manifest records what an install created, so a later run keeps the same block.
 
-Git applies the common exclude file to every worktree, with each entry anchored at that worktree's top level. So the block of one worktree also hides the same paths in the other worktrees, such as a `.omt/config.jsonc` that the user creates there. In a repository with worktrees, the plan marks the step `(shared by all worktrees)`. The install writes only files that git does not track, and `git worktree add` does not copy those, so each worktree needs its own `install --project`.
+Git applies the common exclude file to every worktree, with each entry anchored at that worktree's top level. So the block of one worktree also hides the same paths in the other worktrees, such as a `.omt/config.jsonc` that the user creates there. In a repository with worktrees, the plan marks the step `(shared by all worktrees)`. A repository has one project install, in the main checkout. Because `findProjectRoot` resolves a linked worktree to its main checkout (section 4), `install`, `uninstall`, and `doctor` with `--project` in a worktree act on the main checkout. A second install from another worktree is an idempotent rerun. The skill folders stay in the main checkout, so a harness finds them in a worktree only if it reads the skill folders of the main checkout.
 
 Stale blocks. Install and uninstall also replace or remove a block that belongs to no live project:
 
@@ -1210,7 +1243,7 @@ User scope and project scope never read or write each other's files.
     allow_implicit_invocation: false
   ```
 
-- Skills call the CLI as `omt` on `PATH`. That works after `npm install -g oh-my-t3code`, or `pnpm link --global` in a clone. When `command -v omt` finds nothing, a skill uses `.omt/bin/omt` from the project root, which `omt install --project` creates. Without either, a skill falls back to the manual steps in `roles.md` and `brief.md`. The rule lives in the section "The CLI" of `skills/omt/references/delegation.md`. Skills never use `npx`, which needs the network.
+- Skills call the CLI as `omt` on `PATH`. That works after `npm install -g oh-my-t3code`, or `pnpm link --global` in a clone. When `command -v omt` finds nothing, a skill uses `.omt/bin/omt` from the project root, which `omt install --project` creates. When that file is missing, as in a linked worktree, a skill uses the shim of the main checkout, `"$(git rev-parse --path-format=absolute --git-common-dir)/../.omt/bin/omt"`. Without any of them, a skill falls back to the manual steps in `roles.md` and `brief.md`. The rule lives in the section "The CLI" of `skills/omt/references/delegation.md`. Skills never use `npx`, which needs the network.
 - Skills name T3 tools by their base names (`delegate_task`, `task_status`). The first skill text that names a tool says that harnesses may add a prefix, such as `mcp__t3-code__delegate_task`.
 - Shared reference lives in `skills/omt/references/`. Other skills link to it with relative paths such as `../omt/references/delegation.md`.
 - Every relative link in a skill must resolve to a file in the repository. A test checks this.
@@ -1221,8 +1254,9 @@ User scope and project scope never read or write each other's files.
 | Skill | Invocation | Purpose |
 | --- | --- | --- |
 | `omt` | user | Router. Lists the omt workflows, when to use each, and the shared references. |
-| `omt-ulw` | model | Ultrawork loop: frame, route, explore, plan, dispatch, review, test, fix, final gate, report. Trigger words: ulw, ultrawork, build or fix with subagents in T3. |
-| `omt-plan` | model | Planning: read-only exploration, owner-decision questions only, plan file, cross-family plan-review rounds with a frozen blocker list, handoff. |
+| `omt-ulw` | model | Ultrawork loop: mode and branch check, frame, route, explore, plan, dispatch, review, test, fix, final gate, report. Trigger words: ulw, ultrawork, build or fix with subagents in T3. |
+| `omt-plan` | model | Planning: read-only exploration, owner-decision questions only, asked in one message after all independent work (research and a draft plan), plan file with a `## Research` section and an optional `omt plan limit`, plan-review rounds (round 1 with one reviewer per family) with a frozen blocker list, handoff. |
+| `omt-design` | model | Design pass before UI units: mode and branch check, frame and slug, one `design` task for 2 or 3 directions with screenshots, owner checkpoint (pick and steer in one message), `design` rounds with the owner's words verbatim until the owner approves or `maxReviewRounds`, design spec `docs/design/<slug>.md`, handoff to `ui` units that cite it. |
 | `omt-review` | model | Review of uncommitted changes, a branch, a commit, or a PR. Reviewer count by diff size, grouping by file locality, a fresh task per round, a final oracle pass, merged findings. |
 | `omt-research` | model | Parallel read-only research into a cited report. |
 | `omt-swarm` | user | Independent tracks in separate worktree threads with `t3_thread_launch`, stacked branches, `link_pull_request`, and `watch_pull_request`. Invoking it is the explicit user request that T3 requires for new threads. |
@@ -1230,20 +1264,25 @@ User scope and project scope never read or write each other's files.
 
 Rules that the skills must carry:
 
-- `omt-ulw` runs the full loop for every task, however small. The conductor edits no product files (code, tests, docs, config). Its own writes go only to `.omt/` (plan, ledger, evidence) and to brief temp files in `$TMPDIR`. A LIGHT run may skip only step 3 (explore), the test child (step 8), and the oracle. It still has the banner, steps 0 to 2, a plan from `omt plan new <slug> --light`, one `execute` child and one `review` child per unit with each dispatch and result in the ledger, the conductor's own run of the verify commands and the final checks, and the report. When no child can do an edit (role `unavailable`, no `delegate_task`, a stop code, or a limit), the conductor stops and tells the user; it does not make the edit itself.
+- `omt-ulw` runs the full loop for every task, however small. The conductor edits no product files (code, tests, docs, config). Its own writes go only to `.omt/` (plan, ledger, evidence) and to brief temp files in `$TMPDIR`. A LIGHT run may skip only step 3 (explore), the test child (step 8), and the oracle. It still has the banner, steps 0 to 2, a plan from `omt plan new <slug> --light`, one `execute` child (a `ui` child for a unit that implements a design or changes UI, with no fallback to another family) and one `review` child per unit with each dispatch and result in the ledger, the conductor's own run of the verify commands and the final checks, and the report. When no child can do an edit (role `unavailable`, no `delegate_task`, a stop code, or a limit), the conductor stops and tells the user; it does not make the edit itself.
 - Before each dispatch, the conductor runs `omt ledger stats --plan <slug>` and dispatches only while it reports `can dispatch: yes`. Without the CLI, it counts the open task ids in the plan's log.
 - A read-only role's brief carries the plan-mode line (section 9.2). When a summary is `Child task completed without an assistant result.`, the conductor reads the child with `t3_thread_read` (view `messages`, which includes proposed plans) before it re-dispatches.
 - The conductor keeps its own turn short: dispatch async work, then end the turn and let the wake start the next one. When the turn cannot end (a goal or a stop hook keeps it running), it uses `delegate_task` with `mode: "wait"` and a `timeoutMs` of at most 3,600,000 for one blocking task. For parallel tasks, it uses `t3_thread_wait` on each child thread, then `task_status` for each. A later wake that names tasks it already read needs no action.
 - `interaction_mode_escalation_denied` and `runtime_mode_escalation_denied` are stop codes: report them and do not fall back. `provider_unavailable`, `model_unavailable`, and an `invalid_request` about options move to the next rung with the next attempt number.
 - On `provider_unavailable` for a target that names only `driverKind`, the skill first retries that target once, with the next attempt number and `providerInstanceId` in place of `driverKind`, set to the same value. The target is the one that failed, rung 1 or a fallback, so the skill keeps it until the retry is sent. Observed T3 behavior is the reason. T3 checks a named provider instance again before it refuses it, but it takes a `driverKind`-only target from a cached provider snapshot that can be stale.
-- `omt-swarm` tracks are top-level threads, not delegated children. Their launch message does not use `omt brief`. It tells the track to run `omt-ulw`, to commit each verified unit on its own branch, to push, and to open a PR against its base. Before it launches, the skill checks with `t3_thread_configuration` that the caller runs in `full-access` runtime mode and `default` interaction mode, which `t3_thread_launch` requires. It launches at most `maxParallel` tracks and gives each track a lower `limits.maxParallel`. Top-level threads never wake the caller, so the skill monitors them with a `schedule_task` heartbeat bound to the caller's thread. The heartbeat prompt is complete on its own, and the skill deletes the heartbeat when every track has a PR or a blocker.
+- `omt-swarm` tracks are top-level threads, not delegated children. Their launch message does not use `omt brief`. It tells the track to run `omt-ulw`, to commit each verified unit on its own branch, to push, and to open a PR against its base. Before it launches, the skill checks with `t3_thread_configuration` that the caller runs in `full-access` runtime mode and `default` interaction mode, which `t3_thread_launch` requires. It launches at most `maxParallel` tracks. Each track uses the plan slug `<slug>-<track>` and, after its plan exists, runs `omt plan limit <slug>-<track> <k>` with a lower `<k>`. The track does not change `limits` in the config, because all worktrees share one `.omt/`. Top-level threads never wake the caller, so the skill monitors them with a `schedule_task` heartbeat bound to the caller's thread. The heartbeat prompt is complete on its own, and the skill deletes the heartbeat when every track has a PR or a blocker.
 - `omt-ulw`, `omt-plan`, `omt-review`, and `omt-research` start with a step 0 that calls `t3_thread_configuration` with no `threadId` and reads `interactionMode`. In `plan` mode they dispatch only read-only roles, write no files, and deliver the result in the final message, or ask the user to switch to default mode. No skill calls `orchestrator_capabilities` to read its modes, because that result holds the full provider and model catalog.
+- Step 0 of `omt-ulw` and `omt-plan` also links to the branch check in `delegation.md`. It finds the default branch from the repository metadata (`refs/remotes/origin/HEAD`, then `init.defaultBranch` when that branch exists, then `main` or `master`) and counts `git rev-list --count HEAD..<default>`. When the count is above 0, `plan` mode only reports it. `default` mode runs `git merge --ff-only <default>` when the worktree is clean and `HEAD` is an ancestor of the default branch; otherwise it reports the count and asks the user. When no default branch is found, the skill skips the check and says so.
+- `omt-plan` asks every owner decision in one message, after it has finished all work that does not depend on the answers. It fills `## Research` with each question, its answer, and its sources. When units share build state that parallel workers would race on, it runs `omt plan limit <slug> 1` and says why in the plan. It edits and hashes the plan at the absolute path that `omt plan status <slug>` prints, also from a worktree.
+- Skills write and name evidence files in the directory that `omt paths --evidence` prints, never under a path relative to `.omt/evidence/`, so a worktree uses the shared evidence directory.
 - Skills tick plan items with `omt plan mark` and create LIGHT plans with `omt plan new <slug> --light`. They record a dispatch with `--task-id`, `--provider`, and `--model`, and the result with the same plan, unit, role, round, and attempt, without the task id. `--provider` is `target.providerInstanceId`, or `target.driverKind` when the target has no instance id, and `--model` is `target.model`, both from the target of the `delegate_task` call that returned the task. After a fallback, that is the fallback's target.
-- Fix rounds: round 1 is `execute`, the round 2 fix is `execute`, the round 3 fix is `deep`, and a failed round 3 review stops the unit and asks the user. Oracle rounds count against `maxReviewRounds` too.
+- Fix rounds: round 1 is `execute`, the round 2 fix is `execute`, the round 3 fix is `deep`, and a failed round 3 review stops the unit and asks the user. A `ui` unit uses `ui` in every round. Oracle rounds count against `maxReviewRounds` too.
+- Design artifacts get no model review. No `review`, `oracle`, `plan-review`, or other model task looks at files under `docs/design/`; the owner is the design review. `omt-ulw` review and oracle briefs, and `omt-review` reviewer groups, diff commands, and oracle input leave `docs/design/` out; `omt-ulw` test, review, and oracle briefs of `ui` units leave out `docs/design/`, every visual-match done condition, and design context, and keep code and behavior checks; `omt-review` lists the design files for the owner, and a change that holds only design files goes to the owner. Code review of `ui` units stays. A `design` or `ui` dispatch never falls back to another family: when its rung cannot run, the skill stops and tells the user.
+- `omt-plan` plans an `omt-design` step before units that build or change UI when no spec exists under `docs/design/`. UI units cite the spec and use the `ui` role. A unit that implements a design or changes UI uses the `ui` role in HEAVY and LIGHT runs. `omt-ulw` step 5 (dispatch) starts with the design check: when the plan asks for an `omt-design` step that has not run, it runs `omt-design` before it dispatches any `ui` unit. The `omt-plan` hand-off returns to step 5, so it passes through that check.
 - A `test` persona never runs `git stash` or other commands that touch files outside its scope, because the checkout is shared.
 - `plan-review`, `review`, and `oracle` are cross-family relative to the worker. A reviewer comes from the family other than the worker's; when that family is not available, the same family reviews. The `oracle` is the whole-change gate from the family other than the main implementer's.
 - `omt-ulw` builds the review briefs (step 7) and the oracle brief (step 10) with `--against auto`.
-- `omt-plan` writes the plan itself, so its `plan-review` briefs pass `--against <provider instance>`, where the provider instance is `modelSelection.instanceId` from the `t3_thread_configuration` result of step 0.
+- `omt-plan` round 1 dispatches two `plan-review` tasks: `--unit plan.claude --against codex` (an Opus reviewer) and `--unit plan.codex --against claudeAgent` (an Astra reviewer). Before each of the two dispatches it runs `omt ledger stats --plan <slug>`; when that reports `can dispatch: no` after the first, the second goes out after the first finishes. Each runs only on its own family: when a failure code would move it to a rung of the other family, the skill does not fall back, and it tells the user which reviewer is unavailable. The frozen blocker list is the union of both reviewers' blocking findings without duplicates, and round 1 approves only when both approve. From round 2, one task passes `--unit plan --against <the plan author's provider>`. The skill writes the plan itself, so that provider is `modelSelection.instanceId` from the `t3_thread_configuration` result of step 0; when a `plan` task wrote the plan, it is that task's provider.
 - `omt-review` round 1 reviews a change whose author is unknown, so it passes no `--against`. Its oracle pass uses `--against <the provider that most review tasks ran on>`. A review round after its fix loop dispatches one review per fix under the fix's unit `F<k>` with `--against auto`, so each reviewer is picked against the worker of that fix.
 
 ### 15.3 Shared references in `skills/omt/references/`

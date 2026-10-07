@@ -1,8 +1,8 @@
 import { readdir, stat } from "node:fs/promises";
-import { join, relative } from "node:path";
+import { join } from "node:path";
 import { writeTargetFor } from "../install/fsops.ts";
 import { findProjectRoot, plansDir } from "../paths.ts";
-import { parsePlan } from "../plan/parse.ts";
+import { findPlanHeader, parseMaxParallel, parsePlan } from "../plan/parse.ts";
 import type { PlanStatus } from "../plan/parse.ts";
 import { planTemplate } from "../plan/template.ts";
 import type { CliContext, CommandRun } from "../types.ts";
@@ -14,8 +14,9 @@ import { printJson } from "../util/output.ts";
 
 export const summary = "Create plan files and show their progress.";
 
-export const usage = `Usage: omt plan new <slug> [--title <text>] [--light] [--force]
+export const usage = `Usage: omt plan new <slug> [--title <text>] [--light] [--max-parallel <n>] [--force]
        omt plan mark <slug> <id> <done|open|blocked>
+       omt plan limit <slug> <n|none>
        omt plan status [<slug>] [--json]
        omt plan list [--json]
 
@@ -23,12 +24,16 @@ Subcommands:
   new <slug>        write .omt/plans/<slug>.md from the template
   mark <slug> <id>  set the checkbox of an item such as U3, D1, or F2, and
                     append a line to the log
+  limit <slug> <n>  set the plan's max-parallel header key (1 to 32), or
+                    remove it with none
   status [<slug>]   print counts and the next open unit (default: newest plan)
   list              print one line per plan
 
 Options:
   --title <text>    with new: the plan title (default: the slug)
   --light           with new: leave out the oracle line (F2)
+  --max-parallel <n>
+                    with new: cap parallel dispatch for this plan (1 to 32)
   --force           with new: overwrite an existing plan
   --json            print JSON
   -h, --help        print this help
@@ -73,14 +78,24 @@ async function listPlanFiles(dir: string): Promise<{ slug: string; path: string;
 }
 
 async function loadPlan(path: string, slug: string): Promise<PlanSummary> {
+  const status = parsePlan(await readPlan(path, slug));
+  return { ...status, slug: status.slug ?? slug, path };
+}
+
+function maxParallelArg(value: string, flag: string): number {
+  const number = parseMaxParallel(value);
+  if (number === undefined) throw usageError(`${flag} must be an integer from 1 to 32, got "${value}"`);
+  return number;
+}
+
+async function readPlan(path: string, slug: string): Promise<string> {
   const markdown = await readFileIfExists(path);
   if (markdown === undefined) {
     throw new OmtError("plan_not_found", `plan "${slug}" not found at ${path}`, {
       hint: `run "omt plan new ${slug}" to create it`,
     });
   }
-  const status = parsePlan(markdown);
-  return { ...status, slug: status.slug ?? slug, path };
+  return markdown;
 }
 
 function nextText(status: PlanStatus): string {
@@ -96,17 +111,19 @@ async function planNew(
   ctx: CliContext,
   root: string,
   positionals: string[],
-  options: { title: string | undefined; light: boolean; force: boolean },
+  options: { title: string | undefined; light: boolean; maxParallel: string | undefined; force: boolean },
 ) {
   const slug = positionals[1];
   if (slug === undefined) throw usageError("plan new needs a <slug>");
   extraPositional(positionals, 2);
   checkPlanSlug(slug);
+  const maxParallel = options.maxParallel === undefined ? undefined : maxParallelArg(options.maxParallel, "--max-parallel");
   const path = join(plansDir(root), `${slug}.md`);
   if (!options.force && (await pathExists(path))) {
     throw new OmtError("plan_exists", `plan already exists: ${path}`, { hint: "pass --force to overwrite it" });
   }
-  await writeFileAtomic(await writeTargetFor(path), planTemplate(slug, options.title ?? slug, ctx.now().toISOString(), { light: options.light }));
+  const template = planTemplate(slug, options.title ?? slug, ctx.now().toISOString(), { light: options.light, maxParallel });
+  await writeFileAtomic(await writeTargetFor(path), template);
   ctx.stdout(`${path}\n`);
   return 0;
 }
@@ -121,12 +138,7 @@ async function planMark(ctx: CliContext, root: string, positionals: string[]) {
   if (!Object.hasOwn(MARKS, state)) throw usageError(`invalid state "${state}"`, "use done, open, or blocked");
   const mark = MARKS[state as MarkState];
   const path = join(plansDir(root), `${slug}.md`);
-  const markdown = await readFileIfExists(path);
-  if (markdown === undefined) {
-    throw new OmtError("plan_not_found", `plan "${slug}" not found at ${path}`, {
-      hint: `run "omt plan new ${slug}" to create it`,
-    });
-  }
+  const markdown = await readPlan(path, slug);
   const item = /^(U|D|F)(\d+)$/.test(id) ? parsePlan(markdown).items.find((candidate) => candidate.id === id) : undefined;
   if (item === undefined) throw new OmtError("plan_item_not_found", `no item ${id} in plan "${slug}"`);
   const lines = markdown.split("\n");
@@ -137,6 +149,23 @@ async function planMark(ctx: CliContext, root: string, positionals: string[]) {
   text += `- ${ctx.now().toISOString()} ${id} -> ${state}\n`;
   await writeFileAtomic(await writeTargetFor(path), text);
   ctx.stdout(`marked ${id} ${state}\n`);
+  return 0;
+}
+
+async function planLimit(ctx: CliContext, root: string, positionals: string[]) {
+  const [, slug, value] = positionals;
+  if (slug === undefined || value === undefined) throw usageError("plan limit needs <slug> <n|none>");
+  extraPositional(positionals, 3);
+  checkPlanSlug(slug);
+  const limit = value === "none" ? undefined : maxParallelArg(value, "the limit");
+  const path = join(plansDir(root), `${slug}.md`);
+  const markdown = await readPlan(path, slug);
+  const header = findPlanHeader(markdown);
+  if (header === undefined) throw new OmtError("plan_header_not_found", `plan "${slug}" has no omt-plan header comment`);
+  const kept = header.text.replace(/\s+max-parallel=[^\s>]*/g, "").replace(/\s*-->$/, "");
+  const updated = limit === undefined ? `${kept} -->` : `${kept} max-parallel=${limit} -->`;
+  await writeFileAtomic(await writeTargetFor(path), markdown.slice(0, header.index) + updated + markdown.slice(header.index + header.text.length));
+  ctx.stdout(limit === undefined ? `removed the max-parallel limit of ${slug}\n` : `set max-parallel=${limit} for ${slug}\n`);
   return 0;
 }
 
@@ -160,17 +189,18 @@ async function planStatus(ctx: CliContext, root: string, positionals: string[], 
     checkPlanSlug(slug);
     path = join(dir, `${slug}.md`);
   }
-  const { path: _path, ...status } = await loadPlan(path, slug);
+  const status = await loadPlan(path, slug);
   if (json) {
     printJson(ctx.stdout, status);
     return 0;
   }
   ctx.stdout(
     [
-      `plan: ${status.slug} (${relative(root, path)})`,
+      `plan: ${status.slug} (${path})`,
       `units: ${unitsText(status)}`,
       `done-when: ${status.counts.D.done}/${status.counts.D.total}`,
       `final: ${status.counts.F.done}/${status.counts.F.total}`,
+      ...(status.maxParallel === undefined ? [] : [`max parallel: ${status.maxParallel}`]),
       `next: ${nextText(status)}`,
       "",
     ].join("\n"),
@@ -198,6 +228,7 @@ export const run: CommandRun = async (ctx) => {
   const { values, positionals } = parseArgs(ctx.argv, {
     title: { type: "string" },
     light: { type: "boolean" },
+    "max-parallel": { type: "string" },
     force: { type: "boolean" },
     json: { type: "boolean" },
   });
@@ -208,17 +239,20 @@ export const run: CommandRun = async (ctx) => {
       return planNew(ctx, root, positionals, {
         title: values.title,
         light: values.light === true,
+        maxParallel: values["max-parallel"],
         force: values.force === true,
       });
     case "mark":
       return planMark(ctx, root, positionals);
+    case "limit":
+      return planLimit(ctx, root, positionals);
     case "status":
       return planStatus(ctx, root, positionals, json);
     case "list":
       return planList(ctx, root, positionals, json);
     case undefined:
-      throw usageError("plan needs a subcommand: new, mark, status, or list");
+      throw usageError("plan needs a subcommand: new, mark, limit, status, or list");
     default:
-      throw usageError(`unknown plan subcommand "${positionals[0]}"`, "use new, mark, status, or list");
+      throw usageError(`unknown plan subcommand "${positionals[0]}"`, "use new, mark, limit, status, or list");
   }
 };

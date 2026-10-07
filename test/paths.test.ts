@@ -1,6 +1,7 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { join, sep } from "node:path";
 import { test } from "node:test";
+import type { TestContext } from "node:test";
 import assert from "node:assert/strict";
 import {
   claudeConfigDir,
@@ -8,19 +9,21 @@ import {
   configDir,
   evidenceDir,
   findProjectRoot,
+  mainCheckoutOf,
   ledgerPath,
   manifestPath,
   omtDir,
   plansDir,
   projectConfigPath,
   projectRolesDir,
+  shadowedWorktreeState,
   skillRoots,
   t3HomeDir,
   t3SettingsPath,
   userConfigPath,
   userRolesDir,
 } from "../src/paths.ts";
-import { tempDir } from "./helpers.ts";
+import { gitRepo, tempDir } from "./helpers.ts";
 
 const HOME = "/fake/home";
 
@@ -100,4 +103,107 @@ test("findProjectRoot returns cwd when no marker exists", (t) => {
   const found = findProjectRoot(dir);
   // On some machines the temp directory sits inside a repository; then the root is above `root`.
   assert.ok(found === dir || root.startsWith(`${found}${sep}`), found);
+});
+
+// A main checkout with one commit and a linked worktree next to it.
+function worktreeRepo(t: TestContext) {
+  const root = tempDir(t);
+  const main = join(root, "main");
+  const worktree = join(root, "wt");
+  const git = gitRepo(root, main);
+  git(["worktree", "add", "-q", worktree]);
+  return { root, main, worktree, git };
+}
+
+const real = (path: string | undefined) => (path === undefined ? undefined : realpathSync(path));
+
+test("mainCheckoutOf reads the main checkout of a linked worktree without git", (t) => {
+  const { main, worktree } = worktreeRepo(t);
+  assert.equal(real(mainCheckoutOf(worktree)), realpathSync(main));
+  assert.equal(mainCheckoutOf(main), undefined, "a normal checkout has no main checkout");
+  assert.equal(mainCheckoutOf(join(worktree, "nope")), undefined);
+});
+
+test("mainCheckoutOf takes a relative or absolute commondir, and rejects a bare or broken layout", (t) => {
+  const root = tempDir(t);
+  const gitDir = join(root, "repo", ".git", "worktrees", "wt");
+  const worktree = join(root, "wt");
+  mkdirSync(gitDir, { recursive: true });
+  mkdirSync(worktree);
+  writeFileSync(join(worktree, ".git"), "gitdir: ../repo/.git/worktrees/wt\n");
+  writeFileSync(join(gitDir, "commondir"), "../..\n");
+  const config = join(root, "repo", ".git", "config");
+  writeFileSync(config, "[core]\n\tbare = false\n");
+  assert.equal(mainCheckoutOf(worktree), join(root, "repo"));
+  for (const text of ["[core]\n\tbare = true\n", "[Core]\n\tBare = yes ; comment\n", "[core]\n\tbare\n"]) {
+    writeFileSync(config, text);
+    assert.equal(mainCheckoutOf(worktree), undefined, `bare: ${JSON.stringify(text)}`);
+  }
+  writeFileSync(config, '[core "x"]\n\tbare = true\n[core]\n\tbare = false\n');
+  assert.equal(mainCheckoutOf(worktree), join(root, "repo"), "a subsection is not [core]");
+  writeFileSync(config, "[core]\n\tbare = false\n");
+  writeFileSync(join(gitDir, "commondir"), `${join(root, "repo", ".git")}\n`);
+  assert.equal(mainCheckoutOf(worktree), join(root, "repo"));
+
+  const bare = join(root, "bare.git", "worktrees", "wt");
+  mkdirSync(bare, { recursive: true });
+  writeFileSync(join(bare, "commondir"), "../..\n");
+  writeFileSync(join(worktree, ".git"), `gitdir: ${bare}\n`);
+  assert.equal(mainCheckoutOf(worktree), undefined, "a bare repository has no main checkout");
+
+  writeFileSync(join(worktree, ".git"), `gitdir: ${join(root, "gone")}\n`);
+  assert.equal(mainCheckoutOf(worktree), undefined, "a broken gitdir");
+  writeFileSync(join(worktree, ".git"), "not a gitdir line\n");
+  assert.equal(mainCheckoutOf(worktree), undefined);
+});
+
+test("findProjectRoot resolves a linked worktree to its main checkout", (t) => {
+  const { main, worktree } = worktreeRepo(t);
+  mkdirSync(join(worktree, "src"));
+  assert.equal(realpathSync(findProjectRoot(join(worktree, "src"))), realpathSync(main), "main without .omt");
+  mkdirSync(join(main, ".omt"));
+  assert.equal(realpathSync(findProjectRoot(worktree)), realpathSync(main), "main with .omt");
+  mkdirSync(join(worktree, ".omt"));
+  assert.equal(realpathSync(findProjectRoot(worktree)), realpathSync(main), "the worktree's own .omt never wins");
+  assert.equal(findProjectRoot(main), main, "a normal checkout is unchanged");
+  assert.equal(findProjectRoot(worktree), main, "the root keeps the path form of the cwd");
+});
+
+test("findProjectRoot keeps a worktree of a bare repository stored at <repo>/.git", (t) => {
+  const root = tempDir(t);
+  const seed = join(root, "seed");
+  const git = gitRepo(root, seed);
+  const common = join(root, "repo", ".git");
+  git(["init", "-q", "--bare", "-b", "main", common], root);
+  git(["push", "-q", common, "main"]);
+  const worktree = join(root, "wt");
+  git(["worktree", "add", "-q", worktree, "main"], common);
+  assert.equal(mainCheckoutOf(worktree), undefined);
+  assert.equal(findProjectRoot(worktree), worktree);
+});
+
+test("findProjectRoot keeps a worktree whose gitdir is broken", (t) => {
+  const { worktree } = worktreeRepo(t);
+  writeFileSync(join(worktree, ".git"), `gitdir: ${join(worktree, "gone")}\n`);
+  assert.equal(findProjectRoot(worktree), worktree);
+});
+
+test("shadowedWorktreeState reports a worktree .omt with plans or a ledger", (t) => {
+  const { main, worktree } = worktreeRepo(t);
+  assert.equal(shadowedWorktreeState(worktree), undefined);
+  mkdirSync(join(worktree, ".omt", "plans"), { recursive: true });
+  writeFileSync(join(worktree, ".omt", "plans", "notes.txt"), "x\n");
+  mkdirSync(join(worktree, ".omt", "plans", "dir.md"));
+  mkdirSync(join(worktree, ".omt", "ledger.jsonl"));
+  assert.equal(shadowedWorktreeState(worktree), undefined, "only regular .md files and a regular ledger file count");
+  writeFileSync(join(worktree, ".omt", "plans", "x.md"), "# x\n");
+  assert.deepEqual(shadowedWorktreeState(worktree), { worktree, main });
+  mkdirSync(join(main, ".omt", "plans"), { recursive: true });
+  writeFileSync(join(main, ".omt", "plans", "y.md"), "# y\n");
+  assert.equal(shadowedWorktreeState(main), undefined, "the main checkout is never shadowed");
+
+  const other = worktreeRepo(t);
+  mkdirSync(join(other.worktree, ".omt"));
+  writeFileSync(join(other.worktree, ".omt", "ledger.jsonl"), "");
+  assert.deepEqual(shadowedWorktreeState(other.worktree), { worktree: other.worktree, main: other.main });
 });

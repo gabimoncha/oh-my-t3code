@@ -17,6 +17,8 @@ A role names a kind of work. The config maps each role to a chain of rungs (prov
 | `oracle` | read-only | review | The final gate. Attack the finished change from the family other than the main implementer's. Cross-family. |
 | `test` | edit | test | Writing and running tests and real checks for a verdict with evidence. |
 | `writing` | edit | work | Documentation and other prose. |
+| `design` | edit | work | Design directions and the design spec for screens and flows ([omt-design](../../omt-design/SKILL.md)). Opus only, no fallback. |
+| `ui` | edit | work | One UI unit built from its design spec, in every round of that unit. Opus only, no fallback. |
 
 Read-only roles run in `plan` interaction mode; edit roles run in `default`. Every default role inherits your runtime mode. The persona for each role is `roles/<role>.md`, for example [roles/execute.md](roles/execute.md). The result block for each kind is `results/<kind>.md`, for example [results/work.md](results/work.md).
 
@@ -51,6 +53,8 @@ When neither `omt` nor `.omt/bin/omt` is found (see [The CLI](delegation.md#the-
 | `oracle` | codex / gpt-6-astra / high | claudeAgent / claude-opus-5-5 / high |
 | `test` | codex / gpt-6.1-sol / low | claudeAgent / claude-sonnet-5-5 / low |
 | `writing` | claudeAgent / claude-opus-5-5 / high | codex / gpt-6-astra / medium |
+| `design` | claudeAgent / claude-opus-5-5 / high | none |
+| `ui` | claudeAgent / claude-opus-5-5 / medium | none |
 
 The cross-family roles are `plan-review`, `review`, and `oracle`. For these roles, try the rungs outside the worker's family first, then the rungs in the worker's family, each in table order. When no rung outside the worker's family can run, the same family reviews.
 
@@ -72,7 +76,7 @@ The effort option id depends on the driver:
 | `pi` | `thinking` | unchanged |
 | `opencode` | `variant` | `off` and `minimal` become `low`; `max` becomes `xhigh` |
 
-For any other driver, send no `options`. Set `role` to the T3 role (`research` for explore and research, `design` for plan, `review` for plan-review, review, and oracle, `implementation` for execute, quick, deep, and writing, `test` for test). Set `interactionMode` from the Access column (`plan` for read-only, `default` for edit) and `runtimeMode` to `inherit`.
+For any other driver, send no `options`. Set `role` to the T3 role (`research` for explore and research, `design` for plan and design, `review` for plan-review, review, and oracle, `implementation` for execute, quick, deep, writing, and ui, `test` for test). Set `interactionMode` from the Access column (`plan` for read-only, `default` for edit) and `runtimeMode` to `inherit`.
 
 ## Cross-family roles
 
@@ -94,6 +98,8 @@ On `provider_unavailable`, `model_unavailable`, or an `invalid_request` about op
 2. Set `delegateTask.target` to the next unused fallback. Change nothing else.
 3. Call `delegate_task` with that payload.
 4. Record the new call as a new `dispatched` entry with `--attempt <n+1>`, its `--task-id`, and the fallback's `--provider` and `--model` ([results.md](results.md#recording)). The failed call returned no task, so it has no ledger entry to close.
+
+A role with one rung (`design` and `ui`) has no fallback. When T3 refuses its rung, stop and tell the user which target failed.
 
 A mode escalation error is not a rung problem: stop and report it ([delegation.md](delegation.md#failure-codes)).
 

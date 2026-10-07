@@ -10,12 +10,13 @@ import * as hook from "./commands/hook.ts";
 import * as init from "./commands/init.ts";
 import * as install from "./commands/install.ts";
 import * as ledger from "./commands/ledger.ts";
+import * as paths from "./commands/paths.ts";
 import * as plan from "./commands/plan.ts";
 import * as roles from "./commands/roles.ts";
 import * as route from "./commands/route.ts";
 import * as uninstall from "./commands/uninstall.ts";
 import type { CliContext, CommandRun } from "./types.ts";
-import { findProjectRoot } from "./paths.ts";
+import { findProjectRoot, omtDir, shadowedWorktreeState } from "./paths.ts";
 import { OmtError } from "./util/errors.ts";
 
 export interface CommandModule {
@@ -35,8 +36,11 @@ export const COMMANDS: Readonly<Record<string, CommandModule>> = {
   brief,
   plan,
   ledger,
+  paths,
   hook,
 };
+
+const STATE_COMMANDS = new Set(["plan", "ledger", "brief", "route", "init"]);
 
 const HERE = fileURLToPath(import.meta.url);
 
@@ -144,6 +148,14 @@ function reportError(ctx: CliContext, error: unknown): number {
   return 1;
 }
 
+function warnShadowedState(ctx: CliContext): void {
+  const shadowed = shadowedWorktreeState(ctx.cwd);
+  if (shadowed === undefined) return;
+  ctx.stderr(
+    `warning: ${omtDir(shadowed.worktree)} holds plans or a ledger that omt no longer reads; move them to ${omtDir(shadowed.main)}\n`,
+  );
+}
+
 export async function main(argv: string[], overrides: Partial<CliContext> = {}): Promise<number> {
   const ctx = createContext(overrides);
   try {
@@ -165,6 +177,7 @@ export async function main(argv: string[], overrides: Partial<CliContext> = {}):
       ctx.stdout(command.usage);
       return 0;
     }
+    if (STATE_COMMANDS.has(first)) warnShadowedState(ctx);
     return await command.run({ ...ctx, argv: rest });
   } catch (error) {
     return reportError(ctx, error);

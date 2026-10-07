@@ -1,3 +1,5 @@
+import { LIMIT_RANGES } from "../config/validate.ts";
+
 export type PlanItemKind = "U" | "D" | "F";
 export type PlanItemState = "open" | "done" | "blocked";
 
@@ -19,6 +21,7 @@ export interface PlanCounts {
 export interface PlanStatus {
   title: string;
   slug?: string;
+  maxParallel?: number;
   items: PlanItem[];
   counts: Record<PlanItemKind, PlanCounts>;
   next?: PlanItem;
@@ -26,7 +29,29 @@ export interface PlanStatus {
 }
 
 const ITEM_RE = /^- \[( |x|X|~)\] (U|D|F)(\d+)\. (.*)$/;
-const HEADER_RE = /<!--\s*omt-plan v1\b[^>]*?\bslug=([^\s>]+)/;
+const HEADER_LINE_RE = /^[ \t]*(<!--[ \t]*omt-plan v1\b[^>\n]*-->)[ \t]*\r?$/m;
+const SLUG_RE = /\bslug=([^\s>]+)/;
+const MAX_PARALLEL_RE = /\bmax-parallel=([^\s>]+)/;
+
+export interface PlanHeader {
+  text: string;
+  index: number;
+}
+
+// The header is the first line that is only an omt-plan comment, so an example header quoted later in the body does not count.
+export function findPlanHeader(markdown: string): PlanHeader | undefined {
+  const match = HEADER_LINE_RE.exec(markdown);
+  const text = match?.[1];
+  if (match === null || text === undefined) return undefined;
+  return { text, index: match.index + match[0].indexOf(text) };
+}
+
+export function parseMaxParallel(value: string): number | undefined {
+  if (!/^[1-9]\d*$/.test(value)) return undefined;
+  const [min, max] = LIMIT_RANGES.maxParallel;
+  const number = Number(value);
+  return number >= min && number <= max ? number : undefined;
+}
 
 function stateOf(mark: string): PlanItemState {
   if (mark === " ") return "open";
@@ -60,7 +85,10 @@ export function parsePlan(markdown: string): PlanStatus {
     bucket[item.state] += 1;
     bucket.total += 1;
   });
-  const slug = HEADER_RE.exec(markdown)?.[1];
+  const header = findPlanHeader(markdown)?.text ?? "";
+  const slug = SLUG_RE.exec(header)?.[1];
+  const maxParallelText = MAX_PARALLEL_RE.exec(header)?.[1];
+  const maxParallel = maxParallelText === undefined ? undefined : parseMaxParallel(maxParallelText);
   const next = items.find((item) => item.kind === "U" && item.state === "open");
   const status: PlanStatus = {
     title,
@@ -69,6 +97,7 @@ export function parsePlan(markdown: string): PlanStatus {
     complete: items.length > 0 && items.every((item) => item.state === "done"),
   };
   if (slug !== undefined) status.slug = slug;
+  if (maxParallel !== undefined) status.maxParallel = maxParallel;
   if (next !== undefined) status.next = next;
   return status;
 }

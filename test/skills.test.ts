@@ -54,6 +54,7 @@ function relativeLinks(markdown: string): string[] {
 test("the bundled skills are all present", () => {
   assert.deepEqual(skillDirs().sort(), [
     "omt",
+    "omt-design",
     "omt-loop",
     "omt-plan",
     "omt-research",
@@ -113,6 +114,7 @@ test("each mode-check step calls t3_thread_configuration, and no skill reads mod
   const modeSteps: Record<string, string> = {
     "omt-ulw": "### 0. ",
     "omt-plan": "### 0. ",
+    "omt-design": "### 0. ",
     "omt-research": "### 0. ",
     "omt-review": "### 0. ",
     "omt-swarm": "### 1. ",
@@ -142,7 +144,7 @@ test("the resolve-by-hand table in roles.md matches the default chains", () => {
   const section = text.slice(text.indexOf("## Resolve by hand"), text.indexOf("Build the target as"));
   const rows: Record<string, string[]> = {};
   for (const match of section.matchAll(/^\| `([a-z-]+)` \| ([^|]+) \| ([^|]+) \|$/gm)) {
-    rows[match[1] ?? ""] = [(match[2] ?? "").trim(), (match[3] ?? "").trim()];
+    rows[match[1] ?? ""] = [(match[2] ?? "").trim(), (match[3] ?? "").trim()].filter((rung) => rung !== "none");
   }
   const expected: Record<string, string[]> = {};
   for (const [name, role] of Object.entries(DEFAULT_CONFIG.roles)) {
@@ -162,4 +164,107 @@ test("no skill text says that review runs on the same family as execute", () => 
     .filter((path) => path.endsWith(".md"))
     .filter((path) => /same family as `execute`/i.test(readFileSync(path, "utf8")));
   assert.deepEqual(offenders, []);
+});
+
+function readSkill(name: string): string {
+  return readFileSync(join(SKILLS_DIR, name, "SKILL.md"), "utf8");
+}
+
+function section(text: string, heading: string): string {
+  const start = text.indexOf(`\n${heading}`);
+  assert.ok(start >= 0, `no section ${heading}`);
+  const level = /^#+ /.exec(heading)?.[0] ?? "### ";
+  const end = text.indexOf(`\n${level}`, start + 1);
+  return text.slice(start, end < 0 ? undefined : end);
+}
+
+test("delegation.md has a branch check, and both step 0s link to it", () => {
+  const delegation = readFileSync(join(SKILLS_DIR, "omt", "references", "delegation.md"), "utf8");
+  const check = section(delegation, "## Branch check");
+  assert.match(check, /refs\/remotes\/origin\/HEAD/);
+  assert.match(check, /git merge --ff-only <default>/);
+  assert.match(check, /In `plan` mode, only report the count\./);
+  for (const name of ["omt-ulw", "omt-plan", "omt-design"]) {
+    assert.match(section(readSkill(name), "### 0. "), /\(\.\.\/omt\/references\/delegation\.md#branch-check\)/, name);
+  }
+});
+
+test("omt-plan asks in one message after independent work and runs one plan-review per family in round 1", () => {
+  const text = readSkill("omt-plan");
+  const ask = section(text, "### 2. ");
+  assert.match(ask, /finish all work that does not depend on the answers/);
+  assert.match(ask, /ask every owner decision in one message/);
+  const rounds = section(text, "### 4. ");
+  for (const fragment of ["--unit plan.claude --against codex", "--unit plan.codex --against claudeAgent", "can dispatch: no", "do not fall back"]) {
+    assert.ok(rounds.includes(fragment), fragment);
+  }
+  assert.doesNotMatch(rounds, /omt ledger stats(?! --plan <slug>)/);
+  assert.doesNotMatch(text, /\.omt\/plans\/<slug>\.md/);
+});
+
+test("omt-swarm does not tell a track to edit limits.maxParallel", () => {
+  const text = readSkill("omt-swarm");
+  assert.doesNotMatch(text, /limits\.maxParallel/);
+  assert.match(text, /omt plan limit <slug>-<track> <k>/);
+});
+
+test("skills name the shared evidence directory, not a bare .omt/evidence/ path", () => {
+  const offenders = walk(SKILLS_DIR)
+    .filter((path) => path.endsWith(".md"))
+    .filter((path) => readFileSync(path, "utf8").includes(".omt/evidence"))
+    .map((path) => relative(PACKAGE_ROOT, path));
+  assert.deepEqual(offenders, []);
+  for (const name of ["omt-ulw", "omt-review", "omt-research"]) {
+    assert.match(readSkill(name), /`omt paths --evidence`/, name);
+  }
+  assert.match(readFileSync(join(SKILLS_DIR, "omt", "references", "roles", "ui.md"), "utf8"), /`omt paths --evidence`/);
+});
+
+test("the design and ui personas exist, and no model reviews design artifacts", () => {
+  const rolesDir = join(SKILLS_DIR, "omt", "references", "roles");
+  for (const role of ["design", "ui"]) {
+    assert.ok(DEFAULT_CONFIG.roles[role], role);
+    assert.ok(existsSync(join(rolesDir, `${role}.md`)), `missing roles/${role}.md`);
+  }
+  const design = readSkill("omt-design");
+  assert.doesNotMatch(design, /omt brief review/);
+  assert.doesNotMatch(design, /omt brief oracle/);
+  assert.match(design, /--unit DS<k>/);
+  const review = readSkill("omt-review");
+  assert.match(section(review, "### 2. "), /Leave every file under `docs\/design\/` out of the groups/);
+  assert.match(section(review, "### 3. "), /never include `docs\/design\/`/);
+  assert.match(section(review, "### 5. "), /`docs\/design\/` excluded/);
+  const ulw = readSkill("omt-ulw");
+  assert.match(section(ulw, "### 7. "), /Leave `docs\/design\/` out of the scope paths/);
+  assert.match(section(ulw, "### 10. "), /without `docs\/design\/`/);
+  assert.match(section(ulw, "### 8. "), /Design exclusion: for a `ui` unit, leave `docs\/design\/` out of the test scope paths/);
+  assert.match(section(ulw, "### 8. "), /leave out every done condition and every piece of context that compares the result with the design/);
+  assert.match(section(ulw, "### 9. "), /A `ui` unit uses `ui` in every round/);
+  assert.match(section(readSkill("omt-plan"), "### 3. "), /plan an `omt-design` step before those units/);
+});
+
+test("omt-ulw keeps visual checks out of review and oracle briefs of ui units", () => {
+  const ulw = readSkill("omt-ulw");
+  assert.match(section(ulw, "### 8. "), /every piece of context that compares the result with the design/);
+  assert.match(section(ulw, "### 8. "), /Review briefs \(step 7\) and the oracle brief \(step 10\) apply the same exclusion/);
+  assert.match(section(ulw, "### 7. "), /For a `ui` unit, also apply the \[design exclusion\]\(#8-test\)/);
+  assert.match(section(ulw, "### 10. "), /every done condition except those that the \[design exclusion\]\(#8-test\)/);
+});
+
+test("omt-ulw uses the ui role for UI units also in a LIGHT run", () => {
+  const ulw = readSkill("omt-ulw");
+  assert.match(section(ulw, "## Contract"), /a `ui` child for a unit that implements a design or changes UI, with no fallback to another family/);
+  assert.match(section(ulw, "### 5. "), /A `ui` unit uses the `ui` role, also in a LIGHT run\. When `ui` cannot run, stop/);
+  assert.match(section(ulw, "### 5. "), /do not fall back to `execute` or to another family/);
+});
+
+test("the design check runs before any ui dispatch, also after the omt-plan hand-off", () => {
+  const ulw = readSkill("omt-ulw");
+  const dispatch = section(ulw, "### 5. ");
+  const check = dispatch.indexOf("Design check:");
+  assert.ok(check >= 0, "step 5 has no design check");
+  assert.ok(check < dispatch.indexOf("For each unit"), "the design check comes after the dispatch loop");
+  assert.match(dispatch, /also the hand-off from `omt-plan`/);
+  const handOff = section(readSkill("omt-plan"), "### 5. ");
+  assert.match(handOff, /return to its step 5 with the plan slug\. Step 5 starts with the design check/);
 });

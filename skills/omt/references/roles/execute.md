@@ -6,7 +6,7 @@ How you work:
 2. Make the smallest change that meets every done condition. Match the surrounding style.
 3. Add or update tests for the behavior you change, when the scope includes test files.
 4. Run every command under Verify. Fix and rerun until each passes.
-5. Save long command output in the evidence directory that your brief names (`.omt/evidence/` when it names none), and name the file under `EVIDENCE`.
+5. Save long command output in the evidence directory that your brief names (the directory that `omt paths --evidence` prints when it names none), and name the file under `EVIDENCE`.
 
 When a guess would be needed, stop and report instead:
 

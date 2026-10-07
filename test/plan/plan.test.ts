@@ -37,7 +37,7 @@ const SAMPLE = `# Auth refactor
 test("planTemplate fills the title, slug, and timestamp", () => {
   const text = planTemplate("auth", "Auth work", "2026-01-02T03:04:05.000Z");
   assert.match(text, /^# Auth work\n\n<!-- omt-plan v1 slug=auth created=2026-01-02T03:04:05\.000Z -->\n/);
-  for (const heading of ["Objective", "Done when", "Roles", "Units", "Final verification", "Log"]) {
+  for (const heading of ["Objective", "Done when", "Research", "Roles", "Units", "Final verification", "Log"]) {
     assert.match(text, new RegExp(`^## ${heading}$`, "m"));
   }
   assert.match(text, /^- 2026-01-02T03:04:05\.000Z plan created$/m);
@@ -129,7 +129,7 @@ test("plan status prints counts and the next unit, defaulting to the newest plan
   assert.equal(
     ctx.out(),
     [
-      `plan: auth-refactor (${join(".omt", "plans", "auth-refactor.md")})`,
+      `plan: auth-refactor (${join(dir, "auth-refactor.md")})`,
       "units: 2/5 done, 1 blocked, 2 open",
       "done-when: 1/2",
       "final: 1/2",
@@ -142,6 +142,7 @@ test("plan status prints counts and the next unit, defaulting to the newest plan
   assert.equal(await run(json), 0);
   const parsed = JSON.parse(json.out());
   assert.equal(parsed.title, "Older");
+  assert.equal(parsed.path, join(dir, "older.md"));
   assert.equal(parsed.next.id, "U1");
   assert.deepEqual(parsed.counts.U, { open: 1, done: 0, blocked: 0, total: 1 });
 });
@@ -269,4 +270,100 @@ test("plan mark and plan new --force write through a symlinked plan file", async
   assert.equal(await run(at(["new", "linked", "--force", "--title", "Rewritten"])), 0);
   assert.ok(lstatSync(link).isSymbolicLink());
   assert.match(readFileSync(real, "utf8"), /^# Rewritten$/m);
+});
+
+test("parsePlan reads a valid max-parallel header key and ignores a missing or invalid one", () => {
+  const header = (extra: string) => `# P\n\n<!-- omt-plan v1 slug=p created=2026-01-01T00:00:00.000Z${extra} -->\n`;
+  assert.equal(parsePlan(header(" max-parallel=1")).maxParallel, 1);
+  assert.equal(parsePlan(header(" max-parallel=32")).maxParallel, 32);
+  assert.equal(parsePlan(header(" max-parallel=1")).slug, "p");
+  for (const extra of ["", " max-parallel=0", " max-parallel=33", " max-parallel=two", " max-parallel=1.5"]) {
+    assert.equal(parsePlan(header(extra)).maxParallel, undefined, extra);
+  }
+  assert.equal(parsePlan("# P\n\nmax-parallel=2\n").maxParallel, undefined);
+});
+
+const QUOTED = "- [ ] U2. Add the key, for example `<!-- omt-plan v1 slug=x created=... max-parallel=1 -->`\n\n<!-- omt-plan v1 slug=y created=2026-01-01T00:00:00.000Z max-parallel=1 -->\n";
+
+test("parsePlan reads slug and max-parallel only from the first header comment, not from a quoted example", () => {
+  const plan = (extra: string) => `# P\n\n<!-- omt-plan v1 slug=p created=2026-01-01T00:00:00.000Z${extra} -->\n\n## Units\n\n${QUOTED}`;
+  assert.equal(parsePlan(plan("")).maxParallel, undefined);
+  assert.equal(parsePlan(plan("")).slug, "p");
+  assert.equal(parsePlan(plan(" max-parallel=3")).maxParallel, 3);
+  assert.equal(parsePlan(plan(" max-parallel=3")).slug, "p");
+});
+
+test("the template has a Research section after Done when, also with --light", () => {
+  for (const light of [false, true]) {
+    const text = planTemplate("x", "x", "t", { light });
+    assert.match(text, /## Done when\n[\s\S]*\n## Research\n\n<research questions, their cited answers, and sources; or "none">\n\n## Roles\n/);
+  }
+});
+
+test("plan new --max-parallel writes the header key and rejects a bad value", async (t) => {
+  const ctx = projectContext(t, ["new", "demo", "--max-parallel", "1"]);
+  assert.equal(await run(ctx), 0);
+  const text = readFileSync(join(ctx.cwd, ".omt", "plans", "demo.md"), "utf8");
+  assert.match(text, /^<!-- omt-plan v1 slug=demo created=2026-01-02T03:04:05\.000Z max-parallel=1 -->$/m);
+  assert.equal(parsePlan(text).maxParallel, 1);
+
+  const status = fakeContext({ homedir: ctx.homedir, cwd: ctx.cwd, argv: ["status", "demo"] });
+  assert.equal(await run(status), 0);
+  assert.match(status.out(), /^max parallel: 1$/m);
+  const json = fakeContext({ homedir: ctx.homedir, cwd: ctx.cwd, argv: ["status", "demo", "--json"] });
+  assert.equal(await run(json), 0);
+  assert.equal(JSON.parse(json.out()).maxParallel, 1);
+
+  for (const value of ["0", "33", "x"]) {
+    const bad = fakeContext({ homedir: ctx.homedir, cwd: ctx.cwd, argv: ["new", "other", "--max-parallel", value] });
+    await assert.rejects(run(bad), (error: unknown) => error instanceof OmtError && error.exitCode === 2);
+  }
+});
+
+test("plan limit sets, changes, and clears max-parallel in the header only", async (t) => {
+  const ctx = projectContext(t, ["new", "demo"]);
+  assert.equal(await run(ctx), 0);
+  const path = join(ctx.cwd, ".omt", "plans", "demo.md");
+  const original = readFileSync(path, "utf8");
+  const at = (argv: string[]) => fakeContext({ homedir: ctx.homedir, cwd: ctx.cwd, argv });
+  const header = "<!-- omt-plan v1 slug=demo created=2026-01-02T03:04:05.000Z";
+
+  assert.equal(await run(at(["limit", "demo", "2"])), 0);
+  assert.equal(readFileSync(path, "utf8"), original.replace(`${header} -->`, `${header} max-parallel=2 -->`));
+  assert.equal(await run(at(["limit", "demo", "1"])), 0);
+  const changed = readFileSync(path, "utf8");
+  assert.equal(changed, original.replace(`${header} -->`, `${header} max-parallel=1 -->`));
+  assert.equal(parsePlan(changed).maxParallel, 1);
+  assert.equal(parsePlan(changed).slug, "demo");
+  assert.equal(await run(at(["limit", "demo", "none"])), 0);
+  assert.equal(readFileSync(path, "utf8"), original);
+});
+
+test("plan limit changes only the first header comment and leaves quoted examples in the body", async (t) => {
+  const ctx = projectContext(t, ["new", "demo"]);
+  assert.equal(await run(ctx), 0);
+  const path = join(ctx.cwd, ".omt", "plans", "demo.md");
+  const original = `${readFileSync(path, "utf8")}${QUOTED}`;
+  writeFileSync(path, original);
+  const at = (argv: string[]) => fakeContext({ homedir: ctx.homedir, cwd: ctx.cwd, argv });
+  const header = "<!-- omt-plan v1 slug=demo created=2026-01-02T03:04:05.000Z";
+
+  assert.equal(parsePlan(original).maxParallel, undefined);
+  assert.equal(await run(at(["limit", "demo", "4"])), 0);
+  const changed = readFileSync(path, "utf8");
+  assert.equal(changed, original.replace(`${header} -->`, `${header} max-parallel=4 -->`));
+  assert.ok(changed.endsWith(QUOTED));
+  assert.equal(parsePlan(changed).maxParallel, 4);
+  assert.equal(await run(at(["limit", "demo", "none"])), 0);
+  assert.equal(readFileSync(path, "utf8"), original);
+});
+
+test("plan limit exits 1 for a missing plan and 2 for a bad value", async (t) => {
+  const ctx = projectContext(t, ["new", "demo"]);
+  assert.equal(await run(ctx), 0);
+  const at = (argv: string[]) => fakeContext({ homedir: ctx.homedir, cwd: ctx.cwd, argv });
+  const exitCode = (code: number) => (error: unknown) => error instanceof OmtError && error.exitCode === code;
+  await assert.rejects(run(at(["limit", "nope", "1"])), exitCode(1));
+  for (const value of ["0", "33", "abc", "-1"]) await assert.rejects(run(at(["limit", "demo", value])), exitCode(2));
+  await assert.rejects(run(at(["limit", "demo"])), exitCode(2));
 });

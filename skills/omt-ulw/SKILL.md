@@ -14,7 +14,7 @@ Print this banner as your first line, then start step 0:
 The user typed ulw to get the loop. Run the full loop for every task, however small. A small task gets a LIGHT run, not a shortcut.
 
 - You edit no product files: code, tests, docs, or config. Your own writes go only to `.omt/` (plan, ledger, evidence) and to brief temp files in `$TMPDIR`.
-- A LIGHT run may skip only step 3 (explore), the test child (step 8), and the oracle. It still has the banner, steps 0 to 2, a plan from `omt plan new <slug> --light`, one `execute` child and one `review` child per unit with each dispatch and result in the ledger, your own run of the verify commands and the final checks, and the report.
+- A LIGHT run may skip only step 3 (explore), the test child (step 8), and the oracle. It still has the banner, steps 0 to 2, a plan from `omt plan new <slug> --light`, one `execute` child (a `ui` child for a unit that implements a design or changes UI, with no fallback to another family) and one `review` child per unit with each dispatch and result in the ledger, your own run of the verify commands and the final checks, and the report.
 - When no child can do an edit (role `unavailable`, no `delegate_task`, a stop code, or a limit), stop and tell the user. Do not make the edit yourself.
 
 You are the conductor. The shared T3 rules are in [delegation.md](../omt/references/delegation.md); read it before your first dispatch. T3 tools appear here by base name; your harness may prefix them, for example `mcp__t3-code__delegate_task`.
@@ -35,6 +35,8 @@ You are the conductor. The shared T3 rules are in [delegation.md](../omt/referen
 ### 0. Check your mode
 
 Call `t3_thread_configuration` with no `threadId` and read your `interactionMode` ([delegation.md](../omt/references/delegation.md#your-interaction-mode)). Ultrawork edits files, so in `plan` mode ask the user to switch this thread to default mode, or offer `omt-plan` to deliver a plan in your final message.
+
+Then run the [branch check](../omt/references/delegation.md#branch-check).
 
 Done when: you run in `default` mode, or the user has the question.
 
@@ -70,9 +72,15 @@ When `.omt/.gitignore` is missing, run `omt init` first.
 
 Each unit has a role, a scope, a done condition, a verify command, and its dependencies. Units without a dependency between them have disjoint scopes. Every done condition from step 1 maps to a unit or a final check.
 
+A unit that implements a design or changes UI has the role `ui`, also in a LIGHT plan. Each `ui` unit cites the design spec. Step 5 runs the design check before any dispatch.
+
 Done when: `omt plan status <slug>` shows every unit, and (HEAVY) the plan review approved it.
 
 ### 5. Dispatch
+
+Design check: when the plan asks for an `omt-design` step that has not run, run the `omt-design` skill with the plan slug first, and dispatch no `ui` unit until it returns an approved spec. Every path into this step runs this check, also the hand-off from `omt-plan`.
+
+A `ui` unit uses the `ui` role, also in a LIGHT run. When `ui` cannot run, stop and tell the user; do not fall back to `execute` or to another family.
 
 For each unit whose dependencies are done, until a limit is reached:
 
@@ -102,7 +110,7 @@ Done when: every named task has a terminal ledger entry with its verdict, and ea
 For each unit that passed step 6, dispatch a fresh `review` task for the same round:
 
 - Write the unit's task text, scope, and done conditions, and the worker's result block, to a temp file such as `$TMPDIR/omt-<slug>-<unit>-r<n>.md`. Pass it with `--context-file`. Pass the brief's data, never the rendered execute brief: that text holds its own brief marker and `Final message` block.
-- The task names the scope paths, not git refs: workers do not commit. The reviewer runs `git status --porcelain -- <scope paths>` and `git diff HEAD -- <scope paths>` and reads every untracked file in full.
+- The task names the scope paths, not git refs: workers do not commit. Leave `docs/design/` out of the scope paths: the owner reviews designs, not a model. For a `ui` unit, also apply the [design exclusion](#8-test) of step 8 to the done conditions and the context. Code review of `ui` units stays. The reviewer runs `git status --porcelain -- <scope paths>` and `git diff HEAD -- <scope paths>` and reads every untracked file in full.
 - From round 2, pass every prior finding with its response in `--prior-file`.
 - Use `--plan <slug> --unit <id> --round <n> --attempt 1 --against auto --title "review <unit>: <short unit title>"`, and record the dispatch as in step 5. `--against auto` puts the reviewer on the family other than the unit's worker.
 
@@ -110,7 +118,9 @@ Done when: the unit has a recorded review verdict for this round. `APPROVE` move
 
 ### 8. Test
 
-Dispatch a `test` task with the unit's scope, done conditions, and verify commands (`--plan <slug> --unit <id> --round <n> --attempt 1 --title "test <unit>: <short unit title>"`), and record the dispatch as in step 5. HEAVY runs it for every unit; LIGHT may run the verify commands yourself instead and save the output under `.omt/evidence/`.
+Dispatch a `test` task with the unit's scope, done conditions, and verify commands (`--plan <slug> --unit <id> --round <n> --attempt 1 --title "test <unit>: <short unit title>"`), and record the dispatch as in step 5. HEAVY runs it for every unit; LIGHT may run the verify commands yourself instead and save the output in the evidence directory that `omt paths --evidence` prints.
+
+Design exclusion: for a `ui` unit, leave `docs/design/` out of the test scope paths, and leave out every done condition and every piece of context that compares the result with the design, such as screens, screenshots, or a visual match. Keep the code and behavior checks: build, unit tests, and `agent-device` flows that check behavior, not looks. The `ui` task and the owner do the visual comparison. Review briefs (step 7) and the oracle brief (step 10) apply the same exclusion.
 
 On `VERIFIED` with evidence, record the result, run `omt plan mark <slug> <unit> done`, and record `--status verified` for the unit. `NOT VERIFIED` or `INCONCLUSIVE` moves it to step 9. When you run the verify commands yourself, a pass with saved output counts as `VERIFIED`; a failure counts as `NOT VERIFIED` and goes to step 9.
 
@@ -126,6 +136,8 @@ Send the findings or failures, verbatim, to a new fix task for the next round `<
 | 2 | `execute` fix | round 3 |
 | 3 | `deep` fix | stop |
 
+A `ui` unit uses `ui` in every round, never `execute` or `deep`. When `ui` cannot run, stop and tell the user; do not fall back to another role or family.
+
 To stop: run `omt plan mark <slug> <unit> blocked` and ask the user, with the open findings. Stop at the same point when the next round would exceed `maxReviewRounds`.
 
 Done when: the unit is back in review with a higher round, or it is marked blocked and the user has the question.
@@ -135,7 +147,7 @@ Done when: the unit is back in review with a higher round, or it is marked block
 When every unit is done:
 
 1. Run every final check in the plan yourself (`F1`, the full test suite and typecheck). Mark each `D` and `F` item with `omt plan mark <slug> <id> done` after its command passes. A failing final check goes to step 9 as a fix task for the unit that owns the code.
-2. HEAVY: dispatch one `oracle` task over the whole change, with the objective, every done condition, and the scope paths (or the base ref when the work is committed). Build it with `omt brief oracle --task-file - --title "oracle: <slug>" --plan <slug> --unit F2 --round <n> --attempt 1 --against auto --json`, and record the dispatch and the result as in steps 5 and 6. `--against auto` puts the oracle on the family other than the main implementer's. Fix its findings through step 9, then run the oracle again. Count oracle rounds against `maxReviewRounds`; at the limit, stop and report the open findings to the user. Mark `F2` done when it returns `APPROVE`.
+2. HEAVY: dispatch one `oracle` task over the whole change, with the objective, every done condition except those that the [design exclusion](#8-test) of step 8 leaves out, and the scope paths without `docs/design/` (or the base ref when the work is committed, with `docs/design/` excluded from its diff). Leave design context out of the task text too. Build it with `omt brief oracle --task-file - --title "oracle: <slug>" --plan <slug> --unit F2 --round <n> --attempt 1 --against auto --json`, and record the dispatch and the result as in steps 5 and 6. `--against auto` puts the oracle on the family other than the main implementer's. Fix its findings through step 9, then run the oracle again. Count oracle rounds against `maxReviewRounds`; at the limit, stop and report the open findings to the user. Mark `F2` done when it returns `APPROVE`.
 
 LIGHT plans have no `F2` item and no oracle round.
 

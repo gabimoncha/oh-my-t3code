@@ -35,7 +35,7 @@ import {
 } from "../../src/install/project.ts";
 import { detectJsonStyle } from "../../src/install/claudeHook.ts";
 import { MANAGED_MARKER } from "../../src/util/fs.ts";
-import { childEnv, CLI_PATH, GIT } from "../helpers.ts";
+import { childEnv, CLI_PATH, gitRepo } from "../helpers.ts";
 import { makeFixture, readJson, snapshot, STAMP } from "./fixture.ts";
 import type { Fixture } from "./fixture.ts";
 
@@ -177,15 +177,18 @@ test("findGitExclude handles a .git directory, a worktree .git file with commond
   assert.match(none.note ?? "", /no \.git/);
 });
 
-test("install --project in a worktree writes the block into the common exclude file", async (t) => {
+test("install --project in a worktree installs into the main checkout and its exclude file", async (t) => {
   const f = projectFixture(t, false);
-  const main = join(f.root, "main-repo", ".git");
+  const mainRepo = join(f.root, "main-repo");
+  const main = join(mainRepo, ".git");
   mkdirSync(join(main, "worktrees", "project"), { recursive: true });
   writeFileSync(join(main, "worktrees", "project", "commondir"), "../..\n");
   writeFileSync(join(f.project, ".git"), `gitdir: ${join(main, "worktrees", "project")}\n`);
   const { code, ctx } = await f.run(["install", "--project", "--yes"]);
   assert.equal(code, 0, ctx.err());
-  assert.equal(readFileSync(join(main, "info", "exclude"), "utf8"), `${block(f.project, ...SKILL_ENTRIES, ...CREATED_OMT)}\n`);
+  assert.equal(readFileSync(join(main, "info", "exclude"), "utf8"), `${block(mainRepo, ...SKILL_ENTRIES, ...CREATED_OMT)}\n`);
+  assert.ok(existsSync(join(mainRepo, ".omt", "install.json")));
+  assert.deepEqual(readdirSync(f.project), [".git"], "the worktree gets no files");
 });
 
 test("the exclude block replaces an older block and keeps every other line", async (t) => {
@@ -459,26 +462,10 @@ test("doctor --project checks the shim and the exclude block, and skips path and
   assert.deepEqual(readdirSync(g.project), [".omt"], "doctor writes nothing");
 });
 
-// A fixture whose project is a real git repository with one commit. Tests may run git; src never does.
+// A fixture whose project is a real git repository with one commit.
 function gitFixture(t: TestContext, files: Record<string, string> = {}) {
   const f = projectFixture(t, false);
-  const env = {
-    ...childEnv(f.root),
-    GIT_CONFIG_NOSYSTEM: "1",
-    GIT_CONFIG_GLOBAL: "/dev/null",
-    GIT_AUTHOR_NAME: "t",
-    GIT_AUTHOR_EMAIL: "t@example.com",
-    GIT_COMMITTER_NAME: "t",
-    GIT_COMMITTER_EMAIL: "t@example.com",
-  };
-  const git = (args: string[], cwd = f.project) => execFileSync(GIT, args, { cwd, env, encoding: "utf8" });
-  git(["init", "-q", "-b", "main"]);
-  for (const [path, content] of Object.entries({ "README.md": "# demo\n", ...files })) {
-    mkdirSync(dirname(join(f.project, path)), { recursive: true });
-    writeFileSync(join(f.project, path), content);
-  }
-  git(["add", "-A"]);
-  git(["commit", "-q", "-m", "init"]);
+  const git = gitRepo(f.root, f.project, files);
   const status = (cwd = f.project) => git(["status", "--porcelain", "--ignored", "--untracked-files=all"], cwd);
   return { ...f, git, status };
 }
@@ -583,25 +570,30 @@ test("uninstall keeps a reduced exclude block for the paths that stay", async (t
   assert.equal(readFileSync(f.exclude, "utf8"), GIT_EXCLUDE_DEFAULT);
 });
 
-test("worktrees keep separate blocks in the shared exclude file", async (t) => {
+test("installs from two worktrees make one install with one block in the main checkout", async (t) => {
   const f = gitFixture(t);
   const w1 = join(f.root, "w1");
   const w2 = join(f.root, "w2");
   f.git(["worktree", "add", "-q", w1]);
   f.git(["worktree", "add", "-q", w2]);
-  assert.equal((await f.run(["install", "--project", "--yes"], { cwd: w1 })).code, 0);
-  assert.equal((await f.run(["install", "--project", "--yes"], { cwd: w2 })).code, 0);
   const exclude = join(f.project, ".git", "info", "exclude");
-  assert.ok(excludeBlockCount(readFileSync(exclude, "utf8")) === 2);
-  assert.equal(f.git(["status", "--porcelain"], w1), "");
+  const before = readFileSync(exclude, "utf8");
+  assert.equal((await f.run(["install", "--project", "--yes"], { cwd: w1 })).code, 0);
+  const again = await f.run(["install", "--project", "--yes"], { cwd: w2 });
+  assert.equal(again.code, 0, again.ctx.err());
+  assert.deepEqual([...new Set(actionLines(again.ctx.out()))], ["unchanged"]);
+  const text = readFileSync(exclude, "utf8");
+  assert.equal(excludeBlockCount(text), 1);
+  assert.ok(text.includes(excludeBegin(f.project)), "the block has the root that a cwd in the main checkout gives");
+  for (const wt of [w1, w2]) {
+    for (const path of [".agents", ".claude", ".omt"]) assert.ok(!existsSync(join(wt, path)), `no ${path} in ${wt}`);
+  }
+  assert.ok(existsSync(join(f.project, ".omt", "install.json")));
+  assert.equal(f.git(["status", "--porcelain"]), "");
 
   assert.equal((await f.run(["uninstall", "--project", "--yes"], { cwd: w2 })).code, 0);
-  for (const path of [".agents", ".claude", ".omt"]) assert.ok(!existsSync(join(w2, path)), `the uninstall removed ${path} in w2`);
-  const text = readFileSync(exclude, "utf8");
-  assert.ok(text.includes(excludeBegin(w1)), "the block of w1 stays");
-  assert.ok(!text.includes(excludeBegin(w2)));
-  assert.equal(f.git(["status", "--porcelain"], w1), "");
-  assert.equal(f.git(["status", "--porcelain"], w2), "");
+  assert.ok(!existsSync(join(f.project, ".omt", "install.json")), "an uninstall from a worktree removes the one install");
+  assert.equal(readFileSync(exclude, "utf8"), before);
 });
 
 function excludeBlockCount(text: string): number {
@@ -898,6 +890,7 @@ test("the block names only the files the install writes, so new files in .omt of
   assert.match(installed.ctx.out(), /managed block in .*\(shared by all worktrees\)/);
   mkdirSync(join(f.project, ".omt", "plans"), { recursive: true });
   writeFileSync(join(f.project, ".omt", "plans", "p.md"), "# p\n");
+  mkdirSync(join(wt, ".omt", "plans"), { recursive: true });
   writeFileSync(join(wt, ".omt", "plans", "mine.md"), "# mine\n");
   assert.match(f.git(["status", "--porcelain", "-uall"]), /^\?\? \.omt\/plans\/p\.md$/m);
   assert.match(f.git(["status", "--porcelain", "-uall"], wt), /^\?\? \.omt\/plans\/mine\.md$/m);
@@ -907,9 +900,10 @@ test("a block whose root no longer exists: doctor warns, and the next install or
   const f = gitFixture(t);
   const wt = join(f.root, "wt");
   f.git(["worktree", "add", "-q", wt]);
-  assert.equal((await f.run(["install", "--project", "--yes"], { cwd: wt })).code, 0);
-  f.git(["worktree", "remove", "--force", wt]);
   const exclude = join(f.project, ".git", "info", "exclude");
+  // An install of an older omt wrote a block for the worktree itself.
+  writeFileSync(exclude, withExcludeBlock(readFileSync(exclude, "utf8"), wt, ["/.omt/install.json"]));
+  f.git(["worktree", "remove", "--force", wt]);
   assert.ok(readFileSync(exclude, "utf8").includes(excludeBegin(wt)));
   const report = await doctor(f);
   assert.equal(report.status("exclude"), "WARN");
@@ -1317,10 +1311,10 @@ test("a dangling .omt/.gitignore symlink is the user's: the install writes nothi
   assert.equal(f.status(), statusBefore);
 });
 
-test("worktrees that share the exclude file give it back byte for byte in either uninstall order", async (t) => {
-  for (const order of ["main first", "worktree first"]) {
+test("an install from main and a worktree is one install; an uninstall from either cwd gives the exclude file back byte for byte", async (t) => {
+  for (const from of ["main", "worktree"]) {
     for (const start of ["*.log", undefined]) {
-      const name = `${order}, ${start === undefined ? "no exclude file" : "no final newline"}`;
+      const name = `uninstall from ${from}, ${start === undefined ? "no exclude file" : "no final newline"}`;
       const f = gitFixture(t);
       const wt = join(f.root, "wt");
       f.git(["worktree", "add", "-q", wt]);
@@ -1328,10 +1322,13 @@ test("worktrees that share the exclude file give it back byte for byte in either
       const exclude = join(info, "exclude");
       if (start === undefined) rmSync(info, { recursive: true });
       else writeFileSync(exclude, start);
-      for (const cwd of [f.project, wt]) assert.equal((await f.run(["install", "--project", "--yes"], { cwd })).code, 0, name);
-      for (const cwd of order === "main first" ? [f.project, wt] : [wt, f.project]) {
-        assert.equal((await f.run(["uninstall", "--project", "--yes"], { cwd })).code, 0, name);
-      }
+      assert.equal((await f.run(["install", "--project", "--yes"], { cwd: f.project })).code, 0, name);
+      const again = await f.run(["install", "--project", "--yes"], { cwd: wt });
+      assert.equal(again.code, 0, name);
+      assert.deepEqual([...new Set(actionLines(again.ctx.out()))], ["unchanged"], `${name}: the second install is a rerun`);
+      const removed = await f.run(["uninstall", "--project", "--yes"], { cwd: from === "main" ? f.project : wt });
+      assert.equal(removed.code, 0, name);
+      assert.ok(!existsSync(join(f.project, ".omt", "install.json")), `${name}: the one install goes`);
       if (start === undefined) assert.ok(!existsSync(info), `${name}: the info directory goes`);
       else assert.equal(readFileSync(exclude, "utf8"), start, name);
     }

@@ -80,7 +80,7 @@ The install writes these paths in the project root:
 
 Agents in the project call the CLI as `.omt/bin/omt` when `omt` is not on `PATH`.
 
-Git does not see these files. The install writes one managed block into the repository's `.git/info/exclude`, so `git status` shows nothing new. That file is local to your clone and is never committed. The block names only the files that the install writes, so a plan that you write into `.omt/plans/` shows in git. Each project root has its own block. In a monorepo, the entries of a package start with the package path, so packages do not hide each other's files. Worktrees share one exclude file, and git applies every block to every worktree: the block of one worktree also hides the same paths in your other worktrees, such as a new `.omt/config.jsonc`. Git does not copy untracked files into a new worktree, so the other worktrees do not get the install. A T3 worktree thread or an `omt-swarm` child has no skills, shim, or hook until you run `install --project` in that worktree too. A `.gitignore` with `*` in `.omt/backups/` hides the backups from git.
+Git does not see these files. The install writes one managed block into the repository's `.git/info/exclude`, so `git status` shows nothing new. That file is local to your clone and is never committed. The block names only the files that the install writes, so a plan that you write into `.omt/plans/` shows in git. Each project root has its own block. In a monorepo, the entries of a package start with the package path, so packages do not hide each other's files. A repository has one project install, in the main checkout, and `install`, `uninstall`, or `doctor` with `--project` in a worktree acts on the main checkout and its `.omt`, which all worktrees share. The skill folders stay in the main checkout, so an agent in a worktree finds them only if its harness reads the skill folders of the main checkout. A `.gitignore` with `*` in `.omt/backups/` hides the backups from git.
 
 One file can still show in git. When the repository tracks `.claude/settings.local.json`, `git status` shows it as modified while the hook is installed. The install edits the file in its own style. It keeps the indentation, and a final newline only when the file had one. It writes the whole file in that indentation, so inline arrays in an indented file become multi-line. When an install changes the layout of the file this way, it first saves the original bytes in `.omt/backups/`. The install creates `.omt/.gitignore` only when it is missing, and never edits a file that the repository already has. Add `--no-git-exclude` to skip the block, for a setup that you want to commit. It also removes a block that an earlier install wrote. Then the install adds the missing lines to an existing `.omt/.gitignore`, and the uninstall removes them again. A teammate who clones a committed setup runs `install --project` to get the shim, because `.omt/.gitignore` keeps `.omt/bin/` out of git. That install records the committed skills and links as existing. The block does not hide them, and the uninstall keeps them. When the committed skills are older than the CLI, the install updates them, and git shows them as modified.
 
@@ -131,8 +131,10 @@ The agent frames the goal, explores the code, writes a plan in `.omt/plans/`, di
 | `oracle` | Attack the finished change before it counts as done | GPT-6-Astra, high | Claude Opus 5.5, high |
 | `test` | Write and run tests, then report a verdict | GPT-6.1-Sol, low | Claude Sonnet 5.5, low |
 | `writing` | Write or edit documentation | Claude Opus 5.5, high | GPT-6-Astra, medium |
+| `design` | Design screens and flows, and write a design spec | Claude Opus 5.5, high | none |
+| `ui` | Implement one UI unit from its design spec | Claude Opus 5.5, medium | none |
 
-The fallback runs only when T3 refuses the first choice. For the cross-family roles below, the first choice depends on the worker.
+The fallback runs only when T3 refuses the first choice. For the cross-family roles below, the first choice depends on the worker. `design` and `ui` have no fallback: designs come only from Claude Opus 5.5, and you are the design review.
 
 `plan-review`, `review`, and `oracle` are cross-family roles. A reviewer comes from the other model family than the worker whose change it reviews. GPT-6-Astra reviews Claude work, and Claude Opus 5.5 reviews GPT work. The skills pass the worker to `omt brief --against`, and the CLI puts the rungs of the other family first. When the other family is not available, the same family reviews. The oracle runs on the family other than the main implementer's.
 
@@ -172,13 +174,14 @@ Useful commands:
 | --- | --- |
 | `omt-ulw` | You want a task built, fixed, or shipped end to end with subagents. The `ulw` and `ultrawork` keywords start it. |
 | `omt-plan` | You want a reviewed plan before any code changes. |
+| `omt-design` | You want designs, mockups, or screens before UI work. You pick a direction and steer it. |
 | `omt-review` | You want a review of uncommitted changes, a branch, a commit, or a pull request. |
 | `omt-research` | You need a cited answer from the repository, library docs, or the web. |
 | `omt-swarm` | You have independent tracks that should each run in their own worktree thread and end in a pull request. You start it yourself. |
 | `omt-loop` | Work must continue across turns until a condition holds. You start it yourself. |
 | `omt` | You want the list of workflows, the CLI commands, and the shared references. You start it yourself. |
 
-The agent can pick the first four on its own. You start the last three by name.
+The agent can pick the first five on its own. You start the last three by name.
 
 ## Commands
 

@@ -39,13 +39,15 @@ Count changed lines (added plus removed) with `git diff --shortstat` or the PR's
 | below 3,000 | 3 |
 | 3,000 or more | 4 |
 
+Leave every file under `docs/design/` out of the groups and the line count: the owner reviews designs, not a model. When the change holds only design files, dispatch no reviewer and no oracle; list the files for the owner's review and stop.
+
 Never use more than `maxParallel` reviewers. Group the files by directory so that each reviewer gets related files, with groups of similar size.
 
-Done when: each changed file is in exactly one group.
+Done when: each changed file outside `docs/design/` is in exactly one group, and the design files are listed for the owner.
 
 ### 3. Dispatch the reviewers
 
-In default mode, run `omt init` first when `.omt/.gitignore` is missing; the ledger and the evidence file in step 6 live under `.omt/`. For each group, run `omt ledger stats --plan review-<slug>` and dispatch only while it reports `can dispatch: yes`. Build the brief with `omt brief review --task-file - --title "review G<k>: <group paths>" --round <n> --attempt 1 --plan review-<slug> --unit G<k> --json`. The task gives the diff command limited to the group's paths, and the intent of the change (PR description, commit messages, or the user's words). Reviewers run the diff themselves; paste a diff only when it is short. Each round is a fresh task; from round 2, `--prior-file` carries the earlier findings and the responses.
+In default mode, run `omt init` first when `.omt/.gitignore` is missing; the ledger and the evidence file in step 6 live under `.omt/`. For each group, run `omt ledger stats --plan review-<slug>` and dispatch only while it reports `can dispatch: yes`. Build the brief with `omt brief review --task-file - --title "review G<k>: <group paths>" --round <n> --attempt 1 --plan review-<slug> --unit G<k> --json`. The task gives the diff command limited to the group's paths, which never include `docs/design/`, and the intent of the change (PR description, commit messages, or the user's words). Reviewers run the diff themselves; paste a diff only when it is short. Each round is a fresh task; from round 2, `--prior-file` carries the earlier findings and the responses.
 
 Round 1 reviews a change whose author is unknown. Pass no `--against`, so the configured order applies.
 
@@ -63,13 +65,13 @@ Done when: one merged list exists, sorted by severity.
 
 ### 5. Oracle pass
 
-Run `omt ledger stats --plan review-<slug>`, then dispatch one `oracle` task (`--plan review-<slug> --unit oracle --round <n> --attempt 1 --against <provider> --title "oracle: <slug>"`) with the merged findings and the full diff command. `<provider>` is the provider that most review tasks of this round ran on, so the oracle checks the reviewers from the other family. Record its dispatch with `--provider` and `--model`, and record its verdict. Ask it to confirm or refute each finding, and to report confirmed misses. Remove what it refutes with evidence; add what it confirms.
+Run `omt ledger stats --plan review-<slug>`, then dispatch one `oracle` task (`--plan review-<slug> --unit oracle --round <n> --attempt 1 --against <provider> --title "oracle: <slug>"`) with the merged findings and the full diff command with `docs/design/` excluded (for example `git diff HEAD -- . ':(exclude)docs/design'`). `<provider>` is the provider that most review tasks of this round ran on, so the oracle checks the reviewers from the other family. Record its dispatch with `--provider` and `--model`, and record its verdict. Ask it to confirm or refute each finding, and to report confirmed misses. Remove what it refutes with evidence; add what it confirms.
 
 Done when: the oracle verdict is read and the merged list is updated.
 
 ### 6. Write and report
 
-Write the merged findings to `.omt/evidence/review-<slug>-r<n>.md`, in the format of [results/review.md](../omt/references/results/review.md), with an overall verdict. Show the user the verdict, the findings by severity, and the file path.
+Write the merged findings to `review-<slug>-r<n>.md` in the evidence directory that `omt paths --evidence` prints, in the format of [results/review.md](../omt/references/results/review.md), with an overall verdict. Show the user the verdict, the findings by severity, and the file path. When the change holds design files, list them for the owner's review.
 
 Then offer a fix loop. Number the P0 to P2 findings `F1`, `F2`, and so on. Each goes to an `execute` task built with `--plan review-<slug> --unit F<k> --round <n> --attempt 1 --title "fix F<k>: <finding title>"`, recorded in the ledger under the same plan and unit, with `--provider` and `--model` on the dispatch. Then the next review round starts at step 3 with round `<n+1>`, with one review per fix. Stop at `maxReviewRounds`.
 

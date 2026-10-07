@@ -208,6 +208,52 @@ test("ledger stats reads the limits from the project config", async (t) => {
   assert.match(ctx.out(), /^can dispatch: no$/m);
 });
 
+test("ledger stats --plan uses the lower of the plan and config max parallel", async (t) => {
+  const ctx = projectContext(t, ["stats", "--plan", "auth"]);
+  mkdirSync(join(ctx.cwd, ".omt", "plans"), { recursive: true });
+  writeFileSync(join(ctx.cwd, ".omt", "config.jsonc"), '{ "version": 1, "limits": { "maxParallel": 4 } }\n');
+  writeFileSync(
+    join(ctx.cwd, ".omt", "plans", "auth.md"),
+    "# Auth\n\n<!-- omt-plan v1 slug=auth created=2026-01-01T00:00:00.000Z max-parallel=1 -->\n",
+  );
+  await appendLedger(join(ctx.cwd, ".omt", "ledger.jsonl"), entry({ plan: "auth", taskId: "t1" }));
+  assert.equal(await run(ctx), 0);
+  assert.match(ctx.out(), /^max parallel: 1 \(plan 1, config 4\)$/m);
+  assert.match(ctx.out(), /^can dispatch: no$/m);
+
+  const json = fakeContext({ homedir: ctx.homedir, cwd: ctx.cwd, argv: ["stats", "--plan", "auth", "--json"] });
+  assert.equal(await run(json), 0);
+  const parsed = JSON.parse(json.out());
+  assert.equal(parsed.limits.maxParallel, 1);
+  assert.equal(parsed.planMaxParallel, 1);
+  assert.equal(parsed.canDispatch, false);
+
+  const other = fakeContext({ homedir: ctx.homedir, cwd: ctx.cwd, argv: ["stats", "--plan", "nofile", "--json"] });
+  assert.equal(await run(other), 0);
+  assert.deepEqual(JSON.parse(other.out()), {
+    plan: "nofile",
+    dispatched: 0,
+    active: 0,
+    terminal: 0,
+    limits: { maxParallel: 4, maxTasksPerRun: 24 },
+    canDispatch: true,
+  });
+});
+
+test("ledger stats --plan ignores a max-parallel key quoted in the plan body", async (t) => {
+  const ctx = projectContext(t, ["stats", "--plan", "auth"]);
+  mkdirSync(join(ctx.cwd, ".omt", "plans"), { recursive: true });
+  writeFileSync(join(ctx.cwd, ".omt", "config.jsonc"), '{ "version": 1, "limits": { "maxParallel": 4 } }\n');
+  writeFileSync(
+    join(ctx.cwd, ".omt", "plans", "auth.md"),
+    "# Auth\n\n<!-- omt-plan v1 slug=auth created=2026-01-01T00:00:00.000Z -->\n\n" +
+      "- [ ] U2. Example `<!-- omt-plan v1 slug=x created=... max-parallel=1 -->`\n\n" +
+      "<!-- omt-plan v1 slug=x created=2026-01-01T00:00:00.000Z max-parallel=1 -->\n",
+  );
+  assert.equal(await run(ctx), 0);
+  assert.match(ctx.out(), /^max parallel: 4$/m);
+});
+
 test("ledger add accepts any role name, such as swarm and loop", async (t) => {
   for (const role of ["swarm", "loop", "Not A Config Role"]) {
     const ctx = projectContext(t, ["add", "--role", role, "--status", "dispatched", "--unit", "U1"]);

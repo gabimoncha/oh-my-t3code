@@ -16,9 +16,11 @@ const EXPECTED: Record<string, [access: string, result: string, t3Role: string, 
   oracle: ["read-only", "review", "review", "plan"],
   test: ["edit", "test", "test", "default"],
   writing: ["edit", "work", "implementation", "default"],
+  design: ["edit", "work", "design", "default"],
+  ui: ["edit", "work", "implementation", "default"],
 };
 
-test("the defaults hold the 11 roles with the values from spec section 6.4", () => {
+test("the defaults hold the 13 roles with the values from spec section 6.4", () => {
   assert.deepEqual(Object.keys(DEFAULT_CONFIG.roles).sort(), Object.keys(EXPECTED).sort());
   for (const [name, [access, result, t3Role, mode]] of Object.entries(EXPECTED)) {
     const role = DEFAULT_CONFIG.roles[name];
@@ -34,7 +36,7 @@ test("the defaults hold the 11 roles with the values from spec section 6.4", () 
 
 test("every default rung names the built-in provider instance of its driver, a model, and an effort", () => {
   for (const [name, role] of Object.entries(DEFAULT_CONFIG.roles)) {
-    assert.equal(role.chain.length, 2, name);
+    assert.equal(role.chain.length, name === "design" || name === "ui" ? 1 : 2, name);
     for (const rung of role.chain) {
       assert.equal(rung.provider, rung.driver, name);
       assert.ok(rung.driver === "claudeAgent" || rung.driver === "codex", name);
@@ -44,8 +46,8 @@ test("every default rung names the built-in provider instance of its driver, a m
   }
 });
 
-// [rung 1, rung 2, crossFamily]; each rung is "driver/model/effort", and its provider is the driver.
-const CHAINS: Record<string, [string, string, boolean]> = {
+// [...rungs, crossFamily]; each rung is "driver/model/effort", and its provider is the driver.
+const CHAINS: Record<string, (string | boolean)[]> = {
   explore: ["codex/gpt-6-luna/low", "claudeAgent/claude-sonnet-5-5/low", false],
   research: ["codex/gpt-6.1-sol/low", "claudeAgent/claude-opus-5-5/low", false],
   plan: ["claudeAgent/claude-opus-5-5/xhigh", "codex/gpt-6-astra/xhigh", false],
@@ -57,14 +59,17 @@ const CHAINS: Record<string, [string, string, boolean]> = {
   oracle: ["codex/gpt-6-astra/high", "claudeAgent/claude-opus-5-5/high", true],
   test: ["codex/gpt-6.1-sol/low", "claudeAgent/claude-sonnet-5-5/low", false],
   writing: ["claudeAgent/claude-opus-5-5/high", "codex/gpt-6-astra/medium", false],
+  design: ["claudeAgent/claude-opus-5-5/high", false],
+  ui: ["claudeAgent/claude-opus-5-5/medium", false],
 };
 
 test("the default chains and crossFamily flags match spec section 6.4 exactly", () => {
   assert.deepEqual(Object.keys(CHAINS).sort(), Object.keys(DEFAULT_CONFIG.roles).sort());
-  for (const [name, [first, second, crossFamily]] of Object.entries(CHAINS)) {
+  for (const [name, rungs] of Object.entries(CHAINS)) {
     const role = DEFAULT_CONFIG.roles[name];
     assert.ok(role, name);
-    const chain = [first, second].map((text) => {
+    const crossFamily = rungs.at(-1) === true;
+    const chain = rungs.filter((rung): rung is string => typeof rung === "string").map((text) => {
       const [driver, model, effort] = text.split("/");
       return { provider: driver, driver, model, effort };
     });
@@ -72,6 +77,29 @@ test("the default chains and crossFamily flags match spec section 6.4 exactly", 
     assert.equal(role.crossFamily, crossFamily, name);
   }
   assert.match(DEFAULT_CONFIG.roles.review?.description ?? "", /family that did not make the change/);
+});
+
+test("the design and ui roles run only on Opus, with no fallback", () => {
+  assert.deepEqual(DEFAULT_CONFIG.roles.design, {
+    description: "Design screens and flows in Paper, and write a design spec that UI units cite.",
+    access: "edit",
+    result: "work",
+    t3Role: "design",
+    interactionMode: "default",
+    runtimeMode: "inherit",
+    crossFamily: false,
+    chain: [{ provider: "claudeAgent", driver: "claudeAgent", model: "claude-opus-5-5", effort: "high" }],
+  });
+  assert.deepEqual(DEFAULT_CONFIG.roles.ui, {
+    description: "Implement one UI unit from its design spec, inside its scope.",
+    access: "edit",
+    result: "work",
+    t3Role: "implementation",
+    interactionMode: "default",
+    runtimeMode: "inherit",
+    crossFamily: false,
+    chain: [{ provider: "claudeAgent", driver: "claudeAgent", model: "claude-opus-5-5", effort: "medium" }],
+  });
 });
 
 test("the default limits match the spec", () => {

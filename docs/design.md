@@ -38,6 +38,10 @@ The `plan-review`, `review`, and `oracle` roles are cross-family. The skill pass
 
 The ledger records the provider of each dispatch. So `--against auto` finds the worker of a unit, or the main implementer of a plan, without help from the agent.
 
+### Designs come from Opus, and the owner steers
+
+The `design` role makes design directions and the design spec, and the `ui` role implements a UI unit from that spec. Both run only on Claude Opus 5.5: `design` at high effort, `ui` at medium. Neither has a fallback to another family. The owner chose this rule, because Opus is far better at design, and a human steers taste. No model reviews a design: `review`, `oracle`, and `plan-review` tasks leave `docs/design/` out. The owner picks a direction, steers it in their own words, and approves the spec. Code review of `ui` units still runs as for any other unit.
+
 ### A CLI for the deterministic parts, skills for the judgment
 
 Config merging, chain resolution, option mapping, brief rendering, and plan counting are deterministic. An LLM does them badly and expensively, so the `omt` CLI does them. Planning, splitting work, reading results, and deciding what to do next need judgment, so skills carry them.

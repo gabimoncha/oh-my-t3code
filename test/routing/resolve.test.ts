@@ -389,6 +389,8 @@ test("every default role resolves against the fixture", () => {
     oracle: ["codex", "gpt-6-astra", { reasoningEffort: "high" }],
     test: ["codex", "gpt-6.1-sol", { reasoningEffort: "low" }],
     writing: ["claudeAgent", "claude-opus-5-5", { effort: "high" }],
+    design: ["claudeAgent", "claude-opus-5-5", { effort: "high" }],
+    ui: ["claudeAgent", "claude-opus-5-5", { effort: "medium" }],
   };
   const report = resolveAll(DEFAULT_CONFIG, caps());
   assert.equal(report.version, 1);
@@ -404,7 +406,7 @@ test("every default role resolves against the fixture", () => {
     assert.deepEqual(resolution.delegateTask?.target, { providerInstanceId, model, options }, name);
     assert.equal(resolution.delegateTask?.role, config.t3Role, name);
     assert.equal(resolution.delegateTask?.interactionMode, config.interactionMode, name);
-    assert.equal(resolution.fallbacks.length, 1, name);
+    assert.equal(resolution.fallbacks.length, config.chain.length - 1, name);
     assert.ok(resolution.attempts.every((a) => a.ok && a.notes.length === 0), name);
   }
 });

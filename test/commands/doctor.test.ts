@@ -38,7 +38,7 @@ test("doctor prints one line per check and exits 0 without failures", async (t) 
   assert.equal(code, 0);
   const ids = ctx.out().trimEnd().split("\n").map((line) => line.split(/\s+/)[1]);
   assert.deepEqual(ids, ["node", "config", "skills", "links", "hooks", "path", "t3", "homes"]);
-  assert.match(ctx.out(), /^PASS  config  11 roles$/m);
+  assert.match(ctx.out(), /^PASS  config  13 roles$/m);
 });
 
 test("doctor node check passes on 22.18 and fails on an older version", async (t) => {

@@ -1,4 +1,5 @@
-import { accessSync, constants, mkdirSync, mkdtempSync, rmSync, statSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { accessSync, constants, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -51,6 +52,35 @@ export function childEnv(root: string): NodeJS.ProcessEnv {
     CLAUDE_CONFIG_DIR: join(home, ".claude"),
     T3CODE_HOME: join(home, ".t3"),
   };
+}
+
+// A child environment for git: no system or global config, and a fixed author.
+export function gitEnv(root: string): NodeJS.ProcessEnv {
+  return {
+    ...childEnv(root),
+    GIT_CONFIG_NOSYSTEM: "1",
+    GIT_CONFIG_GLOBAL: "/dev/null",
+    GIT_AUTHOR_NAME: "t",
+    GIT_AUTHOR_EMAIL: "t@example.com",
+    GIT_COMMITTER_NAME: "t",
+    GIT_COMMITTER_EMAIL: "t@example.com",
+  };
+}
+
+// Makes `dir` a git repository on branch main with one commit, and returns a git runner for it.
+// Tests may run git; src never does.
+export function gitRepo(root: string, dir: string, files: Record<string, string> = {}) {
+  const env = gitEnv(root);
+  const git = (args: string[], cwd = dir) => execFileSync(GIT, args, { cwd, env, encoding: "utf8" });
+  mkdirSync(dir, { recursive: true });
+  git(["init", "-q", "-b", "main"]);
+  for (const [path, content] of Object.entries({ "README.md": "# demo\n", ...files })) {
+    mkdirSync(dirname(join(dir, path)), { recursive: true });
+    writeFileSync(join(dir, path), content);
+  }
+  git(["add", "-A"]);
+  git(["commit", "-q", "-m", "init"]);
+  return git;
 }
 
 export interface FakeContext extends CliContext {

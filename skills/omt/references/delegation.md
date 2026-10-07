@@ -4,7 +4,13 @@ The T3 rules for every omt skill. The T3 MCP server key is `t3-code`. Skills nam
 
 ## The CLI
 
-Call the CLI as `omt`. When `command -v omt` finds nothing, use `.omt/bin/omt` from the project root, which `omt install --project` creates. Without either, follow the manual steps in [roles.md](roles.md) and [brief.md](brief.md).
+Look up the CLI in this order, and use the first one that exists:
+
+1. `omt` on `PATH` (`command -v omt`).
+2. `.omt/bin/omt` in the project root. `omt install --project` creates it.
+3. The shim of the main checkout, for a linked worktree: `"$(git rev-parse --path-format=absolute --git-common-dir)/../.omt/bin/omt"`.
+
+When none exists, follow the manual steps in [roles.md](roles.md) and [brief.md](brief.md).
 
 ## What a child is
 
@@ -25,6 +31,21 @@ Do not call `orchestrator_capabilities` to read your modes. Use it only for the 
 
 - `default`: follow the skill as written.
 - `plan`: you are read-only too. Dispatch only read-only roles (`explore`, `research`, `plan-review`, `review`, `oracle`). Write no files: run no `omt init`, `omt plan new`, `omt plan mark`, or `omt ledger add`, and save no evidence files. Commands that only print (`omt roles`, `omt brief`, `omt ledger stats`, `omt plan status`) are fine. Count your dispatched and active tasks yourself against the limits. Deliver the plan or the report in your final message. When the work needs files or edit roles, ask the user to switch the thread to default mode and stop.
+
+## Branch check
+
+Step 0 checks whether the current branch is behind the default branch. A worktree can start from an old base.
+
+1. Find the default branch from the repository metadata. Use the first that gives a result:
+   1. `git symbolic-ref --quiet --short refs/remotes/origin/HEAD`, with the `origin/` prefix removed.
+   2. `git config init.defaultBranch`, when that branch exists (`git rev-parse --verify --quiet <name>`).
+   3. `main` or `master`, whichever exists.
+
+   When none gives a result, skip the check and tell the user that you skipped it.
+2. Count the commits: `git rev-list --count HEAD..<default>`. When the count is 0, continue.
+3. When the count is above 0:
+   - In `plan` mode, only report the count.
+   - In `default` mode, when `git status --porcelain` prints nothing and `git merge-base --is-ancestor HEAD <default>` succeeds, run `git merge --ff-only <default>` and report it. Otherwise report the count and ask the user how to continue.
 
 ## `delegate_task`
 
@@ -70,7 +91,7 @@ T3 sets no limit on concurrent tasks or nesting depth, and children can delegate
 
 Before each dispatch, run `omt ledger stats --plan <slug>`. Dispatch only while it reports `can dispatch: yes`. The command compares `active` with `maxParallel` and `dispatched` with `maxTasksPerRun` for you. `active` counts dispatched entries that no terminal entry has closed yet, so record every result ([results.md](results.md#recording)). Without the CLI, count the open task ids in the plan's log and compare the counts with the limits yourself. Every brief states the child's depth; at `maxDepth` the child does the work itself.
 
-When `omt ledger stats` reports `can dispatch: no` and `active: 0`, no wake will come and the run is stalled. Stop and tell the user which limit was hit (`dispatched` reached `max tasks per run`, or `max parallel` is 0) and how to raise it in `.omt/config.jsonc`: `limits.maxTasksPerRun` or `limits.maxParallel`. `omt config show` prints the current values.
+When `omt ledger stats --plan <slug>` reports `can dispatch: no` and `active: 0`, no wake will come and the run is stalled. Stop and tell the user which limit was hit (`dispatched` reached `max tasks per run`, or `max parallel` is 0) and how to raise it in `.omt/config.jsonc`: `limits.maxTasksPerRun` or `limits.maxParallel`. `omt config show` prints the current values.
 
 ## Waiting
 

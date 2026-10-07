@@ -1,5 +1,6 @@
 import { loadConfig } from "../config/load.ts";
-import { findProjectRoot, ledgerPath } from "../paths.ts";
+import { join } from "node:path";
+import { findProjectRoot, ledgerPath, plansDir } from "../paths.ts";
 import {
   appendLedger,
   closes,
@@ -10,11 +11,13 @@ import {
   readLedger,
   requestId,
 } from "../ledger/ledger.ts";
+import { parsePlan } from "../plan/parse.ts";
 import type { CliContext, CommandRun, LedgerEntry } from "../types.ts";
 import { usageError } from "../util/errors.ts";
 import { formatIssue } from "./config.ts";
 import { parseArgs } from "../util/args.ts";
 import { checkPlanSlug, checkUnitId } from "../util/ids.ts";
+import { readFileIfExists } from "../util/fs.ts";
 import { printJson, renderTable } from "../util/output.ts";
 
 export const summary = "Record and list delegation events in .omt/ledger.jsonl.";
@@ -28,7 +31,8 @@ Subcommands:
   add               append one entry to .omt/ledger.jsonl
   list              print the entries
   stats             print dispatched, active, and terminal counts, the limits,
-                    and whether another task can be dispatched
+                    and whether another task can be dispatched; with --plan,
+                    a max-parallel limit in the plan header lowers max parallel
   request-id        print the canonical clientRequestId
 
 Options for add:
@@ -152,7 +156,14 @@ async function stats(ctx: CliContext, root: string, values: Values) {
   onlyFlags("stats", values, ["plan", "json"]);
   const { config, issues } = await loadConfig({ cwd: ctx.cwd, env: ctx.env, homedir: ctx.homedir });
   for (const issue of issues) ctx.stderr(formatIssue(issue));
-  const result = ledgerStats(await load(ctx, root, values.plan), config.limits, values.plan);
+  const markdown = values.plan === undefined ? undefined : await readFileIfExists(join(plansDir(root), `${values.plan}.md`));
+  const planMaxParallel = markdown === undefined ? undefined : parsePlan(markdown).maxParallel;
+  const limits = {
+    maxParallel: Math.min(config.limits.maxParallel, planMaxParallel ?? config.limits.maxParallel),
+    maxTasksPerRun: config.limits.maxTasksPerRun,
+  };
+  const stats = ledgerStats(await load(ctx, root, values.plan), limits, values.plan);
+  const result = planMaxParallel === undefined ? stats : { ...stats, planMaxParallel };
   if (values.json === true) {
     printJson(ctx.stdout, result);
     return 0;
@@ -162,7 +173,9 @@ async function stats(ctx: CliContext, root: string, values: Values) {
     `dispatched: ${result.dispatched}`,
     `active: ${result.active}`,
     `terminal: ${result.terminal}`,
-    `max parallel: ${result.limits.maxParallel}`,
+    planMaxParallel === undefined
+      ? `max parallel: ${result.limits.maxParallel}`
+      : `max parallel: ${result.limits.maxParallel} (plan ${planMaxParallel}, config ${config.limits.maxParallel})`,
     `max tasks per run: ${result.limits.maxTasksPerRun}`,
     `can dispatch: ${result.canDispatch ? "yes" : "no"}`,
   ];

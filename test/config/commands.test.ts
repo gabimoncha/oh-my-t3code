@@ -37,13 +37,13 @@ async function rejectsUsage(promise: Promise<number>): Promise<void> {
   await assert.rejects(promise, (error: unknown) => error instanceof OmtError && error.exitCode === 2);
 }
 
-test("config show --defaults prints the 11 default roles as JSON", async (t) => {
+test("config show --defaults prints the 13 default roles as JSON", async (t) => {
   const { ctx } = setup(t);
   const c = ctx(["show", "--defaults"]);
   assert.equal(await config(c), 0);
   const printed = JSON.parse(c.out());
   assert.deepEqual(printed, DEFAULT_CONFIG);
-  assert.equal(Object.keys(printed.roles).length, 11);
+  assert.equal(Object.keys(printed.roles).length, 13);
 });
 
 test("config with no subcommand shows the effective config and prints issues to stderr", async (t) => {
