@@ -75,11 +75,12 @@ The CLI lives in src/.
 # Constraints
 
 ${EDIT_SCOPED}
-- Delegation: you are at depth 2 of 2. Do all work yourself. Start no subagents and no delegated tasks.
+- Delegation: you are at depth 2 of 2. Do all work yourself. Start no subagents and no delegated tasks, except \`test\` tasks for device checks (see Devices).
 - You do not see the parent conversation. This brief is your full context. If you need something that is missing, say so in your final message.
 - Other agents may edit other files in this repository at the same time. Leave changes outside your scope alone. Do not commit, push, or create branches.
 - Processes: do not run \`pkill\`, \`killall\`, or another kill by name, because it can stop your own run. Stop only a process that you started, by its PID. Give each command that can run long a time limit, for example \`timeout 900 <command>\`.
 - Shared files: never break and restore files in the shared checkout, for example to prove that a test can fail. The test role makes that proof in a private copy.
+- Devices: do not drive a device, Simulator UI, browser, or computer yourself (\`agent-device\`, \`agent-browser\`, computer use, UI flows); only the test role does that, on a cheap model. For each device check, build a brief with \`omt brief test --depth 3\` that gives the steps and the expected result, run it with \`delegate_task\` in \`mode: "wait"\`, and report its result. This delegation is allowed at any depth.
 
 # Done when
 
@@ -135,11 +136,26 @@ test("renderBrief picks the delegation line from depth and maxDepth", () => {
     assert.match(
       at,
       new RegExp(
-        `^- Delegation: you are at depth ${depth} of 3\\. Do all work yourself\\. Start no subagents and no delegated tasks\\.$`,
+        `^- Delegation: you are at depth ${depth} of 3\\. Do all work yourself\\. Start no subagents and no delegated tasks, except \`test\` tasks for device checks \\(see Devices\\)\\.$`,
         "m",
       ),
     );
   }
+});
+
+test("renderBrief gives every role except test the device line, and allows test children at max depth", () => {
+  const deep = renderBrief(input({ role: "deep", depth: 1, maxDepth: 1 }), PERSONA, CONTRACT);
+  assert.match(deep, /^- Devices: do not drive a device, Simulator UI, browser, or computer yourself .* This delegation is allowed at any depth\.$/m);
+  assert.match(deep, /^- Delegation: you are at depth 1 of 1\. .*except `test` tasks for device checks \(see Devices\)\.$/m);
+  const reviewer = renderBrief(input({ role: "review", interactionMode: "plan", access: "read-only", depth: 1, maxDepth: 2 }), PERSONA, CONTRACT);
+  assert.match(reviewer, /^- Devices: .* You run in plan mode and cannot start a `test` task, so list each device check /m);
+  const reviewerAtMax = renderBrief(input({ role: "review", interactionMode: "plan", access: "read-only", depth: 1, maxDepth: 1 }), PERSONA, CONTRACT);
+  assert.match(reviewerAtMax, /^- Delegation: you are at depth 1 of 1\. Do all work yourself\. Start no subagents and no delegated tasks\.$/m);
+  const raised = renderBrief(input({ role: "deep", depth: 2, maxDepth: 2, configuredMaxDepth: 1 }), PERSONA, CONTRACT);
+  assert.match(raised, /build a brief with `omt brief test --depth 3 --max-depth 2` that/);
+  const tester = renderBrief(input({ role: "test", depth: 2, maxDepth: 2 }), PERSONA, CONTRACT);
+  assert.doesNotMatch(tester, /- Devices:/);
+  assert.match(tester, /^- Delegation: you are at depth 2 of 2\. Do all work yourself\. Start no subagents and no delegated tasks\.$/m);
 });
 
 test("renderBrief names --max-depth when it differs from the configured max depth", () => {

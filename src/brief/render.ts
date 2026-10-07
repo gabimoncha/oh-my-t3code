@@ -30,9 +30,22 @@ function accessLine(access: Access, hasScope: boolean): string {
     : "Access: edit. Change only what the task needs.";
 }
 
-function delegationLine(depth: number, maxDepth: number, configuredMaxDepth: number): string {
+// Driving a device is slow, cheap work; every other role hands it to a test task, also at max depth.
+function deviceLine(role: string, planMode: boolean, depth: number, maxDepth: number, configuredMaxDepth: number): string[] {
+  if (role === "test") return [];
+  // A plan-mode child cannot start a child with broader modes, so it hands the check to the conductor.
+  if (planMode) return ["Devices: do not drive a device, Simulator UI, browser, or computer yourself (`agent-device`, `agent-browser`, computer use, UI flows); only the test role does that, on a cheap model. You run in plan mode and cannot start a `test` task, so list each device check with its steps and expected result under `OPEN` or `NOTES`, or before your result block when it has neither; the conductor sends it to a `test` task."];
+  const command = `omt brief test --depth ${depth + 1}${maxDepth === configuredMaxDepth ? "" : ` --max-depth ${maxDepth}`}`;
+  return [
+    `Devices: do not drive a device, Simulator UI, browser, or computer yourself (\`agent-device\`, \`agent-browser\`, computer use, UI flows); only the test role does that, on a cheap model. For each device check, build a brief with \`${command}\` that gives the steps and the expected result, run it with \`delegate_task\` in \`mode: "wait"\`, and report its result. This delegation is allowed at any depth.`,
+  ];
+}
+
+
+function delegationLine(role: string, planMode: boolean, depth: number, maxDepth: number, configuredMaxDepth: number): string {
   if (depth >= maxDepth) {
-    return `Delegation: you are at depth ${depth} of ${maxDepth}. Do all work yourself. Start no subagents and no delegated tasks.`;
+    const rest = role === "test" || planMode ? "Do all work yourself. Start no subagents and no delegated tasks." : "Do all work yourself. Start no subagents and no delegated tasks, except `test` tasks for device checks (see Devices).";
+    return `Delegation: you are at depth ${depth} of ${maxDepth}. ${rest}`;
   }
   const start = `Delegation: you are at depth ${depth} of ${maxDepth}. You may delegate with the T3 delegate_task tool.`;
   if (maxDepth !== configuredMaxDepth) {
@@ -59,7 +72,7 @@ export function renderBrief(input: BriefInput, persona: string, contract: string
 
   const constraints = [
     accessLine(input.access, scope.length > 0),
-    delegationLine(input.depth, input.maxDepth, input.configuredMaxDepth ?? input.maxDepth),
+    delegationLine(input.role, input.interactionMode === "plan", input.depth, input.maxDepth, input.configuredMaxDepth ?? input.maxDepth),
     ...(input.evidenceDir === undefined ? [] : [`Evidence: save command output and logs under ${input.evidenceDir}.`]),
     ...(input.interactionMode === "plan"
       ? [
@@ -70,6 +83,7 @@ export function renderBrief(input: BriefInput, persona: string, contract: string
     "Other agents may edit other files in this repository at the same time. Leave changes outside your scope alone. Do not commit, push, or create branches.",
     "Processes: do not run `pkill`, `killall`, or another kill by name, because it can stop your own run. Stop only a process that you started, by its PID. Give each command that can run long a time limit, for example `timeout 900 <command>`.",
     "Shared files: never break and restore files in the shared checkout, for example to prove that a test can fail. The test role makes that proof in a private copy.",
+    ...deviceLine(input.role, input.interactionMode === "plan", input.depth, input.maxDepth, input.configuredMaxDepth ?? input.maxDepth),
   ];
 
   const blocks: string[] = [header, `# Role: ${input.role}`];

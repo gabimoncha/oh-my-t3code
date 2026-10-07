@@ -111,9 +111,11 @@ export const run: CommandRun = async (ctx) => {
   for (const issue of issues) ctx.stderr(formatIssue(issue));
   const role = findRole(config, name);
 
-  const maxDepth = maxDepthFlag === undefined ? config.limits.maxDepth : Number(maxDepthFlag);
+  const limit = maxDepthFlag === undefined ? config.limits.maxDepth : Number(maxDepthFlag);
+  // A worker at max depth may still hand a device check to one test child, one level deeper.
+  const maxDepth = name === "test" && depth === limit + 1 ? depth : limit;
   if (depth > maxDepth) {
-    throw usageError(`--depth ${depth} is greater than the max depth ${maxDepth}`, "pass --max-depth <n> to raise the limit (0 to 3)");
+    throw usageError(`--depth ${depth} is greater than the max depth ${limit}`, "pass --max-depth <n> to raise the limit (0 to 3)");
   }
 
   const task = (await readText(ctx, values.task, "task-file", values["task-file"])) ?? "";
