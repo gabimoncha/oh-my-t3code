@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { requestId } from "../../src/ledger/ledger.ts";
@@ -228,4 +228,15 @@ test("brief --against auto without --plan is a usage error", async (t) => {
   assert.equal(code, 2);
   assert.equal(ctx.out(), "");
   assert.match(ctx.err(), /--against auto needs --plan <slug>/);
+});
+
+test("plan, ledger, and brief warn when no .omt or .git is above the current folder", async (t) => {
+  const project = makeProject(t);
+  const outside = join(project.root, "outside");
+  mkdirSync(outside, { recursive: true });
+  const warned = await project.run(["brief", "execute", "--task", "x"], { cwd: outside });
+  assert.equal(warned.code, 0, warned.ctx.err());
+  assert.match(warned.ctx.err(), /^warning: no \.omt or \.git found above .*; omt uses it as the project root\./m);
+  const inside = await project.run(["brief", "execute", "--task", "x"]);
+  assert.doesNotMatch(inside.ctx.err(), /no \.omt or \.git found/);
 });

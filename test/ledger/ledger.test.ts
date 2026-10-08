@@ -340,7 +340,12 @@ test("interrupted, verified, and rejected are terminal and close by task id", ()
 test("ledger add --status dispatched needs --task-id or --unit", async (t) => {
   const ctx = projectContext(t, ["add", "--role", "execute", "--status", "dispatched"]);
   await assert.rejects(run(ctx), (error: unknown) => error instanceof OmtError && error.exitCode === 2);
-  assert.equal(await run(projectContext(t, ["add", "--role", "execute", "--status", "dispatched", "--task-id", "t1"])), 0);
+  const withId = projectContext(t, ["add", "--role", "execute", "--status", "dispatched", "--task-id", "t1"]);
+  assert.equal(await run(withId), 0);
+  assert.equal(withId.err(), "");
+  const noId = projectContext(t, ["add", "--role", "execute", "--status", "dispatched", "--unit", "U1"]);
+  assert.equal(await run(noId), 0);
+  assert.match(noId.err(), /^warning: this dispatched entry has no --task-id/);
 });
 
 test("ledger add with a terminal status that closes nothing still appends and warns", async (t) => {

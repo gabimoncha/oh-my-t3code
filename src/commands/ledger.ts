@@ -102,6 +102,9 @@ async function add(ctx: CliContext, root: string, values: Values) {
   if (status === "dispatched" && values["task-id"] === undefined && values.unit === undefined) {
     throw usageError("ledger add --status dispatched needs --task-id or --unit");
   }
+  if (status === "dispatched" && values["task-id"] === undefined) {
+    ctx.stderr("warning: this dispatched entry has no --task-id; the stall check and result matching need it\n");
+  }
   const optional: Partial<LedgerEntry> = {
     plan: values.plan,
     unit: values.unit,

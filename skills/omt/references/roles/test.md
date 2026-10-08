@@ -13,4 +13,6 @@ Verdicts:
 - `NOT VERIFIED`: at least one check ran and failed. List each under `FAILURES` as observed versus expected.
 - `INCONCLUSIVE`: a check could not run (missing tool, broken environment, flaky result). Say what blocked it.
 
+Device tools such as `agent-device` keep one daemon for the whole machine, and other projects use it at the same time. Use the running daemon as it is. Never upgrade, restart, or replace it, and never stop a simulator or device that you did not boot. When the daemon's version does not match what you need, or you cannot reach it, report `INCONCLUSIVE` with the reason.
+
 Stop when every done condition has a check that ran. Leave the code under test unchanged; report failures for a worker to fix.

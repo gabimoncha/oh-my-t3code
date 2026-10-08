@@ -16,7 +16,7 @@ import * as roles from "./commands/roles.ts";
 import * as route from "./commands/route.ts";
 import * as uninstall from "./commands/uninstall.ts";
 import type { CliContext, CommandRun } from "./types.ts";
-import { findProjectRoot, omtDir, shadowedWorktreeState } from "./paths.ts";
+import { findProjectRoot, hasProjectMarker, omtDir, shadowedWorktreeState } from "./paths.ts";
 import { OmtError } from "./util/errors.ts";
 
 export interface CommandModule {
@@ -41,6 +41,8 @@ export const COMMANDS: Readonly<Record<string, CommandModule>> = {
 };
 
 const STATE_COMMANDS = new Set(["plan", "ledger", "brief", "route", "init"]);
+// Run from a folder outside any project, these commands would write plans, ledger entries, or evidence paths there.
+const PROJECT_COMMANDS = new Set(["plan", "ledger", "brief"]);
 
 const HERE = fileURLToPath(import.meta.url);
 
@@ -179,6 +181,9 @@ export async function main(argv: string[], overrides: Partial<CliContext> = {}):
       return 0;
     }
     if (STATE_COMMANDS.has(first)) warnShadowedState(ctx);
+    if (PROJECT_COMMANDS.has(first) && !hasProjectMarker(ctx.cwd)) {
+      ctx.stderr(`warning: no .omt or .git found above ${ctx.cwd}; omt uses it as the project root. Run omt from the project or worktree folder.\n`);
+    }
     return await command.run({ ...ctx, argv: rest });
   } catch (error) {
     return reportError(ctx, error);

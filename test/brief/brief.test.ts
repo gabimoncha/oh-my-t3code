@@ -80,7 +80,7 @@ ${EDIT_SCOPED}
 - Other agents may edit other files in this repository at the same time. Leave changes outside your scope alone. Do not commit, push, or create branches.
 - Processes: do not run \`pkill\`, \`killall\`, or another kill by name, because it can stop your own run. Stop only a process that you started, by its PID. Give each command that can run long a time limit, for example \`timeout 900 <command>\`.
 - Shared files: never break and restore files in the shared checkout, for example to prove that a test can fail. The test role makes that proof in a private copy.
-- Devices: do not drive a device, Simulator UI, browser, or computer yourself (\`agent-device\`, \`agent-browser\`, computer use, UI flows); only the test role does that, on a cheap model. For each device check, build a brief with \`omt brief test --depth 3\` that gives the steps and the expected result, run it with \`delegate_task\` in \`mode: "wait"\`, and report its result. This delegation is allowed at any depth.
+- Devices: do not drive a device, Simulator UI, browser, or computer yourself (\`agent-device\`, \`agent-browser\`, computer use, UI flows); only the test role does that, on a cheap model. For each device check, build a brief with \`omt brief test --depth 3 --json\` that gives the steps and the expected result, pass its \`delegateTask\` object to \`delegate_task\` with \`mode: "wait"\` (keep its routed target), and report its result. This delegation is allowed at any depth.
 
 # Done when
 
@@ -152,7 +152,7 @@ test("renderBrief gives every role except test the device line, and allows test 
   const reviewerAtMax = renderBrief(input({ role: "review", interactionMode: "plan", access: "read-only", depth: 1, maxDepth: 1 }), PERSONA, CONTRACT);
   assert.match(reviewerAtMax, /^- Delegation: you are at depth 1 of 1\. Do all work yourself\. Start no subagents and no delegated tasks\.$/m);
   const raised = renderBrief(input({ role: "deep", depth: 2, maxDepth: 2, configuredMaxDepth: 1 }), PERSONA, CONTRACT);
-  assert.match(raised, /build a brief with `omt brief test --depth 3 --max-depth 2` that/);
+  assert.match(raised, /build a brief with `omt brief test --depth 3 --max-depth 2 --json` that/);
   const tester = renderBrief(input({ role: "test", depth: 2, maxDepth: 2 }), PERSONA, CONTRACT);
   assert.doesNotMatch(tester, /- Devices:/);
   assert.match(tester, /^- Delegation: you are at depth 2 of 2\. Do all work yourself\. Start no subagents and no delegated tasks\.$/m);

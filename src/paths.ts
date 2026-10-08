@@ -75,6 +75,10 @@ function isBareRepo(commonDir: string): boolean {
   return false;
 }
 
+export function hasProjectMarker(cwd: string): boolean {
+  return nearestMarker(cwd) !== undefined;
+}
+
 function nearestMarker(cwd: string): string | undefined {
   let dir = resolve(cwd);
   for (;;) {

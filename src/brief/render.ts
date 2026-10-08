@@ -35,9 +35,9 @@ function deviceLine(role: string, planMode: boolean, depth: number, maxDepth: nu
   if (role === "test") return [];
   // A plan-mode child cannot start a child with broader modes, so it hands the check to the conductor.
   if (planMode) return ["Devices: do not drive a device, Simulator UI, browser, or computer yourself (`agent-device`, `agent-browser`, computer use, UI flows); only the test role does that, on a cheap model. You run in plan mode and cannot start a `test` task, so list each device check with its steps and expected result under `OPEN` or `NOTES`, or before your result block when it has neither; the conductor sends it to a `test` task."];
-  const command = `omt brief test --depth ${depth + 1}${maxDepth === configuredMaxDepth ? "" : ` --max-depth ${maxDepth}`}`;
+  const command = `omt brief test --depth ${depth + 1}${maxDepth === configuredMaxDepth ? "" : ` --max-depth ${maxDepth}`} --json`;
   return [
-    `Devices: do not drive a device, Simulator UI, browser, or computer yourself (\`agent-device\`, \`agent-browser\`, computer use, UI flows); only the test role does that, on a cheap model. For each device check, build a brief with \`${command}\` that gives the steps and the expected result, run it with \`delegate_task\` in \`mode: "wait"\`, and report its result. This delegation is allowed at any depth.`,
+    `Devices: do not drive a device, Simulator UI, browser, or computer yourself (\`agent-device\`, \`agent-browser\`, computer use, UI flows); only the test role does that, on a cheap model. For each device check, build a brief with \`${command}\` that gives the steps and the expected result, pass its \`delegateTask\` object to \`delegate_task\` with \`mode: "wait"\` (keep its routed target), and report its result. This delegation is allowed at any depth.`,
   ];
 }
 
