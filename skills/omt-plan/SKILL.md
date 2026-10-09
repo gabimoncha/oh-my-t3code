@@ -31,7 +31,7 @@ List the decisions the plan needs. Settle each one from the code, the docs, or t
 
 Ask the user only owner decisions. Before you ask, finish all work that does not depend on the answers: the research and a draft plan. Then ask every owner decision in one message. Give each one 2 to 4 options and your recommendation.
 
-For a HEAVY plan, the owner decisions include the task budget. Recommend your estimate: the tasks the plan already used (`dispatched` in `omt ledger stats --plan <slug>`), plus 4 for the plan-review rounds, plus 4 per unit, plus 3 for the final gate, plus 5 when the plan has an `omt-design` step. Round the sum up to a multiple of 10.
+For a HEAVY plan, the owner decisions include the task budget. Recommend your estimate: the tasks the plan already used (`dispatched` in `omt ledger stats --plan <slug>`), plus 4 for the plan-review rounds, plus 5 per unit, plus 1 more per `ui` unit, plus 3 for the final gate, plus 5 when the plan has an `omt-design` step. Round the sum up to a multiple of 10.
 
 Done when: every decision is settled from evidence or answered by the user.
 
@@ -40,6 +40,7 @@ Done when: every decision is settled from evidence or answered by the user.
 `omt plan status <slug>` prints the absolute plan path, also from a worktree. Steps 3 and 4 edit and hash the plan at that path. When the plan exists, edit it. Otherwise run `omt plan new <slug> --title "<title>"`, after `omt init` when `.omt/.gitignore` is missing. Keep an existing plan: pass no `--force`. Fill every section. The persona in [roles/plan.md](../omt/references/roles/plan.md) is the standard. For a large plan, you may dispatch it to a `plan` task instead.
 
 - `Done when` items are checks that can fail.
+- When a unit reads outside data, such as recordings, files, or API responses, its done condition includes a check on an input shaped like real data: one captured from a real source, or with the properties real data has, such as offsets, gaps, and sizes. A seeded or ideal sample alone hides real-data defects.
 - Each unit has a role, a scope, a done condition, a verify command, and its dependencies.
 - Units with no dependency between them have disjoint scopes.
 - Paste the output of `omt roles` under `Roles`.

@@ -21,7 +21,7 @@ Workers do not commit, and `git diff` does not show untracked files. Check both 
 1. Check that each path under `CHANGES` changed: `git status --porcelain -- <scope paths>` lists it (`??` marks a new file), and `git diff HEAD -- <scope paths>` shows the staged and unstaged edits to tracked files. Read each new file in full.
 2. Check that no file outside the scopes changed: from the repository root, run `git status --porcelain -- . ':(exclude).omt'` and compare it with the union of the scopes of every active unit. The command leaves out `.omt/`, because `omt init`, `omt plan mark`, and the ledger change it on every run. Other units' files show up there too; a path outside every active scope is a finding.
 3. Run at least one `VERIFY` command yourself, or send the unit to a `test` task. A `VERIFY` line without a matching run is unverified.
-4. Open the `EVIDENCE` file when one is named.
+4. Open the `EVIDENCE` files when any are named.
 
 ## Recording
 
@@ -54,7 +54,7 @@ Ledger statuses:
 - **review**
   - `APPROVE`: the round passes. `NOTES` are optional work.
   - `REQUEST_CHANGES`: each P0, P1, and P2 finding goes to a fix task. P3 findings are optional.
-  - `BLOCK`: a P0 finding or a wrong approach. Stop the unit and re-plan before more fixes.
+  - `BLOCK`: a P0 finding or a wrong approach. A P0 with a clear fix inside the unit's scope goes to a fix task. A wrong approach, or a P0 whose fix changes the plan, stops the unit for a re-plan before more fixes.
   - Check that every finding names a concrete failure scenario. Drop a finding you disprove by reading the code, and say so in the next round's `Prior rounds`.
   - Severity levels are defined in [roles/review.md](roles/review.md).
 - **test**

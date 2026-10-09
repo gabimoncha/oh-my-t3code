@@ -280,15 +280,14 @@ test("omt-ulw step 9 runs a relevance check before each fix round", () => {
   assert.match(fix, /When you drop every finding, the unit goes to step 8\./);
 });
 
-test("omt-ulw round 2 or 3 uses deep only when a finding needs investigation", () => {
+test("omt-ulw fix rounds use deep only when a finding needs investigation", () => {
   const fix = section(readSkill("omt-ulw"), "### 9. ");
-  assert.match(fix, /Round 2 or 3 uses a `deep` fix only when an open finding needs investigation/);
-  assert.match(fix, /Otherwise the round uses an `execute` fix\./);
+  assert.match(fix, /A fix is an `execute` fix, or a `deep` fix when an open finding needs investigation/);
 });
 
 test("omt-plan asks for the task budget and sets it with omt plan limit --tasks", () => {
   const text = readSkill("omt-plan");
-  assert.match(section(text, "### 2. "), /plus 4 for the plan-review rounds, plus 4 per unit, plus 3 for the final gate/);
+  assert.match(section(text, "### 2. "), /plus 4 for the plan-review rounds, plus 5 per unit, plus 1 more per `ui` unit, plus 3 for the final gate/);
   assert.match(section(text, "### 3. "), /run `omt plan limit <slug> --tasks <n>`/);
 });
 
@@ -326,4 +325,69 @@ test("omt-ulw starts a stall heartbeat, and the test role proves failures in a w
   assert.match(test, /git ls-files -co --exclude-standard -z/);
   assert.doesNotMatch(test, /git archive HEAD/);
   assert.match(test, /Never add an exit code to a log afterwards\./);
+});
+
+test("omt-ulw splits BLOCK into a fixable P0 and a wrong approach", () => {
+  const review = section(readSkill("omt-ulw"), "### 7. ");
+  assert.match(review, /A P0 finding that has a clear fix inside the unit's scope: go to step 9, as for `REQUEST_CHANGES`\./);
+  assert.match(review, /A wrong approach, or a P0 whose fix changes the plan: run `omt plan mark <slug> <unit> blocked`/);
+});
+
+test("omt-ulw drops a finding only when its case cannot happen, and reopens done units", () => {
+  const fix = section(readSkill("omt-ulw"), "### 9. ");
+  assert.match(fix, /a case that cannot happen in the planned flow/);
+  assert.match(fix, /Never drop a finding because its case is rare or unlikely\./);
+  assert.match(fix, /Reopen: when a task or a check finds a defect in code that a done unit owns, run the relevance check on the finding first\./);
+  assert.match(fix, /A cycle starts at the unit's first dispatch, or at a reopen/);
+  assert.match(fix, /the table and `maxReviewRounds` use the round within the cycle/);
+  assert.match(fix, /It is round 1 of a new cycle, with the next `--round` value after the unit's last round\./);
+  assert.match(fix, /\| `maxReviewRounds` \(default 3\) \| a fix \| stop \|/);
+  assert.match(section(readSkill("omt-ulw"), "### 10. "), /A failing final check reopens the unit that owns the code/);
+});
+
+test("omt-ulw shows screenshots and recordings to the user", () => {
+  const ulw = readSkill("omt-ulw");
+  assert.match(section(ulw, "### 8. "), /show them in your message about the unit: one Markdown image per file with its absolute path/);
+  assert.match(section(ulw, "### 11. "), /the latest screenshot or recording of each screen or flow that the change adds or changes/);
+});
+
+test("the test role keeps to the done conditions, uses real-shaped data, and closes device sessions", () => {
+  const persona = readFileSync(join(SKILLS_DIR, "omt", "references", "roles", "test.md"), "utf8");
+  assert.match(persona, /Do not add edge, property, or stress suites that no done condition needs\./);
+  assert.match(persona, /at least one input shaped like real data/);
+  assert.match(persona, /in the code under test that the done condition names, not in a test helper, a fixture, or a mock/);
+  assert.match(persona, /save a screenshot of the screen that shows the result, or a recording/);
+  assert.match(persona, /Close each device or browser session that you open, also when a check fails\./);
+  const contract = readFileSync(join(SKILLS_DIR, "omt", "references", "results", "test.md"), "utf8");
+  assert.match(contract, /EVIDENCE:\n- <path of a log, screenshot, or recording in the evidence directory>; or none/);
+  const work = readFileSync(join(SKILLS_DIR, "omt", "references", "results", "work.md"), "utf8");
+  assert.match(work, /EVIDENCE:\n- <path of a log, screenshot, or recording in the evidence directory>; or none/);
+  assert.match(section(readSkill("omt-plan"), "### 3. "), /its done condition includes a check on an input shaped like real data/);
+});
+
+test("the Mira fixes pin every new rule in the skills and references", () => {
+  const ulw = readSkill("omt-ulw");
+  const fix = section(ulw, "### 9. ");
+  assert.match(fix, /Drop the others: a style preference, an input or a state that the plan rules out, a case that cannot happen in the planned flow, or a missing test for a done condition that already has a check that can fail\./);
+  assert.match(fix, /Keep a missing check on an input shaped like real data for code that reads outside data/);
+  assert.match(fix, /run the relevance check on the finding first\. When you drop it, log the drop and leave the unit done\./);
+  assert.match(fix, /reopen the unit: run `omt plan mark <slug> <unit> open`/);
+  assert.match(fix, /Before a third reopen of the same unit, stop and ask the user/);
+  assert.match(fix, /Take the finding out of the fix round of the unit whose task found it\./);
+  assert.match(fix, /When that unit has no other kept finding, it waits until the reopened unit is done again, then goes to step 8 for the same round\./);
+  assert.match(fix, /Dispatch no new task for a unit that depends on the reopened unit, directly or through other units, until the reopened unit is done again\./);
+  assert.match(fix, /Wait until no active task has a scope that overlaps the reopened unit's scope/);
+  assert.match(fix, /the first `--round` value of the new cycle/);
+  assert.match(fix, /When `maxReviewRounds` is 1, round 1 is also the last round/);
+  assert.match(section(ulw, "### 4. "), /has a done condition on an input shaped like real data, also in a LIGHT plan/);
+  assert.match(section(ulw, "### 8. "), /Do not ask for edge, property, or stress suites that no done condition needs\./);
+  assert.match(section(ulw, "### 11. "), /from the `EVIDENCE` lines of the test and `ui` results/);
+  const references = join(SKILLS_DIR, "omt", "references");
+  const results = readFileSync(join(references, "results.md"), "utf8");
+  assert.match(results, /A P0 with a clear fix inside the unit's scope goes to a fix task\./);
+  assert.doesNotMatch(results, /Stop the unit and re-plan before more fixes\./);
+  assert.match(readFileSync(join(references, "roles", "plan.md"), "utf8"), /give it a done condition on an input shaped like real data/);
+  const persona = readFileSync(join(references, "roles", "test.md"), "utf8");
+  assert.match(persona, /or when the existing checks of outside data use only seeded or ideal samples/);
+  assert.match(persona, /List every log, screenshot, and recording under `EVIDENCE`\./);
 });

@@ -78,7 +78,7 @@ ${EDIT_SCOPED}
 - Delegation: you are at depth 2 of 2. Do all work yourself. Start no subagents and no delegated tasks, except \`test\` tasks for device checks (see Devices).
 - You do not see the parent conversation. This brief is your full context. If you need something that is missing, say so in your final message.
 - Other agents may edit other files in this repository at the same time. Leave changes outside your scope alone. Do not commit, push, or create branches.
-- Processes: do not run \`pkill\`, \`killall\`, or another kill by name, because it can stop your own run. Stop only a process that you started, by its PID. Give each command that can run long a time limit, for example \`timeout 900 <command>\`.
+- Processes: do not run \`pkill\`, \`killall\`, or another kill by name, because it can stop your own run. Stop only a process that you started, by its PID. Give each command that can run long a time limit, for example \`timeout 900 <command>\`. Close each device or browser session that you or your script opens on every exit path, for example \`trap '<close command>' EXIT\`.
 - Shared files: never break and restore files in the shared checkout, for example to prove that a test can fail. The test role makes that proof in a private copy.
 - Devices: do not drive a device, Simulator UI, browser, or computer yourself (\`agent-device\`, \`agent-browser\`, computer use, UI flows); only the test role does that, on a cheap model. For each device check, build a brief with \`omt brief test --depth 3 --json\` that gives the steps and the expected result, pass its \`delegateTask\` object to \`delegate_task\` with \`mode: "wait"\` (keep its routed target), and report its result. This delegation is allowed at any depth.
 

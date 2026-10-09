@@ -81,7 +81,7 @@ export function renderBrief(input: BriefInput, persona: string, contract: string
       : []),
     "You do not see the parent conversation. This brief is your full context. If you need something that is missing, say so in your final message.",
     "Other agents may edit other files in this repository at the same time. Leave changes outside your scope alone. Do not commit, push, or create branches.",
-    "Processes: do not run `pkill`, `killall`, or another kill by name, because it can stop your own run. Stop only a process that you started, by its PID. Give each command that can run long a time limit, for example `timeout 900 <command>`.",
+    "Processes: do not run `pkill`, `killall`, or another kill by name, because it can stop your own run. Stop only a process that you started, by its PID. Give each command that can run long a time limit, for example `timeout 900 <command>`. Close each device or browser session that you or your script opens on every exit path, for example `trap '<close command>' EXIT`.",
     "Shared files: never break and restore files in the shared checkout, for example to prove that a test can fail. The test role makes that proof in a private copy.",
     ...deviceLine(input.role, input.interactionMode === "plan", input.depth, input.maxDepth, input.configuredMaxDepth ?? input.maxDepth),
   ];

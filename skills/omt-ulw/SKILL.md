@@ -71,7 +71,7 @@ When `.omt/.gitignore` is missing, run `omt init` first.
 - LIGHT: run `omt plan new <slug> --light` and fill it yourself. The plan has no `F2` oracle item.
 - HEAVY: run the `omt-plan` skill with the slug before any plan file exists. It creates the plan, runs the `plan-review` rounds, and returns here.
 
-Each unit has a role, a scope, a done condition, a verify command, and its dependencies. Units without a dependency between them have disjoint scopes. Every done condition from step 1 maps to a unit or a final check.
+Each unit has a role, a scope, a done condition, a verify command, and its dependencies. Units without a dependency between them have disjoint scopes. A unit that reads outside data, such as recordings, files, or API responses, has a done condition on an input shaped like real data, also in a LIGHT plan. Every done condition from step 1 maps to a unit or a final check.
 
 A unit that implements a design or changes UI has the role `ui`, also in a LIGHT plan. Each `ui` unit cites the design spec. Step 5 runs the design check before any dispatch.
 
@@ -115,35 +115,44 @@ For each unit that passed step 6, dispatch a fresh `review` task for the same ro
 - From round 2, pass every prior finding with its response in `--prior-file`.
 - Use `--plan <slug> --unit <id> --round <n> --attempt 1 --against auto --title "review <unit>: <short unit title>"`, and record the dispatch as in step 5. `--against auto` puts the reviewer on the family other than the unit's worker.
 
-Done when: the unit has a recorded review verdict for this round. `APPROVE` moves it to step 8. `REQUEST_CHANGES` moves it to step 9. `BLOCK` means a P0 finding or a wrong approach: run `omt plan mark <slug> <unit> blocked`, then re-plan the unit (step 4) or ask the user.
+Done when: the unit has a recorded review verdict for this round. `APPROVE` moves it to step 8. `REQUEST_CHANGES` moves it to step 9. `BLOCK` has two causes, so read its findings:
+
+- A P0 finding that has a clear fix inside the unit's scope: go to step 9, as for `REQUEST_CHANGES`.
+- A wrong approach, or a P0 whose fix changes the plan: run `omt plan mark <slug> <unit> blocked`, then re-plan the unit (step 4) or ask the user.
 
 ### 8. Test
 
-Dispatch a `test` task with the unit's scope, done conditions, and verify commands (`--plan <slug> --unit <id> --round <n> --attempt 1 --title "test <unit>: <short unit title>"`), and record the dispatch as in step 5. The test task checks the unit's done conditions and verify commands. Ask it for extra tests only when a done condition has no check that can fail. Only the `test` role drives a device, a Simulator UI, a browser, or a computer; a worker that needs a device check delegates it to a `test` task itself, at any depth. A read-only role lists its device checks instead; put them into a `test` task. HEAVY runs it for every unit; LIGHT may run the verify commands yourself instead and save the output in the evidence directory that `omt paths --evidence` prints.
+Dispatch a `test` task with the unit's scope, done conditions, and verify commands (`--plan <slug> --unit <id> --round <n> --attempt 1 --title "test <unit>: <short unit title>"`), and record the dispatch as in step 5. The test task checks the unit's done conditions and verify commands. Ask it for extra tests only when a done condition has no check that can fail. Do not ask for edge, property, or stress suites that no done condition needs. Only the `test` role drives a device, a Simulator UI, a browser, or a computer; a worker that needs a device check delegates it to a `test` task itself, at any depth. A read-only role lists its device checks instead; put them into a `test` task. HEAVY runs it for every unit; LIGHT may run the verify commands yourself instead and save the output in the evidence directory that `omt paths --evidence` prints.
 
 Design exclusion: for a `ui` unit, leave `docs/design/` out of the test scope paths, and leave out every done condition and every piece of context that compares the result with the design, such as screens, screenshots, or a visual match. Keep the code and behavior checks: build, unit tests, and `agent-device` flows that check behavior, not looks. The `ui` task and the owner do the visual comparison. Review briefs (step 7) and the oracle brief (step 10) apply the same exclusion.
 
-On `VERIFIED` with evidence, record the result, run `omt plan mark <slug> <unit> done`, and record `--status verified` for the unit. `NOT VERIFIED` or `INCONCLUSIVE` moves it to step 9. When you run the verify commands yourself, a pass with saved output counts as `VERIFIED`; a failure counts as `NOT VERIFIED` and goes to step 9.
+On `VERIFIED` with evidence, record the result, run `omt plan mark <slug> <unit> done`, and record `--status verified` for the unit. When the test result names screenshots or recordings, show them in your message about the unit: one Markdown image per file with its absolute path, such as `![library, empty state](/abs/path/u3-library-empty.png)`, grouped by screen. `NOT VERIFIED` or `INCONCLUSIVE` moves it to step 9. When you run the verify commands yourself, a pass with saved output counts as `VERIFIED`; a failure counts as `NOT VERIFIED` and goes to step 9.
 
 Done when: the unit is marked done in the plan with a `verified` ledger entry, or it is in step 9.
 
 ### 9. Fix
 
-Relevance check: before each fix round, check each finding against the plan. Keep a finding when it breaks a done condition, a plan requirement, or the correctness of the changed code for inputs the plan covers. Drop the others, for example a style preference, an input the plan rules out, or a hypothetical case. Record each dropped finding with its reason under `Log` in the plan and in the next `--prior-file`. When you drop every finding, the unit goes to step 8. When you drop every finding of an oracle round, record the drops under `Log` in the plan and mark `F2` done. The step 11 report lists the dropped oracle findings.
+Relevance check: before each fix round, check each finding against the plan. Keep a finding when it breaks a done condition, a plan requirement, or the correctness of the changed code for inputs the plan covers. Drop the others: a style preference, an input or a state that the plan rules out, a case that cannot happen in the planned flow, or a missing test for a done condition that already has a check that can fail. Keep a missing check on an input shaped like real data for code that reads outside data, also when a seeded sample already passes. Never drop a finding because its case is rare or unlikely. A race or an order of events that the planned flow allows breaks correctness. Record each dropped finding with its reason under `Log` in the plan and in the next `--prior-file`. When you drop every finding, the unit goes to step 8. When you drop every finding of an oracle round, record the drops under `Log` in the plan and mark `F2` done. The step 11 report lists the dropped oracle findings.
 
 Send the kept findings or failures, verbatim, to a new fix task for the next round `<n+1>`, with all earlier rounds in `--prior-file`. Use `--plan <slug> --unit <id> --round <n+1> --attempt 1 --title "fix <unit>: <short unit title>"`, and record the dispatch with its `--provider` and `--model` as in step 5. Do not ask a fix task to prove that its tests can fail; the test task does that. Then return to step 7 for that unit.
 
-| Round | Worker | Next step when its review or test fails |
-| --- | --- | --- |
-| 1 | `execute` | round 2 |
-| 2 | `execute` fix or `deep` fix | round 3 |
-| 3 | `execute` fix or `deep` fix | stop |
+Rounds count per cycle. A cycle starts at the unit's first dispatch, or at a reopen (below). The `--round` value in briefs and in the ledger goes on rising across cycles; the table and `maxReviewRounds` use the round within the cycle.
 
-Round 2 or 3 uses a `deep` fix only when an open finding needs investigation: its cause is unknown, the previous fix failed for the same reason, or the fix changes the design. Otherwise the round uses an `execute` fix.
+| Round in the cycle | Worker | Next step when its review or test fails |
+| --- | --- | --- |
+| 1 | the unit's planned role; after a reopen, a fix | round 2 |
+| 2 to `maxReviewRounds` - 1 | a fix | the next round |
+| `maxReviewRounds` (default 3) | a fix | stop |
+
+When `maxReviewRounds` is 1, round 1 is also the last round, so a failure in round 1 stops the unit.
+
+A fix is an `execute` fix, or a `deep` fix when an open finding needs investigation: its cause is unknown, the previous fix failed for the same reason, or the fix changes the design.
 
 A `ui` unit uses `ui` in every round, never `execute` or `deep`. When `ui` cannot run, stop and tell the user; do not fall back to another role or family.
 
-To stop: run `omt plan mark <slug> <unit> blocked` and ask the user, with the open findings. Stop at the same point when the next round would exceed `maxReviewRounds`.
+To stop: run `omt plan mark <slug> <unit> blocked` and ask the user, with the open findings. Stop at the same point when the next round in the cycle would exceed `maxReviewRounds`.
+
+Reopen: when a task or a check finds a defect in code that a done unit owns, run the relevance check on the finding first. When you drop it, log the drop and leave the unit done. When you keep it, reopen the unit: run `omt plan mark <slug> <unit> open`, and write under `Log` in the plan the defect, the task or check that found it, and the first `--round` value of the new cycle. Take the finding out of the fix round of the unit whose task found it. When that unit has no other kept finding, it waits until the reopened unit is done again, then goes to step 8 for the same round. Dispatch no new task for a unit that depends on the reopened unit, directly or through other units, until the reopened unit is done again. Wait until no active task has a scope that overlaps the reopened unit's scope, then send a fix task for the reopened unit. It is round 1 of a new cycle, with the next `--round` value after the unit's last round. The task budget still applies. Before a third reopen of the same unit, stop and ask the user, because two fixes may be breaking each other. The step 11 report lists each reopen.
 
 Done when: the unit is back in review with a higher round, or it is marked blocked and the user has the question.
 
@@ -151,7 +160,7 @@ Done when: the unit is back in review with a higher round, or it is marked block
 
 When every unit is done:
 
-1. Run every final check in the plan yourself (`F1`, the full test suite and typecheck). Mark each `D` and `F` item with `omt plan mark <slug> <id> done` after its command passes. A failing final check goes to step 9 as a fix task for the unit that owns the code.
+1. Run every final check in the plan yourself (`F1`, the full test suite and typecheck). Mark each `D` and `F` item with `omt plan mark <slug> <id> done` after its command passes. A failing final check reopens the unit that owns the code (see Reopen in step 9).
 2. HEAVY: dispatch one `oracle` task over the whole change, with the objective, every done condition except those that the [design exclusion](#8-test) of step 8 leaves out, and the scope paths without `docs/design/` (or the base ref when the work is committed, with `docs/design/` excluded from its diff). Leave design context out of the task text too. Build it with `omt brief oracle --task-file - --title "oracle: <slug>" --plan <slug> --unit F2 --round <n> --attempt 1 --against auto --json`, and record the dispatch and the result as in steps 5 and 6. `--against auto` puts the oracle on the family other than the main implementer's. Fix its findings through step 9, then run the oracle again. From oracle round 2, pass the earlier oracle findings with your response to each in `--prior-file`. Count oracle rounds against `maxReviewRounds`; at the limit, stop and report the open findings to the user. Mark `F2` done when it returns `APPROVE`.
 
 LIGHT plans have no `F2` item and no oracle round.
@@ -164,7 +173,8 @@ Tell the user:
 
 - What changed, by file or area.
 - Each done condition with its evidence: the command and its result line, or the evidence file.
-- Review, test, and oracle verdicts per unit.
+- Review, test, and oracle verdicts per unit, and each reopen.
+- What the user can see: the latest screenshot or recording of each screen or flow that the change adds or changes, from the `EVIDENCE` lines of the test and `ui` results, as Markdown images with absolute paths, grouped by screen. When no device check ran, say so.
 - Open items: blocked units, notes, and decisions left.
 
 Delete the stall heartbeat with `delete_scheduled_task`.
