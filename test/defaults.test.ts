@@ -102,6 +102,10 @@ test("the design and ui roles run only on Opus, with no fallback", () => {
   });
 });
 
+test("the default visuals show the plan page", () => {
+  assert.deepEqual(DEFAULT_CONFIG.visuals, { plan: true });
+});
+
 test("the default limits match the spec", () => {
   assert.deepEqual(DEFAULT_CONFIG.limits, { maxParallel: 4, maxTasksPerRun: 24, maxDepth: 1, maxReviewRounds: 3 });
   assert.equal(DEFAULT_CONFIG.version, 1);
@@ -144,5 +148,6 @@ for (const [name, text] of Object.entries({ USER_STARTER_CONFIG, PROJECT_STARTER
     assert.deepEqual(parsed.roles, {});
     assert.deepEqual(parsed.limits, {});
     assert.match(text, /omt config show --defaults/);
+    assert.match(text, /^  \/\/ "visuals": \{ "plan": false \},$/m);
   });
 }

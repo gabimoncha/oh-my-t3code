@@ -37,7 +37,7 @@ const SAMPLE = `# Auth refactor
 test("planTemplate fills the title, slug, and timestamp", () => {
   const text = planTemplate("auth", "Auth work", "2026-01-02T03:04:05.000Z");
   assert.match(text, /^# Auth work\n\n<!-- omt-plan v1 slug=auth created=2026-01-02T03:04:05\.000Z -->\n/);
-  for (const heading of ["Objective", "Done when", "Research", "Roles", "Units", "Final verification", "Log"]) {
+  for (const heading of ["Summary", "Objective", "Done when", "Research", "Roles", "Units", "Final verification", "Log"]) {
     assert.match(text, new RegExp(`^## ${heading}$`, "m"));
   }
   assert.match(text, /^- 2026-01-02T03:04:05\.000Z plan created$/m);
@@ -300,6 +300,16 @@ test("parsePlan reads slug and max-parallel only from the first header comment, 
   assert.equal(parsePlan(plan("")).slug, "p");
   assert.equal(parsePlan(plan(" max-parallel=3")).maxParallel, 3);
   assert.equal(parsePlan(plan(" max-parallel=3")).slug, "p");
+});
+
+test("the template has a Summary section between the header and Objective, also with --light", () => {
+  for (const light of [false, true]) {
+    const text = planTemplate("x", "x", "t", { light });
+    assert.match(
+      text,
+      /-->\n\n## Summary\n\n<at most 15 lines for the owner: what changes for them, the work and its task budget, the main risk, the open decisions, and what is not in this plan>\n\n## Objective\n/,
+    );
+  }
 });
 
 test("the template has a Research section after Done when, also with --light", () => {

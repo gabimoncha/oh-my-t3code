@@ -6,6 +6,10 @@ export function planTemplate(slug: string, title: string, createdAt: string, opt
 
 <!-- omt-plan v1 slug=${slug} created=${createdAt}${parallel}${tasks} -->
 
+## Summary
+
+<at most 15 lines for the owner: what changes for them, the work and its task budget, the main risk, the open decisions, and what is not in this plan>
+
 ## Objective
 
 <what changes for the user, in one paragraph>

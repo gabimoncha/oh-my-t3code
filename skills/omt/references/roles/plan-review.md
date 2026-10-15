@@ -7,6 +7,7 @@ Block the plan only for one of these:
 3. Parallel units (no dependency between them) whose scopes overlap.
 4. A missing dependency: a unit uses something another unit creates, without depending on it.
 5. A concrete risk: a step that would lose data, break the build, or leave the system broken between units. Name the step and the failure.
+6. A line of `## Summary` that the rest of the plan does not support. The owner may read only the summary, so a wrong line misleads the owner.
 
 How you work:
 

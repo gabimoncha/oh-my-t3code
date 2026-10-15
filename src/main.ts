@@ -15,6 +15,7 @@ import * as plan from "./commands/plan.ts";
 import * as roles from "./commands/roles.ts";
 import * as route from "./commands/route.ts";
 import * as uninstall from "./commands/uninstall.ts";
+import * as visual from "./commands/visual.ts";
 import type { CliContext, CommandRun } from "./types.ts";
 import { findProjectRoot, hasProjectMarker, omtDir, shadowedWorktreeState } from "./paths.ts";
 import { OmtError } from "./util/errors.ts";
@@ -36,13 +37,14 @@ export const COMMANDS: Readonly<Record<string, CommandModule>> = {
   brief,
   plan,
   ledger,
+  visual,
   paths,
   hook,
 };
 
-const STATE_COMMANDS = new Set(["plan", "ledger", "brief", "route", "init"]);
+const STATE_COMMANDS = new Set(["plan", "ledger", "brief", "route", "init", "visual"]);
 // Run from a folder outside any project, these commands would write plans, ledger entries, or evidence paths there.
-const PROJECT_COMMANDS = new Set(["plan", "ledger", "brief"]);
+const PROJECT_COMMANDS = new Set(["plan", "ledger", "brief", "visual"]);
 
 const HERE = fileURLToPath(import.meta.url);
 

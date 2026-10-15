@@ -44,6 +44,26 @@ test("config show --defaults prints the 13 default roles as JSON", async (t) => 
   const printed = JSON.parse(c.out());
   assert.deepEqual(printed, DEFAULT_CONFIG);
   assert.equal(Object.keys(printed.roles).length, 13);
+  assert.deepEqual(printed.visuals, { plan: true });
+});
+
+test("a layer with visuals.plan false turns the plan page off, and a bad value is an error", async (t) => {
+  const { ctx, write, userPath, projectPath } = setup(t);
+  write(userPath, '{ "visuals": { "plan": false } }');
+  let c = ctx([]);
+  assert.equal(await config(c), 0);
+  assert.deepEqual(JSON.parse(c.out()).visuals, { plan: false });
+  assert.equal(c.err(), "");
+
+  write(projectPath, '{ "visuals": { "plan": "yes", "page": true } }');
+  c = ctx([]);
+  assert.equal(await config(c), 0);
+  assert.deepEqual(JSON.parse(c.out()).visuals, { plan: false });
+  assert.equal(
+    c.err(),
+    `error ${projectPath} visuals.plan: must be a boolean, got "yes"\n` +
+      `error ${projectPath} visuals.page: unknown visuals key "page"; allowed keys: plan\n`,
+  );
 });
 
 test("config with no subcommand shows the effective config and prints issues to stderr", async (t) => {

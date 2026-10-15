@@ -189,3 +189,21 @@ test("an invalid limit is dropped with an error, and valid limits are kept", () 
   assert.deepEqual(paths({ limits: { maxDepth: 4 } }), ["limits.maxDepth"]);
   assert.deepEqual(paths({ limits: { maxParallel: "4" } }), ["limits.maxParallel"]);
 });
+
+test("visuals must be an object with a boolean plan; a bad key is dropped with an error", () => {
+  assert.deepEqual(validateLayer({ visuals: { plan: false } }, "src"), { layer: { visuals: { plan: false } }, issues: [] });
+  assert.deepEqual(paths({ visuals: true }), ["visuals"]);
+  assert.deepEqual(paths({ visuals: null }), ["visuals"]);
+  assert.deepEqual(paths({ visuals: [] }), ["visuals"]);
+  assert.equal(validateLayer({ visuals: 1 }, "src").layer.visuals, undefined);
+  const { layer, issues } = validateLayer({ visuals: { plan: "no", other: true } }, "src");
+  assert.deepEqual(layer.visuals, {});
+  assert.deepEqual(
+    issues.map((issue) => [issue.path, issue.message, issue.severity]),
+    [
+      ["visuals.plan", 'must be a boolean, got "no"', "error"],
+      ["visuals.other", 'unknown visuals key "other"; allowed keys: plan', "error"],
+    ],
+  );
+  assert.deepEqual(validateLayer({ visuals: { plan: true, x: 1 } }, "src").layer.visuals, { plan: true });
+});

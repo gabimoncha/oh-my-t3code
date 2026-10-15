@@ -43,6 +43,7 @@ src/
   routing/               capabilities.ts, effort.ts, resolve.ts, format.ts
   brief/                 templates.ts, render.ts
   plan/                  template.ts, parse.ts
+  visual/                spec.ts, inline.ts, flow.ts, plan.ts, page.ts
   ledger/                ledger.ts
   install/               skills.ts, links.ts, claudeHook.ts, manifest.ts, plan.ts, apply.ts, doctor.ts
   hooks/                 userPromptSubmit.ts
@@ -53,7 +54,7 @@ schema/
   omt.schema.json        JSON Schema for config files
 skills/
   omt/                   router skill and shared references
-  omt-ulw/ omt-plan/ omt-design/ omt-review/ omt-research/ omt-swarm/ omt-loop/
+  omt-ulw/ omt-plan/ omt-design/ omt-review/ omt-research/ omt-swarm/ omt-loop/ omt-show/
 test/
   helpers.ts             temp dirs and a fake CliContext
   fixtures/capabilities.json
@@ -102,16 +103,22 @@ export interface Limits {
   maxReviewRounds: number;
 }
 
+export interface Visuals {
+  plan: boolean;
+}
+
 export interface OmtConfig {
   version: 1;
   roles: Record<string, RoleConfig>;
   limits: Limits;
+  visuals: Visuals;
 }
 
 export interface ConfigLayer {
   version?: 1;
   roles?: Record<string, Partial<RoleConfig> | null>;
   limits?: Partial<Limits>;
+  visuals?: Partial<Visuals>;
 }
 
 export type IssueSeverity = "error" | "warning";
@@ -365,6 +372,7 @@ Argument parsing uses `node:util` `parseArgs` with `strict: true` and `allowPosi
 | `plan` | `omt plan new <slug> [--title <text>] [--light] [--max-parallel <n>] [--max-tasks <n>] [--force]`, `omt plan mark <slug> <id> <done\|open\|blocked>`, `omt plan limit <slug> [<n\|none>] [--tasks <n\|none>]`, `omt plan status [<slug>] [--json]`, `omt plan list [--json]` |
 | `ledger` | `omt ledger add [options]`, `omt ledger list [--plan <slug>] [--json]`, `omt ledger stats [--plan <slug>] [--json]`, `omt ledger request-id --plan <slug> --unit <id> --role <role> [--round <n>] [--attempt <n>]` |
 | `paths` | `omt paths [--json] [--root \| --plans \| --ledger \| --evidence \| --config \| --shim]` |
+| `visual` | `omt visual [--plan <slug\|file.md>] [--spec <file\|->] [--out <path\|->] [--json]` |
 | `hook` | `omt hook user-prompt-submit` |
 
 In every flag that takes a file, `-` means standard input.
@@ -525,6 +533,63 @@ Prints the absolute paths of the project state, resolved through `findProjectRoo
 - Two path flags, a path flag with `--json`, or a positional argument is a usage error (exit 2).
 - It reads no file and creates no path.
 
+### 5.9 `omt visual`
+
+Builds one self-contained HTML page with tabs, status cards, tables, checklists, callouts, code blocks, and flowcharts. The `omt-show` skill passes the page text to the T3 `html_render` tool. The same plan and spec give the same bytes on every run: the layout uses no clock and no randomness.
+
+**Arguments.**
+
+- `--plan <slug|file.md>` adds the tabs built from a plan (below). A value that ends in `.md` is a plan file path, resolved from the cwd; the page is then named after the header `slug`, else the file name, else `plan`. Any other value must be a plan slug of `.omt/plans/`. A missing plan exits 1 with `plan_not_found`.
+- `--spec <file|->` reads a JSON page spec, from stdin with `-`. A missing spec file exits 1.
+- `--out <path|->` writes the page to the path, or prints it to stdout with `-`. The default is `<evidence>/visuals/<slug>.html` with `--plan`, else `<evidence>/visuals/page-<first 12 hex of the page's sha256>.html`. The page is written with `writeFileAtomic`, which creates the directory.
+- `--json` prints `{ path, bytes, title, tabs, warnings }`, where `tabs` holds the tab titles. Without it, the command prints the page path, and each warning goes to stderr as `warning: <message>`. With `--out -`, warnings go to stderr.
+- Usage errors (exit 2): neither `--plan` nor `--spec`, `--json` with `--out -`, an invalid slug, and a positional argument.
+
+**Page spec.** The root is `{ title?, subtitle?, tabs? }`. `title` has 1 to 200 characters, `subtitle` 0 to 300, and `tabs` holds 0 to 8 tabs; without `--plan`, a spec needs at least 1 tab. A tab is `{ title, blocks }` with a title of 1 to 40 characters and 1 to 40 blocks. Each block has a `type`:
+
+| `type` | Fields |
+| --- | --- |
+| `text` | `text` (1 to 8000). Paragraphs split on blank lines. A paragraph whose lines start with `- ` or `* ` is a bullet list, and with `<n>. ` a numbered list. A line that starts with two spaces continues the item above. |
+| `cards` | `cards`: 1 to 6 of `{ title (1 to 60), value? (0 to 24), text? (0 to 300), tone? }`. |
+| `table` | `title?` (0 to 120), `columns` (1 to 8 strings of 0 to 120 characters), `rows` (0 to 80 arrays of strings of 0 to 2000 characters), `nowrap?` (0 to 8 column indexes). A row with fewer cells is padded and a row with more is cut, each with a warning. |
+| `checklist` | `title?`, `items`: 1 to 80 of `{ text (1 to 2000), state? }`, where `state` is `done`, `open` (default), or `blocked`. |
+| `callout` | `tone?`, `title?` (0 to 120), `text` (1 to 2000). |
+| `code` | `text` (1 to 8000). |
+| `flow` | `title` (1 to 120), `description?` (0 to 600, default the title), `nodes` (1 to 60), `edges` (0 to 120). |
+
+- `tone` is `info`, `ok`, `warn`, `bad`, or `muted` (default).
+- A node is `{ id, label, sub?, kind?, tone?, badge?, row?, col? }`: `id` matches `^[A-Za-z0-9_-]{1,40}$`, `label` has 1 to 120 characters, `sub` 0 to 160, `badge` 0 to 16, `row` 0 to 60, `col` 0 to 7. `kind` is `step` (default), `task`, `decision`, `start`, `end`, or `stop`. Node `tone` is `done`, `open`, or `blocked`.
+- An edge is `{ from, to, label?, dashed? }`; `label` has 0 to 24 characters.
+- Inline markup in `text`, card `text`, table cells, checklist items, and callout `text`: `` `code` `` and `**bold**`. A link `[text](url)` shows its text only, so the page loads no URL. All other text is HTML-escaped. Node labels, `sub`, and badges are plain text with the backticks removed.
+- Every problem of an invalid spec is listed in one error (exit 2) as `<JSON path>: <message>`, for example `$.tabs[1].blocks[3].edges[0].to: unknown node "zz"`. The problems are: not JSON, a wrong type, a missing required field, a value out of range, an unknown key, an unknown `type`, `kind`, `tone`, or `state`, a duplicate node id, and an edge to an unknown node.
+
+**Flow layout.**
+
+1. Back edges: a DFS from each node in input order, following edges in input order, marks an edge to a node on the DFS stack as a back edge.
+2. Rows: a node keeps its `row`. Otherwise its row is 0 with no forward in-edge, else 1 plus the highest row of its forward predecessors.
+3. Columns: nodes with `col` are placed first; each other node, in input order, takes the lowest free column of its row. A node whose cell is taken moves to the next free column with a warning. When no node of the flow has a `col`, each row is centered under the widest row (`K` nodes): a row of `k` nodes shifts right by `(K - k) / 2` columns. A flow with any `col` centers no row, so its main column stays straight.
+4. Size: with `K` at most 4, the canvas is 720 px wide and a column is `(720 - 56) / K` px; wider grids use 150 px columns. A node is 28 px narrower than its column. The label wraps on spaces at `floor((width - 22) / 7.1)` characters (`- 34` for a decision), and `sub` at `floor((width - 22) / 6.3)`. A word longer than the line breaks after the last `/` that fits, else after the last `-`, `_`, or `.` that fits, else at the line width. A label or `sub` longer than 4 lines is cut with `…` and a warning. Node height is `12 + 17 × label lines + (4 + 14 × sub lines, when there is a sub) + 8`, plus 6 for a decision. A row is as tall as its tallest node, and each node is centered in its row.
+5. Gaps between rows are at least 32 px, and 14 px plus 8 px per edge that runs across inside the gap. Each such edge gets its own lane in the gap. An edge that leaves a node above a given x takes a higher lane than an edge that drops into a node at that x.
+6. Routes are axis-aligned. A route is valid when no segment enters the box of a node other than its two ends (boxes grown by 4 px), nor the open inside of its own ends. Forward edges choose before back edges, and each edge takes its first valid candidate that shares no line with an earlier edge; edges that leave or enter the same node in the same direction may share a line. When every candidate shares a line, the first valid candidate stays.
+   - Forward edge: a straight line when both centers share `x`; down to the lane in the gap below the source, across, and down into the target; the same with the lane in the gap above the target; else the nearer side lane outside all nodes.
+   - Edge in the same row: a straight line between the facing sides; else down to the gap below the row, across, and up into the target's bottom.
+   - Back edge: up from the source top to the target's middle and across into its facing side; else across from the source's facing side and up into the target's bottom; else the right lane.
+   - Self-loop: out of the bottom, through the right lane, and back into the node.
+   - Side lanes are 16 px apart, and the canvas grows to hold them.
+7. An edge label sits on the edge's own part: when the path turns from a first vertical stub into a horizontal run, the label is centered 5 px above that run (or 13 px below it); a straight vertical start puts it 6 px beside the line, 13 px below a downward start or 5 px above an upward one; a horizontal start puts it centered 5 px above. A label that would overlap another label or a node box, or leave the canvas, takes the next of these places, in steps of 12 px. Then it tries places along each of its segments: centered 5 px above or 13 px below a horizontal run, from the middle toward each end in 24 px steps, and 6 px beside a vertical run on both sides in 12 px steps. A first vertical stub that turns into a horizontal run gets no such places. When no place inside the canvas is free, the canvas grows right or down if that frees a place. Else the label takes its first place inside the canvas, with the warning `flow "<title>": the label "<text>" of edge <from> -> <to> overlaps another label or a node`. Labels have a 4 px halo in the page background color.
+8. SVG numbers are rounded to one decimal place. `layoutFlow(block)` returns the node boxes and edge segments, and `renderFlow(block, id)` returns the SVG; ids are `f<tab>-<block>`, so no spec text reaches an id.
+
+**Plan tabs** (`--plan`).
+
+- Title: the plan's `# ` title. Subtitle: `plan <slug> · <n> units in <L> layers · <done>/<n> done`, plus ` · budget <max-tasks> tasks` when the header has `max-tasks`.
+- `Summary`: a `text` block with the `## Summary` section; when it is missing or empty, the `## Objective` section and the warning `plan has no ## Summary; showing ## Objective`. Then cards: `Units`, `Done`, `Checks`, and `Budget` (with `max-tasks` only).
+- `Units`: the flow `Units by dependency layer`, one `task` node per unit with label `<id> <title>`, the role as `sub`, and the unit state as `tone`. A label longer than 3 lines at the widest layer's width is shortened at a word with `…`; the table keeps the full title. The `U<n>` tokens of a unit's `Depends on:` line that name a unit of the plan are its dependencies; other tokens stay in the table only, and a `U<n>` that names no unit, a unit that names itself, and a cycle each give a warning. Edges are the transitive reduction of the dependencies, so row `r` is layer `L<r + 1>`. Then a table: `Unit`, `Title`, `Role`, `Depends on`, `State`.
+- `Checks`: checklists `Done when` (the `D` items) and `Final verification` (the `F` items).
+- Unit fields are the lines `  - <Field>: <value>` after a unit line, up to the next item or heading. Lines inside code fences are never items, fields, or headings, but a section keeps its fenced text. A fence closes only on a line of the opening character (`` ` `` or `~`) that is at least as long as the opening fence; a fence that does not close runs to the end of the plan.
+- Merge: the spec's `title` and `subtitle` win. A spec tab with the same title as a built tab adds its blocks to that tab. Other spec tabs follow, in spec order.
+
+**Page.** One document: a doctype, `<html lang="en">`, a charset and a viewport meta, a `<title>`, one inline `<style>`, the body, and one inline `<script>` that runs the tabs. No element loads a resource: no `<link>`, no `src=`, no `@import`, no URL. Colors come from `--o-*` variables that read the T3 theme variables (`--foreground`, `--background`, `--muted-foreground`, `--border`, `--info`, `--success`, `--warning`, `--warning-surface`, `--destructive`, `--code-background`, `--font-sans`, `--font-mono`, `--radius`) with light fallbacks and dark fallbacks under `prefers-color-scheme: dark`. The header is an `h2` title and a subtitle line. A page with more than 1 tab has `button role="tab"` elements and `section role="tabpanel"` panels; the script shows the first panel and hides the others, so a reader without script sees every panel. A flow sits in a wrapper that scrolls sideways, with `width: 100%`, `min-width: 520px`, and `max-width` the canvas width, and a legend of the node kinds and tones it uses; each tone swatch has the kind of the first node with that tone.
+
 ## 6. Config
 
 ### 6.1 Files and layering
@@ -541,7 +606,7 @@ A missing file is not an error. Each file is JSONC (section 7).
 
 `validateLayer(value, source)` returns `{ layer: ConfigLayer, issues: ConfigIssue[] }`. It prunes invalid parts and keeps valid ones.
 
-- The root must be an object. Allowed keys: `$schema` (string, ignored), `version` (must equal 1), `roles` (object), and `limits` (object). An unknown key is an error, and the key is dropped.
+- The root must be an object. Allowed keys: `$schema` (string, ignored), `version` (must equal 1), `roles` (object), `limits` (object), and `visuals` (object). An unknown key is an error, and the key is dropped.
 - A role name matches `^[a-z][a-z0-9-]{0,31}$`. A role value is `null` (remove the role) or an object.
 - Allowed role keys and values:
   - `description`: a non-empty string of at most 300 characters.
@@ -559,6 +624,7 @@ A missing file is not an error. Each file is JSONC (section 7).
   - `effort`: a value from the effort ladder.
   - `options`: an object whose values are strings or booleans.
 - Allowed limit keys and integer ranges: `maxParallel` 1 to 32, `maxTasksPerRun` 1 to 500, `maxDepth` 0 to 3, `maxReviewRounds` 1 to 10. An invalid limit is dropped with an error.
+- `visuals` must be an object, else it is an error and the whole key is dropped. Its only key is `plan`, a boolean. An unknown key or a non-boolean value is an error, and only that key is dropped.
 
 ### 6.3 Merging
 
@@ -573,6 +639,7 @@ A missing file is not an error. Each file is JSONC (section 7).
   - `runtimeMode`: `inherit`.
   - `crossFamily` stays unset, which counts as `false`.
 - Each limit field replaces the old value.
+- Each `visuals` field replaces the old value.
 
 `loadConfig({ cwd, env, homedir })` reads, parses, validates, and merges the layers. It returns a `LoadedConfig`. A JSONC syntax error in a file becomes one error issue, and that file is skipped. Only unexpected I/O errors throw.
 
@@ -620,13 +687,15 @@ Role descriptions (shown to agents in `omt roles` and in skills):
 
 Default limits: `maxParallel` 4, `maxTasksPerRun` 24, `maxDepth` 1, `maxReviewRounds` 3.
 
+Default visuals: `plan` is `true`. omt-plan then shows a final plan as a page in the T3 thread (section 15.2). With `false`, omt-plan writes the plan summary in its reply instead.
+
 ### 6.5 Starter files
 
-`src/config/starter.ts` exports two strings. `omt config init` and `omt install` write the user starter. `omt init` writes the project starter. Both are sparse. They hold `$schema`, `version`, empty `roles` and `limits` objects, and comments with one example override and a pointer to `omt config show --defaults`. The `$schema` URL is `https://raw.githubusercontent.com/gabimoncha/oh-my-t3code/main/schema/omt.schema.json`.
+`src/config/starter.ts` exports two strings. `omt config init` and `omt install` write the user starter. `omt init` writes the project starter. Both are sparse. They hold `$schema`, `version`, empty `roles` and `limits` objects, and comments with one example override, a commented `"visuals": { "plan": false }` line, and a pointer to `omt config show --defaults`. The `$schema` URL is `https://raw.githubusercontent.com/gabimoncha/oh-my-t3code/main/schema/omt.schema.json`.
 
 ### 6.6 JSON Schema
 
-`src/config/schema.ts` exports the JSON Schema (draft 2020-12) for a config file as a plain object. `scripts/build-schema.ts` writes it to `schema/omt.schema.json` with 2-space indentation and a final newline. A test fails when the committed file differs from the generated output. Another test checks that the schema allows exactly the keys that `validateLayer` allows. The role definition includes `crossFamily` with `type: "boolean"`.
+`src/config/schema.ts` exports the JSON Schema (draft 2020-12) for a config file as a plain object. `scripts/build-schema.ts` writes it to `schema/omt.schema.json` with 2-space indentation and a final newline. A test fails when the committed file differs from the generated output. Another test checks that the schema allows exactly the keys that `validateLayer` allows. The role definition includes `crossFamily` with `type: "boolean"`. `visuals` is an object with `additionalProperties: false` and a boolean `plan`.
 
 ## 7. JSONC
 
@@ -894,6 +963,10 @@ Severity meanings for review findings: P0 breaks the build, loses data, or opens
 
 <!-- omt-plan v1 slug=<slug> created=<ISO timestamp> -->
 
+## Summary
+
+<at most 15 lines for the owner: what changes for them, the work and its task budget, the main risk, the open decisions, and what is not in this plan>
+
 ## Objective
 
 <what changes for the user, in one paragraph>
@@ -929,7 +1002,7 @@ Severity meanings for review findings: P0 breaks the build, loses data, or opens
 - <ISO timestamp> plan created
 ```
 
-`--light` leaves out the `F2` line. The `## Research` section is in both forms. `--max-parallel <n>` adds ` max-parallel=<n>` before the `-->` of the header comment. `--max-tasks <n>` adds ` max-tasks=<n>` after it. `omt plan mark` appends its log lines after the last line.
+`--light` leaves out the `F2` line. The `## Summary` and `## Research` sections are in both forms. `--max-parallel <n>` adds ` max-parallel=<n>` before the `-->` of the header comment. `--max-tasks <n>` adds ` max-tasks=<n>` after it. `omt plan mark` appends its log lines after the last line.
 
 ### 12.2 Grammar and status
 
@@ -1268,11 +1341,12 @@ User scope and project scope never read or write each other's files.
 | --- | --- | --- |
 | `omt` | user | Router. Lists the omt workflows, when to use each, and the shared references. |
 | `omt-ulw` | model | Ultrawork loop: mode and branch check, frame, route, explore, plan, dispatch, review, test, fix, final gate, report. Trigger words: ulw, ultrawork, build or fix with subagents in T3. |
-| `omt-plan` | model | Planning: read-only exploration, owner-decision questions only, asked in one message after all independent work (research and a draft plan), a task budget question for a HEAVY plan, plan file with a `## Research` section, an optional `omt plan limit`, and the task budget set with `omt plan limit <slug> --tasks <n>`, plan-review rounds (round 1 with one reviewer per family) with a frozen blocker list, handoff. |
+| `omt-plan` | model | Planning: read-only exploration, owner-decision questions only, asked in one message after all independent work (research and a draft plan), a task budget question for a HEAVY plan, plan file with a `## Research` section, an optional `omt plan limit`, and the task budget set with `omt plan limit <slug> --tasks <n>`, plan-review rounds (round 1 with one reviewer per family) with a frozen blocker list, a `## Summary` filled last, handoff that shows the plan as a page with `omt-show` (or writes the summary in the reply when `visuals.plan` is `false`). |
 | `omt-design` | model | Design pass before UI units: mode and branch check, frame and slug, one `design` task for 3 variants of each screen (or the count the owner asks for) in a new Paper file named after the project, with screenshots, owner checkpoint (screenshots grouped by screen, pick one variant per screen and steer in one message; the owner may mix variants across screens), `design` rounds with the owner's words verbatim until the owner approves or `maxReviewRounds`, design spec `docs/design/<slug>.md`, handoff to `ui` units that cite it. |
 | `omt-review` | model | Review of uncommitted changes, a branch, a commit, or a PR. Reviewer count by diff size, grouping by file locality, a fresh task per round, a final oracle pass, merged findings. |
 | `omt-research` | model | Parallel read-only research into a cited report. |
 | `omt-swarm` | user | Independent tracks in separate worktree threads with `t3_thread_launch`, stacked branches, `link_pull_request`, and `watch_pull_request`. Invoking it is the explicit user request that T3 requires for new threads. |
+| `omt-show` | model | A page in the T3 thread with flowcharts, tables, and status cards. The skill writes a page spec (section 5.9) with only what the built tabs do not show, builds the page with `omt visual`, and passes the page text to `html_render` with `height` 2000. Without `html_render`, the page file is the result. Reference: `references/page-spec.md`. |
 | `omt-loop` | user | Keep work going across turns. On Claude and Codex threads, it asks the user to type `/goal <objective>`; no MCP tool sets a goal. Otherwise it uses a `schedule_task` heartbeat bound to the thread, a condition command, and a hard iteration cap counted in the ledger. It deletes the schedule when done. |
 
 Rules that the skills must carry:
@@ -1291,6 +1365,8 @@ Rules that the skills must carry:
 - `omt-ulw`, `omt-plan`, `omt-review`, and `omt-research` start with a step 0 that calls `t3_thread_configuration` with no `threadId` and reads `interactionMode`. In `plan` mode they dispatch only read-only roles, write no files, and deliver the result in the final message, or ask the user to switch to default mode. No skill calls `orchestrator_capabilities` to read its modes, because that result holds the full provider and model catalog.
 - Step 0 of `omt-ulw` and `omt-plan` also links to the branch check in `delegation.md`. It finds the default branch from the repository metadata (`refs/remotes/origin/HEAD`, then `init.defaultBranch` when that branch exists, then `main` or `master`) and counts `git rev-list --count HEAD..<default>`. When the count is above 0, `plan` mode only reports it. `default` mode runs `git merge --ff-only <default>` when the worktree is clean and `HEAD` is an ancestor of the default branch; otherwise it reports the count and asks the user. When no default branch is found, the skill skips the check and says so.
 - `omt-plan` asks every owner decision in one message, after it has finished all work that does not depend on the answers. It fills `## Research` with each question, its answer, and its sources. When units share build state that parallel workers would race on, it runs `omt plan limit <slug> 1` and says why in the plan. For a HEAVY plan, the owner decisions include the task budget. The recommendation is the tasks the plan already used (`dispatched` in `omt ledger stats --plan <slug>`), plus 4 for the plan-review rounds, plus 5 per unit, plus 1 more per `ui` unit, plus 3 for the final gate, plus 5 when the plan has an `omt-design` step, rounded up to a multiple of 10. After the answer, the skill runs `omt plan limit <slug> --tasks <n>`; in plan mode it gives the budget in its final message. It edits and hashes the plan at the absolute path that `omt plan status <slug>` prints, also from a worktree. It makes every plan edit, `omt plan limit` included, before it computes the hash. After any later edit, header edits included, it computes the hash again before the next brief.
+- Every plan has a `## Summary` of at most 15 lines for the owner, in plain words with no `path:line` citations and no code blocks. The `plan` persona writes it last, and `omt-plan` step 3 updates it after each review fix. The `plan-review` persona blocks a summary line that the rest of the plan does not support. `omt-ulw` fills it last in a LIGHT plan too.
+- `omt-plan` step 5 shows the plan before it hands off, also when `omt-ulw` called it. It reads `visuals.plan` from `omt config show`. When the value is `true` and the harness has `html_render`, it runs `omt-show` with the plan slug (in `plan` mode, with the temp plan file, and `omt-show` writes the page to `$TMPDIR`). When the page is in the thread, the reply leaves the summary out. Otherwise, also when `omt-show` could not show the page, the reply holds the `## Summary` text in full. Either way the reply gives the plan path, the review result, and each open decision.
 - Skills write and name evidence files in the directory that `omt paths --evidence` prints, never under a path relative to `.omt/evidence/`, so a worktree uses the shared evidence directory.
 - Skills tick plan items with `omt plan mark` and create LIGHT plans with `omt plan new <slug> --light`. They record a dispatch with `--task-id`, `--provider`, and `--model`, and the result with the same plan, unit, role, round, and attempt, without the task id. `--provider` is `target.providerInstanceId`, or `target.driverKind` when the target has no instance id, and `--model` is `target.model`, both from the target of the `delegate_task` call that returned the task. After a fallback, that is the fallback's target.
 - Fix rounds: rounds count per cycle, which starts at the unit's first dispatch or at a reopen. Round 1 of the first cycle uses the unit's planned role. Every later round, and round 1 after a reopen, is a fix. A failed review or test in round `maxReviewRounds` of a cycle stops the unit and asks the user. The `--round` value in briefs and in the ledger goes on rising across cycles. A fix is `deep` only when an open finding needs investigation: its cause is unknown, the previous fix failed for the same reason, or the fix changes the design. Otherwise the fix is `execute`. A `ui` unit uses `ui` in every round. Before each fix round, the conductor runs a relevance check. It keeps a finding that breaks a done condition, a plan requirement, or the correctness of the changed code for inputs the plan covers. It drops the others: a style preference, an input or a state that the plan rules out, a case that cannot happen in the planned flow, or a missing test for a done condition that already has a check that can fail. It keeps a missing check on an input shaped like real data for code that reads outside data. It never drops a finding because its case is rare or unlikely; a race or an order of events that the planned flow allows breaks correctness. It records each dropped finding with its reason under `Log` in the plan and in the next `--prior-file`. When it drops every finding, the unit goes to step 8 (test). When it drops every finding of an oracle round, it records the drops under `Log` in the plan and marks `F2` done, and the report lists the dropped oracle findings. From oracle round 2, the oracle brief passes the earlier oracle findings with the conductor's response to each in `--prior-file`. Oracle rounds count against `maxReviewRounds` too.
@@ -1337,6 +1413,7 @@ Required coverage:
 - Project install: the files of section 14.8, an idempotent rerun, `--dry-run`, the exclude file for a `.git` directory and a worktree `.git` file, block replacement, no `.git`, `--no-git-exclude` (also on a reinstall, and its `.omt/.gitignore` restore), the conditional `.omt` and `settings.local.json` lines, the hook in `settings.local.json`, uninstall with a locally modified skill and `--purge`, `--targets gemini` (exit 2), a temp `cliPath`, and the shim conflict and update. Also: a copied project, a moved clone round trip, a tracked manifest with paths outside the root, a symlinked path to the root, the home directory as the root (exit 2), a dangling settings symlink, a failed scratch delete, glob characters in a package path, worktrees, a block whose root is gone, the exact bytes of the exclude file, a kept created `settings.local.json`, and a kept ledger. Also: a reinstall that appends `plans/` to an unedited `.omt/.gitignore` that an earlier install created, and one that leaves an edited file alone. Also: uninstall, reinstall, and a second uninstall after each kind of kept created file, each with an empty `git status`; an uninstall that fails midway; a symlinked exclude file and `.omt/.gitignore`; a crafted tracked manifest that names project files; a package copied inside the same repository; and the exact paths that stay after a failed install and its uninstall.
 - Doctor: each status that the table in section 14.7 defines, with `nodeVersion` injected through the context.
 - Skills: frontmatter rules, every relative link resolves, a persona file for every default role, a contract file for every result kind.
+- Visual: spec errors with JSON paths, unknown keys, escaping of every text field (also an SVG label `<script>alert(1)</script>`), inline markup, byte-identical output, back edges, no edge that crosses a node on any fixture flow, label sides at a shared stub, row centering with and without a pinned column, the transitive reduction, the 6 layers of a plan shaped like `workflow-profiles`, non-unit dependency tokens, a plan with no `## Summary`, and the command: `--out -`, `--json`, the default paths, a plan file path, and the usage errors.
 - Schema: the committed schema equals the generated one, and it allows the same keys as the validator.
 - CLI: `--help`, `--version`, an unknown command (exit 2), and an unknown flag (exit 2), run as a child process.
 - Commands: `roles`, `route`, `brief`, and `doctor` in `test/commands/`, including the `brief --json` payload fields, the title rule, `brief --json --against` with its target and fallbacks, `route --against auto` against a ledger, and the `CROSS` column and `crossFamily` field of `omt roles`.

@@ -19,6 +19,7 @@ omt turns this T3 thread into a conductor: it plans, delegates each unit to a ro
 | `omt-research` | The user wants a cited answer from this repository, docs, or the web, with no code changes. |
 | `omt-swarm` | The user asks for separate threads: independent tracks in their own worktrees, each ending in a PR. |
 | `omt-loop` | The user wants the work to keep going across turns until a condition holds. |
+| `omt-show` | The user wants to see a plan, a flow, or a status as a page with flowcharts and tables. `omt-plan` runs it when it hands off a plan. |
 
 Each skill name works as a composer mention: `$omt-ulw` becomes `/omt-ulw` in Claude and Cursor, `/skill:omt-ulw` in Pi, and stays `$omt-ulw` in Codex.
 
@@ -38,7 +39,8 @@ To find the CLI (`omt`, `.omt/bin/omt`, or the manual steps), follow [The CLI](r
 | `omt ledger add --plan <slug> --unit <id> --role <r> --round <n> --attempt <n> --status <s> ...` | appends one ledger entry; a terminal entry closes the matching dispatched entry ([results.md](references/results.md#recording)) |
 | `omt ledger stats --plan <slug>` | `dispatched` and `active` counts, the limits, and `can dispatch: yes` or `no` |
 | `omt ledger request-id --plan <slug> --unit <id> --role <r> --round <n> --attempt <n>` | the `clientRequestId` |
-| `omt config show` | the effective config, including limits |
+| `omt config show` | the effective config, including limits and `visuals` |
+| `omt visual [--plan <slug>] --spec - --json` | path of a self-contained HTML page: the plan's summary, units by dependency layer, and checks, plus the tabs of the spec ([page-spec.md](../omt-show/references/page-spec.md)) |
 
 ## Shared references
 

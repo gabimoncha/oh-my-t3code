@@ -134,4 +134,7 @@ export const DEFAULT_CONFIG: OmtConfig = {
     maxDepth: 1,
     maxReviewRounds: 3,
   },
+  visuals: {
+    plan: true,
+  },
 };

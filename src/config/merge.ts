@@ -51,5 +51,6 @@ export function mergeLayer(
     }
   }
   Object.assign(config.limits, layer.limits ?? {});
+  Object.assign(config.visuals, layer.visuals ?? {});
   return { config, issues };
 }

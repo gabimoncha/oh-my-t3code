@@ -40,6 +40,7 @@ Done when: every decision is settled from evidence or answered by the user.
 `omt plan status <slug>` prints the absolute plan path, also from a worktree. Steps 3 and 4 edit and hash the plan at that path. When the plan exists, edit it. Otherwise run `omt plan new <slug> --title "<title>"`, after `omt init` when `.omt/.gitignore` is missing. Keep an existing plan: pass no `--force`. Fill every section. The persona in [roles/plan.md](../omt/references/roles/plan.md) is the standard. For a large plan, you may dispatch it to a `plan` task instead.
 
 - `Done when` items are checks that can fail.
+- Fill `## Summary` last, by the summary rule in [roles/plan.md](../omt/references/roles/plan.md), and update it after each review fix. A plan that has no `## Summary` gets one between the header line and `## Objective`.
 - When a unit reads outside data, such as recordings, files, or API responses, its done condition includes a check on an input shaped like real data: one captured from a real source, or with the properties real data has, such as offsets, gaps, and sizes. A seeded or ideal sample alone hides real-data defects.
 - Each unit has a role, a scope, a done condition, a verify command, and its dependencies.
 - Units with no dependency between them have disjoint scopes.
@@ -73,8 +74,10 @@ Done when: a round returned `APPROVE`, or the round count reached `maxReviewRoun
 
 ### 5. Hand off
 
+Show the plan to the owner first, also when `omt-ulw` called this skill. Run `omt config show` and read `visuals.plan`. When it is `true` and you have the T3 `html_render` tool, run the `omt-show` skill with the plan slug (in `plan` mode, with the temp plan file of step 4). When the page is in the thread, it holds the summary, so the reply leaves the summary out. Otherwise, write the `## Summary` text in full in the reply, also when `omt-show` could not show the page. Either way, the reply gives the plan path, the review result, and each decision still open.
+
 When `omt-ulw` called this skill and a round returned `APPROVE` (approval with notes counts), return to its step 5 with the plan slug. Step 5 starts with the design check, so the `omt-design` step runs before any `ui` unit is dispatched. When the rounds ended at `maxReviewRounds` with blockers open, stop and give the user the open blockers; start no units.
 
-Otherwise stop and summarize for the user: the plan path, the unit count, the review result, and any decision still open. Start no units.
+Otherwise stop. Start no units.
 
-Done when: the user, or the `omt-ulw` run, has the plan path and the review result.
+Done when: the owner has the summary, on the page or in the reply, and the user, or the `omt-ulw` run, has the plan path and the review result.

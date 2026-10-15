@@ -50,6 +50,12 @@ The CLI cannot call T3 itself. Claude and Codex sessions get the T3 MCP server t
 
 The skills also work without the CLI. They tell the agent to try a role's chain in order and to fall back on a typed T3 error. T3 is the final validator either way.
 
+### The owner sees a plan as a page
+
+The owner does not read long plans. Each plan therefore opens with a summary of at most 15 lines in plain words, and a plan reviewer blocks a summary line that the plan does not support, because the owner may read nothing else. A summary still hides the shape of the work: which units wait for which, and how a new process runs. T3 renders no flowcharts in chat, but its `html_render` tool shows an HTML page above the agent's reply. So when a plan is final, `omt-plan` shows it as a page with the summary, the units as a flowchart by dependency layer, the checks, and up to 3 flowcharts or tables of the design.
+
+The split follows the rule of the section above. The `omt-show` skill decides what to draw, which needs judgment. `omt visual` lays out the page: the rows of a flowchart, the edge routes, the text wrapping, and the escaping. Agents that draw SVG by hand get coordinates wrong, edges cross boxes, and each page looks different. A fixed layout gives every plan the same look and a check for crossing edges. The page uses T3's theme variables, so it follows the reader's light or dark theme. The owner can turn the page off with `visuals.plan`, and then the summary goes in the reply as text.
+
 ### Briefs and result contracts
 
 A child sees nothing of the parent conversation. Every task therefore carries a brief with a fixed shape: role persona, task, context, scope, constraints, done condition, verify commands, and the required final message format. OmO's worker contract (task, deliverable, scope, verify, stop condition) is the model for this.

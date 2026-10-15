@@ -48,6 +48,17 @@ export const CONFIG_SCHEMA = {
         maxReviewRounds: limit("maxReviewRounds", "Most review rounds for one unit."),
       },
     },
+    visuals: {
+      type: "object",
+      description: "Visual pages that omt shows in the T3 thread.",
+      additionalProperties: false,
+      properties: {
+        plan: {
+          type: "boolean",
+          description: "Show a final plan as a page in the T3 thread. Default true.",
+        },
+      },
+    },
   },
   $defs: {
     role: {

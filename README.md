@@ -162,9 +162,23 @@ This example turns off cross-family review. Then `review` always starts on GPT-6
 
 A `chain` replaces the old chain as a whole. Other fields of the role keep their values. In a rung, `provider` names one T3 provider instance and `driver` names its driver. Set a role to `null` to remove it.
 
+## Plan pages
+
+When a plan is final, `omt-plan` shows it as a page in the T3 thread. The page has the plan summary, status cards, the units as a flowchart by dependency layer, a unit table, the checks, and flowcharts and tables that explain the design. T3 draws no flowcharts in chat, so `omt visual` builds the page and the T3 `html_render` tool shows it. A copy stays in the evidence directory (`omt paths --evidence`), under `visuals/<slug>.html`, so you can also open it in a browser.
+
+To get the plan summary as text in the reply instead, turn the page off in your config:
+
+```jsonc
+{
+  "visuals": { "plan": false }
+}
+```
+
+You can also ask for a page at any time, for example "show me the plan as a flowchart". That runs `omt-show`.
+
 Useful commands:
 
-- `omt config show --defaults` prints the built-in roles and limits.
+- `omt config show --defaults` prints the built-in roles, limits, and visuals.
 - `omt config show` prints the effective config.
 - `omt config validate` reports problems in your files.
 
@@ -177,11 +191,12 @@ Useful commands:
 | `omt-design` | You want designs, mockups, or screens before UI work. You pick one of 3 variants for each screen and steer them. |
 | `omt-review` | You want a review of uncommitted changes, a branch, a commit, or a pull request. |
 | `omt-research` | You need a cited answer from the repository, library docs, or the web. |
+| `omt-show` | You want to see a plan, a flow, or a status as a page with flowcharts and tables. `omt-plan` runs it when it hands off a plan. |
 | `omt-swarm` | You have independent tracks that should each run in their own worktree thread and end in a pull request. You start it yourself. |
 | `omt-loop` | Work must continue across turns until a condition holds. You start it yourself. |
 | `omt` | You want the list of workflows, the CLI commands, and the shared references. You start it yourself. |
 
-The agent can pick the first five on its own. You start the last three by name.
+The agent can pick the first six on its own. You start the last three by name.
 
 ## Commands
 
@@ -197,6 +212,7 @@ The agent can pick the first five on its own. You start the last three by name.
 | `omt brief <role> --task <text>` | Renders a child brief, or a full `delegate_task` payload with `--json`. |
 | `omt plan` | Creates plan files and shows their progress. `plan new <slug> --light` leaves out the oracle item. `plan mark <slug> <id> <done\|open\|blocked>` ticks one item. |
 | `omt ledger` | Records and counts delegated tasks in `.omt/ledger.jsonl`. A result entry (`completed`, `failed`, and the other terminal statuses) closes the dispatch with the same `--task-id`, or with the same plan, unit, role, round, and attempt. |
+| `omt visual` | Builds a self-contained HTML page with flowcharts, tables, and status cards. `--plan <slug>` adds the plan's summary, unit flowchart, and checks; `--spec` adds tabs from a JSON page spec. |
 | `omt hook user-prompt-submit` | Runs the Claude Code hook. The hook calls it, not you. |
 
 Every command accepts `--help`. [`docs/spec.md`](docs/spec.md) describes each command in detail.
@@ -212,7 +228,7 @@ Every command accepts `--help`. [`docs/spec.md`](docs/spec.md) describes each co
 | `~/.config/oh-my-t3code/install.json` | The manifest of what the install added. |
 | `~/.config/oh-my-t3code/backups/` | Backups of anything that the install replaced or edited. |
 | `~/.claude/settings.json` | One `UserPromptSubmit` hook entry, only with `--hooks`. Other settings stay unchanged. |
-| `.omt/` in a project | The project config, the plans, the ledger, and evidence files. |
+| `.omt/` in a project | The project config, the plans, the ledger, and evidence files, including the plan pages under `evidence/visuals/`. |
 
 Each installed skill directory holds a `.omt-managed.json` marker. The install never overwrites a path that it does not manage, unless you pass `--force`. With `--force`, it moves the old path to the backups directory first.
 

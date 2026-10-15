@@ -35,16 +35,22 @@ export interface Limits {
   maxReviewRounds: number;
 }
 
+export interface Visuals {
+  plan: boolean;
+}
+
 export interface OmtConfig {
   version: 1;
   roles: Record<string, RoleConfig>;
   limits: Limits;
+  visuals: Visuals;
 }
 
 export interface ConfigLayer {
   version?: 1;
   roles?: Record<string, Partial<RoleConfig> | null>;
   limits?: Partial<Limits>;
+  visuals?: Partial<Visuals>;
 }
 
 export type IssueSeverity = "error" | "warning";

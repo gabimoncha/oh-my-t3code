@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { CONFIG_SCHEMA } from "../../src/config/schema.ts";
-import { LIMIT_KEYS, LIMIT_RANGES, ROLE_KEYS, ROOT_KEYS, RUNG_KEYS } from "../../src/config/validate.ts";
+import { LIMIT_KEYS, LIMIT_RANGES, ROLE_KEYS, ROOT_KEYS, RUNG_KEYS, VISUALS_KEYS } from "../../src/config/validate.ts";
 import { formatJson } from "../../src/util/output.ts";
 import { EFFORT_LADDER } from "../../src/types.ts";
 import { PACKAGE_ROOT } from "../helpers.ts";
@@ -25,11 +25,13 @@ test("the schema allows exactly the keys that validateLayer allows", () => {
   assert.deepEqual(sorted(Object.keys(s.$defs.role.properties)), sorted(ROLE_KEYS));
   assert.deepEqual(sorted(Object.keys(s.$defs.rung.properties)), sorted(RUNG_KEYS));
   assert.deepEqual(sorted(Object.keys(s.properties.limits.properties)), sorted(LIMIT_KEYS));
+  assert.deepEqual(sorted(Object.keys(s.properties.visuals.properties)), sorted(VISUALS_KEYS));
+  assert.equal(s.properties.visuals.properties.plan.type, "boolean");
 });
 
 test("every object that the validator closes has additionalProperties false", () => {
   const s = CONFIG_SCHEMA;
-  for (const node of [s, s.properties.limits, s.$defs.role, s.$defs.rung]) {
+  for (const node of [s, s.properties.limits, s.properties.visuals, s.$defs.role, s.$defs.rung]) {
     assert.equal(node.additionalProperties, false);
   }
 });

@@ -59,6 +59,7 @@ test("the bundled skills are all present", () => {
     "omt-plan",
     "omt-research",
     "omt-review",
+    "omt-show",
     "omt-swarm",
     "omt-ulw",
   ]);
@@ -295,6 +296,28 @@ test("omt-plan hashes the plan after every edit", () => {
   const rounds = section(readSkill("omt-plan"), "### 4. ");
   assert.match(rounds, /Make every plan edit first, `omt plan limit` included\. Then compute the hash/);
   assert.match(rounds, /After any edit to the plan, header edits included, compute the hash again before the next brief\./);
+});
+
+test("omt-plan shows the final plan as a page unless visuals.plan is off, and every plan has a summary", () => {
+  const plan = readSkill("omt-plan");
+  const handOff = section(plan, "### 5. ");
+  assert.match(handOff, /Show the plan to the owner first, also when `omt-ulw` called this skill\./);
+  assert.match(handOff, /Run `omt config show` and read `visuals\.plan`\. When it is `true` and you have the T3 `html_render` tool, run the `omt-show` skill with the plan slug/);
+  assert.match(handOff, /Otherwise, write the `## Summary` text in full in the reply, also when `omt-show` could not show the page\./);
+  assert.match(section(plan, "### 3. "), /Fill `## Summary` last, by the summary rule in \[roles\/plan\.md\]/);
+  assert.match(section(readSkill("omt-ulw"), "### 4. "), /`## Summary` last by the rule in \[roles\/plan\.md\]/);
+  const rolesDir = join(SKILLS_DIR, "omt", "references", "roles");
+  assert.match(readFileSync(join(rolesDir, "plan.md"), "utf8"), /Write `## Summary` last, in at most 15 lines for the owner/);
+  assert.match(readFileSync(join(rolesDir, "plan-review.md"), "utf8"), /6\. A line of `## Summary` that the rest of the plan does not support\./);
+});
+
+test("omt-show builds the page with omt visual and shows it with html_render", () => {
+  const show = readSkill("omt-show");
+  assert.match(section(show, "### 2. "), /omt visual --plan <slug> --spec - --json <<'EOF'/);
+  assert.match(section(show, "### 2. "), /In `plan` mode, write no file in the project: add `--out "\$TMPDIR\/omt-<slug>-page\.html"`/);
+  assert.match(section(show, "### 3. "), /Call `html_render` with the exact page text as `html`, the page title as `title`, and `2000` as `height`\./);
+  assert.match(section(show, "### 3. "), /When the harness has no `html_render`, or the call fails, the page file is the result\./);
+  assert.match(readSkill("omt"), /\| `omt-show` \|/);
 });
 
 test("delegation.md names the plan task budget in the limits and the stalled-run text", () => {

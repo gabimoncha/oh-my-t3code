@@ -68,7 +68,7 @@ Done when: you can name the files and functions each unit will change, each with
 
 When `.omt/.gitignore` is missing, run `omt init` first.
 
-- LIGHT: run `omt plan new <slug> --light` and fill it yourself. The plan has no `F2` oracle item.
+- LIGHT: run `omt plan new <slug> --light` and fill it yourself, `## Summary` last by the rule in [roles/plan.md](../omt/references/roles/plan.md). The plan has no `F2` oracle item.
 - HEAVY: run the `omt-plan` skill with the slug before any plan file exists. It creates the plan, runs the `plan-review` rounds, and returns here.
 
 Each unit has a role, a scope, a done condition, a verify command, and its dependencies. Units without a dependency between them have disjoint scopes. A unit that reads outside data, such as recordings, files, or API responses, has a done condition on an input shaped like real data, also in a LIGHT plan. Every done condition from step 1 maps to a unit or a final check.
