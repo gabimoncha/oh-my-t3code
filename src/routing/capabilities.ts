@@ -6,6 +6,7 @@ import type {
   ProviderCapability,
 } from "../types.ts";
 import { OmtError } from "../util/errors.ts";
+import { isRecord } from "../util/json.ts";
 
 type Json = Record<string, unknown>;
 
@@ -15,12 +16,8 @@ function fail(message: string): never {
   });
 }
 
-function isObject(value: unknown): value is Json {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 function hasProviders(value: unknown): value is Json {
-  return isObject(value) && Array.isArray(value.providers);
+  return isRecord(value) && Array.isArray(value.providers);
 }
 
 function tryParse(text: string): unknown {
@@ -33,7 +30,7 @@ function tryParse(text: string): unknown {
 
 function fromContentItems(items: unknown[]): Json | undefined {
   for (const item of items) {
-    if (!isObject(item) || item.type !== "text" || typeof item.text !== "string") continue;
+    if (!isRecord(item) || item.type !== "text" || typeof item.text !== "string") continue;
     const parsed = tryParse(item.text);
     if (hasProviders(parsed)) return parsed;
   }
@@ -42,7 +39,7 @@ function fromContentItems(items: unknown[]): Json | undefined {
 
 function unwrap(value: unknown): Json {
   if (hasProviders(value)) return value;
-  const items = Array.isArray(value) ? value : isObject(value) && Array.isArray(value.content) ? value.content : undefined;
+  const items = Array.isArray(value) ? value : isRecord(value) && Array.isArray(value.content) ? value.content : undefined;
   const found = items === undefined ? undefined : fromContentItems(items);
   if (found === undefined) {
     fail("expected an object with a providers array, or an MCP content wrapper that holds one");
@@ -71,7 +68,7 @@ function optionalArray(obj: Json, key: string, where: string): unknown[] {
 }
 
 function objectAt(value: unknown, where: string): Json {
-  if (!isObject(value)) fail(`${where} must be an object`);
+  if (!isRecord(value)) fail(`${where} must be an object`);
   return value;
 }
 

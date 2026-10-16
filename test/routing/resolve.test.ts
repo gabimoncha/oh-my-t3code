@@ -1,32 +1,11 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { test } from "node:test";
 import { DEFAULT_CONFIG } from "../../src/config/defaults.ts";
-import { parseCapabilities } from "../../src/routing/capabilities.ts";
 import { resolveAll, resolveRole, toRouteOutput } from "../../src/routing/resolve.ts";
 import type { Capabilities, ProviderCapability, RoleConfig, Rung } from "../../src/types.ts";
 import { OmtError } from "../../src/util/errors.ts";
-import { PACKAGE_ROOT } from "../helpers.ts";
-
-const FIXTURE = readFileSync(join(PACKAGE_ROOT, "test", "fixtures", "capabilities.json"), "utf8");
-
-function caps(overrides: Partial<Capabilities> = {}): Capabilities {
-  return { ...parseCapabilities(FIXTURE), ...overrides };
-}
-
-function role(chain: Rung[], overrides: Partial<RoleConfig> = {}): RoleConfig {
-  return {
-    description: "Test role.",
-    access: "read-only",
-    result: "review",
-    t3Role: "review",
-    interactionMode: "plan",
-    runtimeMode: "inherit",
-    chain,
-    ...overrides,
-  };
-}
+import { omtExit } from "../helpers.ts";
+import { caps, role } from "./shared.ts";
 
 function provider(caps: Capabilities, id: string): ProviderCapability {
   const found = caps.providers.find((p) => p.providerInstanceId === id);
@@ -446,7 +425,7 @@ test("resolveAll filters by name and rejects unknown roles", () => {
   assert.throws(
     () => resolveAll(DEFAULT_CONFIG, caps(), ["review", "nope"]),
     (error: unknown) =>
-      error instanceof OmtError &&
+      omtExit(1)(error) &&
       error.code === "unknown_role" &&
       error.message.includes("nope") &&
       error.message.includes("execute"),

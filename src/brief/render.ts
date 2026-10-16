@@ -19,7 +19,7 @@ export interface BriefInput {
   evidenceDir?: string; // absolute; set for edit roles
 }
 
-const TITLE_MAX = 72;
+export const TITLE_MAX = 72;
 
 function accessLine(access: Access, hasScope: boolean): string {
   if (access === "read-only") {

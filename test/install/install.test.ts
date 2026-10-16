@@ -16,15 +16,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { USER_STARTER_CONFIG } from "../../src/config/starter.ts";
 import { MANAGED_MARKER, hashDir } from "../../src/util/fs.ts";
-import { makeFixture, readJson, snapshot, STAMP, writeSkill } from "./fixture.ts";
+import { assertAllUnchanged, makeFixture, readJson, snapshot, STAMP, writeSkill } from "./fixture.ts";
+import { writeFile } from "../helpers.ts";
 import type { Fixture } from "./fixture.ts";
-
-function actionLines(output: string): string[] {
-  return output
-    .split("\n")
-    .filter((line) => /^ {2}\S/.test(line))
-    .map((line) => line.trim().split(/\s+/)[0] ?? "");
-}
 
 function assertNoSkillRootBackups(f: Fixture): void {
   for (const root of [f.agents, f.claudeSkills, f.gemini]) {
@@ -42,8 +36,7 @@ function assertNoSkillRootBackups(f: Fixture): void {
 
 test("install creates managed skills, relative links, the starter config, and the manifest", async (t) => {
   const f = makeFixture(t);
-  const { code, ctx } = await f.run(["install", "--yes"]);
-  assert.equal(code, 0, ctx.err());
+  const { ctx } = await f.runOk(["install", "--yes"]);
   assert.match(ctx.out(), /create {3}alpha/);
   assert.match(ctx.out(), /create {3}beta/);
   assert.doesNotMatch(ctx.out(), /not-a-skill/);
@@ -87,13 +80,12 @@ test("install creates managed skills, relative links, the starter config, and th
 
 test("a second install shows only unchanged and writes nothing but the manifest timestamp", async (t) => {
   const f = makeFixture(t);
-  assert.equal((await f.run(["install", "--yes", "--hooks"])).code, 0);
+  await f.runOk(["install", "--yes", "--hooks"]);
   const before = snapshot(f.home);
-  const { code, ctx } = await f.run(["install", "--yes", "--hooks"], {
+  const { ctx } = await f.runOk(["install", "--yes", "--hooks"], {
     now: () => new Date("2026-02-03T04:05:06.000Z"),
   });
-  assert.equal(code, 0, ctx.err());
-  assert.deepEqual([...new Set(actionLines(ctx.out()))], ["unchanged"]);
+  assertAllUnchanged(ctx.out());
   const after = snapshot(f.home);
   const manifestKey = relative(f.home, f.manifest);
   const changed = Object.keys({ ...before, ...after }).filter((key) => before[key] !== after[key]);
@@ -105,10 +97,9 @@ test("a second install shows only unchanged and writes nothing but the manifest 
 
 test("a changed bundled skill is an update", async (t) => {
   const f = makeFixture(t);
-  await f.run(["install", "--yes"]);
+  await f.runOk(["install", "--yes"]);
   writeSkill(f.packageRoot, "alpha", { "SKILL.md": "---\nname: alpha\n---\nAlpha v2.\n" });
-  const { code, ctx } = await f.run(["install", "--yes"]);
-  assert.equal(code, 0, ctx.err());
+  const { ctx } = await f.runOk(["install", "--yes"]);
   assert.match(ctx.out(), /update {3}alpha/);
   assert.match(ctx.out(), /unchanged beta/);
   assert.equal(readFileSync(join(f.agents, "alpha", "SKILL.md"), "utf8"), "---\nname: alpha\n---\nAlpha v2.\n");
@@ -133,8 +124,7 @@ test("--force backs up a conflicting skill outside the skill roots, then install
   const f = makeFixture(t);
   mkdirSync(join(f.agents, "alpha"), { recursive: true });
   writeFileSync(join(f.agents, "alpha", "SKILL.md"), "user skill\n");
-  const { code, ctx } = await f.run(["install", "--yes", "--force"]);
-  assert.equal(code, 0, ctx.err());
+  const { ctx } = await f.runOk(["install", "--yes", "--force"]);
   assert.match(ctx.out(), /replace {2}alpha/);
   const backup = join(f.backups, STAMP, "agents", "alpha");
   assert.equal(readFileSync(join(backup, "SKILL.md"), "utf8"), "user skill\n");
@@ -145,7 +135,7 @@ test("--force backs up a conflicting skill outside the skill roots, then install
 
 test("a locally modified managed skill is a conflict; --force backs it up", async (t) => {
   const f = makeFixture(t);
-  await f.run(["install", "--yes"]);
+  await f.runOk(["install", "--yes"]);
   writeFileSync(join(f.agents, "beta", "references", "notes.md"), "my edit\n");
   const before = snapshot(f.home);
   const refused = await f.run(["install", "--yes"]);
@@ -153,8 +143,7 @@ test("a locally modified managed skill is a conflict; --force backs it up", asyn
   assert.match(refused.ctx.out(), /conflict beta {2}\(locally modified\)/);
   assert.deepEqual(snapshot(f.home), before);
 
-  const forced = await f.run(["install", "--yes", "--force"]);
-  assert.equal(forced.code, 0, forced.ctx.err());
+  await f.runOk(["install", "--yes", "--force"]);
   assert.equal(readFileSync(join(f.backups, STAMP, "agents", "beta", "references", "notes.md"), "utf8"), "my edit\n");
   assert.equal(readFileSync(join(f.agents, "beta", "references", "notes.md"), "utf8"), "Beta notes.\n");
   assertNoSkillRootBackups(f);
@@ -171,8 +160,7 @@ test("a conflicting link is reported and --force backs it up under the root name
   assert.match(refused.ctx.out(), /conflict .*alpha .*\(exists and is not a symlink\)/);
   assert.match(refused.ctx.out(), /conflict .*beta .*\(symlink points elsewhere\)/);
 
-  const forced = await f.run(["install", "--yes", "--force"]);
-  assert.equal(forced.code, 0, forced.ctx.err());
+  await f.runOk(["install", "--yes", "--force"]);
   assert.equal(readFileSync(join(f.backups, STAMP, "claude", "alpha", "SKILL.md"), "utf8"), "user claude skill\n");
   assert.ok(lstatSync(join(f.backups, STAMP, "claude", "beta")).isSymbolicLink());
   assert.equal(realpathSync(join(f.claudeSkills, "alpha")), realpathSync(join(f.agents, "alpha")));
@@ -183,8 +171,7 @@ test("a conflicting link is reported and --force backs it up under the root name
 test("--dry-run prints the plan and writes nothing", async (t) => {
   const f = makeFixture(t);
   const before = snapshot(f.home);
-  const { code, ctx } = await f.run(["install", "--dry-run", "--hooks"]);
-  assert.equal(code, 0, ctx.err());
+  const { ctx } = await f.runOk(["install", "--dry-run", "--hooks"]);
   assert.match(ctx.out(), /create {3}alpha/);
   assert.match(ctx.out(), /Dry run/);
   assert.deepEqual(snapshot(f.home), before);
@@ -199,8 +186,7 @@ test("a declined prompt writes nothing; an accepted prompt applies", async (t) =
     assert.deepEqual(ctx.prompts, ["Apply this plan? [y/N] "]);
     assert.deepEqual(snapshot(f.home), before);
   }
-  const { code, ctx } = await f.run(["install"], { isTTY: true, answer: "Yes" });
-  assert.equal(code, 0, ctx.err());
+  await f.runOk(["install"], { isTTY: true, answer: "Yes" });
   assert.ok(existsSync(join(f.agents, "alpha", MANAGED_MARKER)));
 });
 
@@ -219,8 +205,7 @@ test("a link root that is the same directory as the agents root gets no links", 
   mkdirSync(f.agents, { recursive: true });
   mkdirSync(dirname(f.claudeSkills), { recursive: true });
   symlinkSync(f.agents, f.claudeSkills);
-  const { code, ctx } = await f.run(["install", "--yes"]);
-  assert.equal(code, 0, ctx.err());
+  const { ctx } = await f.runOk(["install", "--yes"]);
   assert.match(ctx.out(), /skip .*same directory as the agents root/);
   assert.ok(lstatSync(join(f.agents, "alpha")).isDirectory());
   assert.ok(!lstatSync(join(f.agents, "alpha")).isSymbolicLink());
@@ -231,8 +216,7 @@ test("a dangling link root that points at the missing agents root gets no links"
   const f = makeFixture(t);
   mkdirSync(dirname(f.claudeSkills), { recursive: true });
   symlinkSync(f.agents, f.claudeSkills);
-  const { code, ctx } = await f.run(["install", "--yes"]);
-  assert.equal(code, 0, ctx.err());
+  const { ctx } = await f.runOk(["install", "--yes"]);
   assert.match(ctx.out(), /skip /);
   assert.ok(existsSync(join(f.agents, "alpha", MANAGED_MARKER)));
 });
@@ -243,14 +227,12 @@ test("gemini is a default target when ~/.gemini exists, and --targets selects ro
   const dry = await f.run(["install", "--dry-run"]);
   assert.match(dry.ctx.out(), new RegExp(`create .*${join(".gemini", "config", "skills", "alpha")}`));
 
-  const only = await f.run(["install", "--yes", "--targets", "agents"]);
-  assert.equal(only.code, 0, only.ctx.err());
+  await f.runOk(["install", "--yes", "--targets", "agents"]);
   assert.ok(existsSync(join(f.agents, "alpha")));
   assert.ok(!existsSync(f.claudeSkills));
   assert.ok(!existsSync(f.gemini));
 
-  const gemini = await f.run(["install", "--yes", "--targets", "gemini"]);
-  assert.equal(gemini.code, 0, gemini.ctx.err());
+  await f.runOk(["install", "--yes", "--targets", "gemini"]);
   assert.equal(realpathSync(join(f.gemini, "alpha")), realpathSync(join(f.agents, "alpha")));
   assert.ok(!existsSync(f.claudeSkills));
 
@@ -276,11 +258,9 @@ test("--hooks adds the entry and keeps every other setting", async (t) => {
       UserPromptSubmit: [{ hooks: [{ type: "command", command: "echo mine" }] }],
     },
   };
-  mkdirSync(dirname(f.settings), { recursive: true });
   const originalText = `${JSON.stringify(original, null, 4)}\n`;
-  writeFileSync(f.settings, originalText);
-  const { code, ctx } = await f.run(["install", "--yes", "--hooks"]);
-  assert.equal(code, 0, ctx.err());
+  writeFile(f.settings, originalText);
+  const { ctx } = await f.runOk(["install", "--yes", "--hooks"]);
   assert.match(ctx.out(), /create {3}Claude UserPromptSubmit/);
   const command = `"${process.execPath}" "${ctx.cliPath}" hook user-prompt-submit # oh-my-t3code`;
   const text = readFileSync(f.settings, "utf8");
@@ -305,8 +285,7 @@ test("--hooks adds the entry and keeps every other setting", async (t) => {
 
 test("--hooks creates settings.json when it is missing, without a backup", async (t) => {
   const f = makeFixture(t);
-  const { code, ctx } = await f.run(["install", "--yes", "--hooks"]);
-  assert.equal(code, 0, ctx.err());
+  await f.runOk(["install", "--yes", "--hooks"]);
   const settings = readJson(f.settings) as { hooks: { UserPromptSubmit: unknown[] } };
   assert.equal(settings.hooks.UserPromptSubmit.length, 1);
   assert.ok(!existsSync(f.backups));
@@ -314,17 +293,15 @@ test("--hooks creates settings.json when it is missing, without a backup", async
 
 test("--hooks updates the command of an existing managed entry", async (t) => {
   const f = makeFixture(t);
-  mkdirSync(dirname(f.settings), { recursive: true });
   const old = '"/old/node" "/old/cli.js" hook user-prompt-submit # oh-my-t3code';
-  writeFileSync(
+  writeFile(
     f.settings,
     JSON.stringify({
       theme: "dark",
       hooks: { UserPromptSubmit: [{ hooks: [{ type: "command", command: old, timeout: 10 }] }] },
     }),
   );
-  const { code, ctx } = await f.run(["install", "--yes", "--hooks"]);
-  assert.equal(code, 0, ctx.err());
+  const { ctx } = await f.runOk(["install", "--yes", "--hooks"]);
   assert.match(ctx.out(), /update {3}Claude UserPromptSubmit/);
   const settings = readJson(f.settings) as { theme: string; hooks: { UserPromptSubmit: { hooks: { command: string }[] }[] } };
   assert.equal(settings.theme, "dark");
@@ -337,10 +314,9 @@ test("--hooks updates the command of an existing managed entry", async (t) => {
 
 test("an unchanged hook writes nothing to settings.json and makes no backup", async (t) => {
   const f = makeFixture(t);
-  await f.run(["install", "--yes", "--hooks"]);
+  await f.runOk(["install", "--yes", "--hooks"]);
   const before = snapshot(dirname(f.settings));
-  const { code, ctx } = await f.run(["install", "--yes", "--hooks"], { now: () => new Date("2026-03-01T00:00:00Z") });
-  assert.equal(code, 0, ctx.err());
+  const { ctx } = await f.runOk(["install", "--yes", "--hooks"], { now: () => new Date("2026-03-01T00:00:00Z") });
   assert.match(ctx.out(), /unchanged Claude UserPromptSubmit/);
   assert.deepEqual(snapshot(dirname(f.settings)), before);
   assert.ok(!existsSync(f.backups));
@@ -353,24 +329,21 @@ test("a symlinked settings.json stays a symlink and its real file is updated", a
   writeFileSync(real, '{ "theme": "light" }\n');
   mkdirSync(dirname(f.settings), { recursive: true });
   symlinkSync(relative(dirname(f.settings), real), f.settings);
-  const { code, ctx } = await f.run(["install", "--yes", "--hooks"]);
-  assert.equal(code, 0, ctx.err());
+  await f.runOk(["install", "--yes", "--hooks"]);
   assert.ok(lstatSync(f.settings).isSymbolicLink());
   assert.equal(realpathSync(f.settings), realpathSync(real));
   const settings = readJson(real) as { theme: string; hooks: unknown };
   assert.equal(settings.theme, "light");
   assert.ok(settings.hooks !== undefined);
 
-  const removed = await f.run(["uninstall", "--yes"]);
-  assert.equal(removed.code, 0, removed.ctx.err());
+  await f.runOk(["uninstall", "--yes"]);
   assert.ok(lstatSync(f.settings).isSymbolicLink());
   assert.deepEqual(readJson(real), { theme: "light" });
 });
 
 test("settings.json that is not valid JSON is an error and nothing changes", async (t) => {
   const f = makeFixture(t);
-  mkdirSync(dirname(f.settings), { recursive: true });
-  writeFileSync(f.settings, "{ not json");
+  writeFile(f.settings, "{ not json");
   const before = snapshot(f.home);
   const { code, ctx } = await f.run(["install", "--yes", "--hooks"]);
   assert.equal(code, 1);
@@ -392,11 +365,9 @@ test("--hooks is refused for a temp or npx cliPath", async (t) => {
 
 test("--hooks keeps the mode of a 0600 settings.json and writes the backup as 0600", async (t) => {
   const f = makeFixture(t);
-  mkdirSync(dirname(f.settings), { recursive: true });
-  writeFileSync(f.settings, '{ "env": { "API_KEY": "secret" } }\n');
+  writeFile(f.settings, '{ "env": { "API_KEY": "secret" } }\n');
   chmodSync(f.settings, 0o600);
-  const { code, ctx } = await f.run(["install", "--yes", "--hooks"]);
-  assert.equal(code, 0, ctx.err());
+  await f.runOk(["install", "--yes", "--hooks"]);
   assert.equal(statSync(f.settings).mode & 0o777, 0o600);
   assert.equal(statSync(join(f.backups, STAMP, "claude-settings.json")).mode & 0o777, 0o600);
 });
@@ -407,7 +378,7 @@ test("a failed skill swap removes the temp copy and leaves the installed skill i
     return;
   }
   const f = makeFixture(t);
-  assert.equal((await f.run(["install", "--yes"])).code, 0);
+  await f.runOk(["install", "--yes"]);
   const before = readFileSync(join(f.agents, "alpha", "SKILL.md"), "utf8");
   writeSkill(f.packageRoot, "alpha", { "SKILL.md": "---\nname: alpha\n---\nAlpha v2.\n" });
   chmodSync(f.agents, 0o555);

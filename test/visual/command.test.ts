@@ -1,11 +1,10 @@
-import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import type { TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { main } from "../../src/main.ts";
-import { CLI_PATH, childEnv, fakeContext, tempDir } from "../helpers.ts";
+import { fakeContext, spawnOmt, tempDir } from "../helpers.ts";
 import { WORKFLOW_PROFILES_PLAN } from "./fixtures.ts";
 
 const SPEC = { title: "Spec page", tabs: [{ title: "Design", blocks: [{ type: "text", text: "Hello <world>" }] }] };
@@ -117,8 +116,8 @@ test("omt visual runs as a child process with a temp HOME", (t) => {
   const cwd = join(root, "project");
   mkdirSync(join(cwd, ".omt", "plans"), { recursive: true });
   writeFileSync(join(cwd, ".omt", "plans", "wp.md"), WORKFLOW_PROFILES_PLAN);
-  const result = spawnSync(process.execPath, [CLI_PATH, "visual", "--plan", "wp", "--out", "-"], { cwd, env: childEnv(root), encoding: "utf8" });
-  assert.equal(result.status, 0, result.stderr);
+  const result = spawnOmt(["visual", "--plan", "wp", "--out", "-"], { root, cwd });
+  assert.equal(result.code, 0, result.stderr);
   assert.match(result.stdout, /<h2>Workflow profiles fixture<\/h2>/);
   assert.equal(result.stderr, "");
 });

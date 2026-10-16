@@ -1,7 +1,6 @@
 import { test } from "node:test";
 import type { TestContext } from "node:test";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, realpathSync, statSync, symlinkSync, lstatSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { run as config } from "../../src/commands/config.ts";
@@ -13,7 +12,7 @@ import { validateLayer } from "../../src/config/validate.ts";
 import { OmtError } from "../../src/util/errors.ts";
 import { logicalCwd } from "../../src/main.ts";
 import { findProjectRoot } from "../../src/paths.ts";
-import { CLI_PATH, childEnv, fakeContext, tempDir } from "../helpers.ts";
+import { OMT_GITIGNORE, fakeContext, omtExit, spawnOmt, tempDir, writeFile } from "../helpers.ts";
 
 function setup(t: TestContext) {
   const root = tempDir(t);
@@ -22,19 +21,12 @@ function setup(t: TestContext) {
   const configDir = join(root, "cfg");
   const userPath = join(configDir, "config.jsonc");
   const projectPath = join(project, ".omt", "config.jsonc");
-  const ctx = (argv: string[]) => {
-    const base = fakeContext({ root });
-    return fakeContext({ root, argv, env: { ...base.env, OMT_CONFIG_DIR: configDir } });
-  };
-  const write = (path: string, text: string) => {
-    mkdirSync(join(path, ".."), { recursive: true });
-    writeFileSync(path, text);
-  };
-  return { root, project, configDir, userPath, projectPath, ctx, write };
-}
-
-async function rejectsUsage(promise: Promise<number>): Promise<void> {
-  await assert.rejects(promise, (error: unknown) => error instanceof OmtError && error.exitCode === 2);
+  const ctx = (argv: string[]) => fakeContext({
+    root,
+    argv,
+    env: { HOME: join(root, "home"), OMT_CONFIG_DIR: configDir },
+  });
+  return { root, project, configDir, userPath, projectPath, ctx, write: writeFile };
 }
 
 test("config show --defaults prints the 13 default roles as JSON", async (t) => {
@@ -171,9 +163,9 @@ test("config init --force keeps a symlinked config a symlink", async (t) => {
 
 test("config rejects an unknown subcommand, an extra argument, and an unknown flag", async (t) => {
   const { ctx } = setup(t);
-  await rejectsUsage(config(ctx(["edit"])));
-  await rejectsUsage(config(ctx(["show", "extra"])));
-  await rejectsUsage(config(ctx(["show", "--yaml"])));
+  await assert.rejects(config(ctx(["edit"])), omtExit(2));
+  await assert.rejects(config(ctx(["show", "extra"])), omtExit(2));
+  await assert.rejects(config(ctx(["show", "--yaml"])), omtExit(2));
 });
 
 test("the starter configs are valid layers", () => {
@@ -199,7 +191,7 @@ test("init creates the config, plans dir, and .gitignore in the project root", a
   );
   assert.equal(readFileSync(join(omt, "config.jsonc"), "utf8"), PROJECT_STARTER_CONFIG);
   assert.ok(statSync(join(omt, "plans")).isDirectory());
-  assert.equal(readFileSync(join(omt, ".gitignore"), "utf8"), "ledger.jsonl\nevidence/\nbin/\ninstall.json\nbackups/\nplans/\n");
+  assert.equal(readFileSync(join(omt, ".gitignore"), "utf8"), OMT_GITIGNORE);
 });
 
 test("init creates only what is missing and never overwrites the config", async (t) => {
@@ -249,7 +241,7 @@ test("init updates a symlinked .gitignore through its target and leaves a dangli
   symlinkSync(target, ignore);
   assert.equal(await init(ctx([])), 0);
   assert.ok(lstatSync(ignore).isSymbolicLink());
-  assert.equal(readFileSync(target, "utf8"), "ledger.jsonl\nevidence/\nbin/\ninstall.json\nbackups/\nplans/\n");
+  assert.equal(readFileSync(target, "utf8"), OMT_GITIGNORE);
 
   const other = setup(t);
   const dangling = join(other.project, ".omt", ".gitignore");
@@ -263,8 +255,8 @@ test("init updates a symlinked .gitignore through its target and leaves a dangli
 
 test("init rejects arguments", async (t) => {
   const { ctx } = setup(t);
-  await rejectsUsage(init(ctx(["now"])));
-  await rejectsUsage(init(ctx(["--force"])));
+  await assert.rejects(init(ctx(["now"])), omtExit(2));
+  await assert.rejects(init(ctx(["--force"])), omtExit(2));
 });
 
 test("config init --force writes through a dangling symlink to its target", async (t) => {
@@ -314,9 +306,9 @@ test("config path prints the user and project paths unresolved", (t) => {
   const link = join(root, "link");
   mkdirSync(join(real, ".git"), { recursive: true });
   symlinkSync(real, link);
-  const env = { ...childEnv(root), PWD: link, OMT_CONFIG_DIR: join(link, "cfg") };
-  const result = spawnSync(process.execPath, [CLI_PATH, "config", "path"], { cwd: link, env, encoding: "utf8" });
-  assert.equal(result.status, 0, result.stderr);
+  const env = { PWD: link, OMT_CONFIG_DIR: join(link, "cfg") };
+  const result = spawnOmt(["config", "path"], { root, cwd: link, env });
+  assert.equal(result.code, 0, result.stderr);
   assert.equal(
     result.stdout,
     `user: ${join(link, "cfg", "config.jsonc")} (absent)\nproject: ${join(link, ".omt", "config.jsonc")} (absent)\n`,
@@ -332,15 +324,15 @@ test("with $PWD on a symlink into a subdirectory, the CLI uses the real project 
   writeFileSync(join(repo, ".omt", "config.jsonc"), '{ "version": 1 }\n');
   mkdirSync(join(repo, "pkg"));
   symlinkSync(join(repo, "pkg"), link);
-  const env = { ...childEnv(root), PWD: link };
-  const cli = (args: string[]) => spawnSync(process.execPath, [CLI_PATH, ...args], { cwd: link, env, encoding: "utf8" });
+  const env = { PWD: link };
+  const cli = (args: string[]) => spawnOmt(args, { root, cwd: link, env });
 
   const path = cli(["config", "path"]);
-  assert.equal(path.status, 0, path.stderr);
+  assert.equal(path.code, 0, path.stderr);
   assert.match(path.stdout, new RegExp(`^project: ${realpathSync(repo)}/\\.omt/config\\.jsonc \\(present\\)$`, "m"));
 
   const add = cli(["ledger", "add", "--role", "execute", "--status", "dispatched", "--task-id", "t1"]);
-  assert.equal(add.status, 0, add.stderr);
+  assert.equal(add.code, 0, add.stderr);
   assert.ok(readFileSync(join(repo, ".omt", "ledger.jsonl"), "utf8").includes('"taskId":"t1"'));
   assert.throws(() => statSync(join(repo, "pkg", ".omt")));
 });

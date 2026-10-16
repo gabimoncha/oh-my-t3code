@@ -1,16 +1,15 @@
-import { renderBrief, briefTitle } from "../brief/render.ts";
+import { renderBrief, briefTitle, TITLE_MAX } from "../brief/render.ts";
 import type { BriefInput } from "../brief/render.ts";
 import { findRoleTemplate, loadResultContract } from "../brief/templates.ts";
-import { loadConfig } from "../config/load.ts";
+import { limitArg } from "../config/validate.ts";
 import { requestId } from "../ledger/ledger.ts";
 import { evidenceDir, findProjectRoot } from "../paths.ts";
-import { resolveRole, toRouteOutput } from "../routing/resolve.ts";
+import { findRole, resolveRole, toRouteOutput } from "../routing/resolve.ts";
 import type { BriefJsonOutput, CliContext, CommandRun } from "../types.ts";
-import { parseArgs } from "../util/args.ts";
+import { parseArgs, positiveInt } from "../util/args.ts";
 import { OmtError, usageError } from "../util/errors.ts";
-import { printJson } from "../util/output.ts";
-import { formatIssue } from "./config.ts";
-import { againstOptions, checkAgainst, findRole, readCapabilities, readInput } from "./route.ts";
+import { formatJson } from "../util/output.ts";
+import { againstOptions, checkAgainst, loadConfigReporting, readCapabilities, readInput } from "./shared.ts";
 
 export const summary = "Render a task brief for a role, or a delegate_task payload.";
 
@@ -41,14 +40,7 @@ Options:
   -h, --help               print this help
 `;
 
-const TITLE_MAX = 72;
 export const BRIEF_MAX_CHARS = 120_000;
-
-function positiveInt(flag: string, value: string | undefined, fallback: number): number {
-  if (value === undefined) return fallback;
-  if (!/^[1-9]\d*$/.test(value)) throw usageError(`--${flag} must be a positive integer, got "${value}"`);
-  return Number(value);
-}
 
 function exclusive(textFlag: string, text: string | undefined, fileFlag: string, file: string | undefined): void {
   if (text !== undefined && file !== undefined) throw usageError(`use --${textFlag} or --${fileFlag}, not both`);
@@ -85,10 +77,9 @@ export const run: CommandRun = async (ctx) => {
     capabilities: { type: "string" },
     against: { type: "string" },
     json: { type: "boolean" },
-  });
-  const [name, extra] = positionals;
+  }, { maxPositionals: 1 });
+  const [name] = positionals;
   if (name === undefined) throw usageError("brief needs a <role>");
-  if (extra !== undefined) throw usageError(`unexpected argument "${extra}"`);
   exclusive("task", values.task, "task-file", values["task-file"]);
   exclusive("context", values.context, "context-file", values["context-file"]);
   if (values.task === undefined && values["task-file"] === undefined) {
@@ -99,19 +90,16 @@ export const run: CommandRun = async (ctx) => {
   const json = values.json === true;
   checkAgainst(values);
 
-  const round = positiveInt("round", values.round, 1);
-  const depth = positiveInt("depth", values.depth, 1);
-  const attempt = positiveInt("attempt", values.attempt, 1);
+  const round = positiveInt("round", values.round) ?? 1;
+  const depth = positiveInt("depth", values.depth) ?? 1;
+  const attempt = positiveInt("attempt", values.attempt) ?? 1;
   const maxDepthFlag = values["max-depth"];
-  if (maxDepthFlag !== undefined && !/^[0-3]$/.test(maxDepthFlag)) {
-    throw usageError(`--max-depth must be an integer from 0 to 3, got "${maxDepthFlag}"`);
-  }
+  const maxDepthOverride = maxDepthFlag === undefined ? undefined : limitArg("--max-depth", maxDepthFlag, "maxDepth");
 
-  const { config, issues } = await loadConfig({ cwd: ctx.cwd, env: ctx.env, homedir: ctx.homedir });
-  for (const issue of issues) ctx.stderr(formatIssue(issue));
+  const { config } = await loadConfigReporting(ctx);
   const role = findRole(config, name);
 
-  const limit = maxDepthFlag === undefined ? config.limits.maxDepth : Number(maxDepthFlag);
+  const limit = maxDepthOverride ?? config.limits.maxDepth;
   // A worker at max depth may still hand a device check to one test child, one level deeper.
   const maxDepth = name === "test" && depth === limit + 1 ? depth : limit;
   if (depth > maxDepth) {
@@ -183,6 +171,6 @@ export const run: CommandRun = async (ctx) => {
   if (values.plan !== undefined && values.unit !== undefined) {
     output.delegateTask.clientRequestId = requestId(values.plan, values.unit, name, round, attempt);
   }
-  printJson(ctx.stdout, output);
+  ctx.stdout(formatJson(output));
   return 0;
 };

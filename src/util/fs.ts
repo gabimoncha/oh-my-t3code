@@ -1,11 +1,34 @@
 import { createHash, randomBytes } from "node:crypto";
+import { realpathSync } from "node:fs";
+import type { Stats } from "node:fs";
 import { chmod, cp, lstat, mkdir, readFile, readdir, readlink, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
 export const MANAGED_MARKER = ".omt-managed.json";
 
+export function errorCode(error: unknown): string | undefined {
+  return (error as NodeJS.ErrnoException | undefined)?.code;
+}
+
 function isNotFound(error: unknown): boolean {
-  return (error as NodeJS.ErrnoException | undefined)?.code === "ENOENT";
+  return errorCode(error) === "ENOENT";
+}
+
+export async function lstatIfExists(path: string): Promise<Stats | undefined> {
+  try {
+    return await lstat(path);
+  } catch (error) {
+    if (isNotFound(error)) return undefined;
+    throw error;
+  }
+}
+
+export function realOrSelf(path: string): string {
+  try {
+    return realpathSync(path);
+  } catch {
+    return path;
+  }
 }
 
 export async function ensureDir(dir: string): Promise<void> {
@@ -50,22 +73,11 @@ export async function readFileIfExists(path: string): Promise<string | undefined
 }
 
 export async function pathExists(path: string): Promise<boolean> {
-  try {
-    await lstat(path);
-    return true;
-  } catch (error) {
-    if (isNotFound(error)) return false;
-    throw error;
-  }
+  return (await lstatIfExists(path)) !== undefined;
 }
 
 export async function isSymlink(path: string): Promise<boolean> {
-  try {
-    return (await lstat(path)).isSymbolicLink();
-  } catch (error) {
-    if (isNotFound(error)) return false;
-    throw error;
-  }
+  return (await lstatIfExists(path))?.isSymbolicLink() ?? false;
 }
 
 export async function copyDir(source: string, target: string): Promise<void> {

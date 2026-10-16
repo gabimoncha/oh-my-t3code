@@ -1,19 +1,10 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { test } from "node:test";
 import { DEFAULT_CONFIG } from "../../src/config/defaults.ts";
-import { parseCapabilities } from "../../src/routing/capabilities.ts";
 import { configuredDrivers, crossFamilyOrder, pickWorker, rungFamily, workerFamily } from "../../src/routing/family.ts";
 import { resolveRole, toRouteOutput } from "../../src/routing/resolve.ts";
 import type { Capabilities, LedgerEntry, RoleConfig, Rung } from "../../src/types.ts";
-import { PACKAGE_ROOT } from "../helpers.ts";
-
-const FIXTURE = readFileSync(join(PACKAGE_ROOT, "test", "fixtures", "capabilities.json"), "utf8");
-
-function caps(): Capabilities {
-  return parseCapabilities(FIXTURE);
-}
+import { caps, role } from "./shared.ts";
 
 // The fixture plus a second Claude instance "claudeWork" and a Codex instance "codexWork".
 function capsWithInstances(): Capabilities {
@@ -29,20 +20,6 @@ function capsWithInstances(): Capabilities {
 const REVIEW = DEFAULT_CONFIG.roles.review as RoleConfig;
 const CLAUDE_HIGH = { providerInstanceId: "claudeAgent", model: "claude-opus-5-5", options: { effort: "high" } };
 const CODEX_HIGH = { providerInstanceId: "codex", model: "gpt-6-astra", options: { reasoningEffort: "high" } };
-
-function role(chain: Rung[], overrides: Partial<RoleConfig> = {}): RoleConfig {
-  return {
-    description: "Test role.",
-    access: "read-only",
-    result: "review",
-    t3Role: "review",
-    interactionMode: "plan",
-    runtimeMode: "inherit",
-    crossFamily: true,
-    chain,
-    ...overrides,
-  };
-}
 
 test("rungFamily is the registered instance's driver kind, else the driver, else the configured driver, else the provider id", () => {
   const c = capsWithInstances();
@@ -93,8 +70,8 @@ test("workerFamily maps a provider instance id to its driver kind with capabilit
 
 test("configuredDrivers maps each provider that a rung names with a driver, first rung wins", () => {
   const roles = {
-    a: role([{ provider: "claude-max", driver: "claudeAgent", model: "m" }, { driver: "codex", model: "n" }]),
-    b: role([{ provider: "claude-max", driver: "other", model: "m" }, { provider: "solo", model: "n" }]),
+    a: role([{ provider: "claude-max", driver: "claudeAgent", model: "m" }, { driver: "codex", model: "n" }], { crossFamily: true }),
+    b: role([{ provider: "claude-max", driver: "other", model: "m" }, { provider: "solo", model: "n" }], { crossFamily: true }),
   };
   assert.deepEqual([...configuredDrivers(roles)], [["claude-max", "claudeAgent"]]);
   assert.deepEqual([...configuredDrivers(DEFAULT_CONFIG.roles)].sort(), [["claudeAgent", "claudeAgent"], ["codex", "codex"]]);
@@ -159,7 +136,7 @@ test("a chain with only same-family rungs keeps its order and adds the same-fami
     { driver: "claudeAgent", model: "claude-opus-5-5" },
     { driver: "claudeAgent", model: "claude-sonnet-5-5" },
   ];
-  const resolution = resolveRole("r", role(chain), undefined, { against: "claudeAgent" });
+  const resolution = resolveRole("r", role(chain, { crossFamily: true }), undefined, { against: "claudeAgent" });
   assert.equal(resolution.delegateTask?.target.model, "claude-opus-5-5");
   assert.deepEqual(resolution.attempts.map((a) => a.index), [0, 1]);
   assert.deepEqual(resolution.notes, [
@@ -173,13 +150,13 @@ test("a worker family that matches no rung keeps the order and says so, without 
     { provider: "claude-max", driver: "claudeAgent", model: "claude-opus-5-5" },
     { provider: "codex-pro", driver: "codex", model: "gpt-6-astra" },
   ];
-  const resolution = resolveRole("r", role(chain), undefined, { against: "claude-other" });
+  const resolution = resolveRole("r", role(chain, { crossFamily: true }), undefined, { against: "claude-other" });
   assert.equal(resolution.delegateTask?.target.providerInstanceId, "claude-max");
   assert.deepEqual(resolution.attempts.map((a) => a.index), [0, 1]);
   assert.deepEqual(resolution.notes, [
     "cross-family: no rung is in family claude-other; check that --against names a driver or a configured provider, or pass --capabilities",
   ]);
-  const mapped = resolveRole("r", role(chain), undefined, {
+  const mapped = resolveRole("r", role(chain, { crossFamily: true }), undefined, {
     against: "claude-max",
     drivers: new Map([["claude-max", "claudeAgent"]]),
   });
@@ -196,20 +173,20 @@ test("a rung that names only a provider gets its family from the configured driv
     { provider: "claude-max", model: "claude-opus-5-5", effort: "high" },
     { provider: "codex-pro", model: "gpt-6-astra", effort: "high" },
   ];
-  const resolution = resolveRole("r", role(chain), undefined, { against: "claude-max", drivers });
+  const resolution = resolveRole("r", role(chain, { crossFamily: true }), undefined, { against: "claude-max", drivers });
   assert.equal(resolution.delegateTask?.target.providerInstanceId, "codex-pro");
   assert.deepEqual(resolution.fallbacks.map((f) => f.providerInstanceId), ["claude-max"]);
   assert.deepEqual(resolution.attempts.map((a) => a.index), [1, 0]);
   assert.deepEqual(resolution.notes, ["cross-family: worker family claudeAgent; other families first"]);
 
-  const byDriver = resolveRole("r", role(chain), undefined, { against: "claudeAgent", drivers });
+  const byDriver = resolveRole("r", role(chain, { crossFamily: true }), undefined, { against: "claudeAgent", drivers });
   assert.equal(byDriver.delegateTask?.target.providerInstanceId, "codex-pro");
 
   const sameFamily: Rung[] = [
     { provider: "claude-max", model: "claude-opus-5-5" },
     { provider: "claude-team", model: "claude-sonnet-5-5" },
   ];
-  const same = resolveRole("r", role(sameFamily), undefined, { against: "claude-max", drivers });
+  const same = resolveRole("r", role(sameFamily, { crossFamily: true }), undefined, { against: "claude-max", drivers });
   assert.equal(same.delegateTask?.target.providerInstanceId, "claude-max");
   assert.deepEqual(same.notes, [
     "cross-family: worker family claudeAgent; the configured order applies",
@@ -223,14 +200,14 @@ test("with capabilities a provider instance id maps to its driver kind before th
     { provider: "claudeWork", model: "claude-opus-5-5", effort: "high" },
     { provider: "codexWork", model: "gpt-6-astra", effort: "high" },
   ];
-  const resolution = resolveRole("r", role(chain), c, { against: "claudeAgent" });
+  const resolution = resolveRole("r", role(chain, { crossFamily: true }), c, { against: "claudeAgent" });
   assert.equal(resolution.status, "resolved");
   assert.deepEqual(resolution.delegateTask?.target, {
     providerInstanceId: "codexWork",
     model: "gpt-6-astra",
     options: { reasoningEffort: "high" },
   });
-  const byInstance = resolveRole("r", role(chain), c, { against: "codexWork" });
+  const byInstance = resolveRole("r", role(chain, { crossFamily: true }), c, { against: "codexWork" });
   assert.equal(byInstance.delegateTask?.target.providerInstanceId, "claudeWork");
   assert.deepEqual(byInstance.notes, ["cross-family: worker family codex; the configured order applies"]);
 });
@@ -245,7 +222,7 @@ test("an unavailable other-family rung falls back to the same family with the no
     { driver: "claudeAgent", model: "claude-opus-5-5", effort: "high" },
     { driver: "codex", model: "gpt-6-astra", effort: "high" },
   ];
-  const resolution = resolveRole("r", role(chain), c, { against: "claudeAgent" });
+  const resolution = resolveRole("r", role(chain, { crossFamily: true }), c, { against: "claudeAgent" });
   assert.equal(resolution.status, "resolved");
   assert.deepEqual(resolution.delegateTask?.target, {
     providerInstanceId: "claudeAgent",

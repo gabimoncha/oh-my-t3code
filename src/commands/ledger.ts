@@ -1,6 +1,4 @@
-import { loadConfig } from "../config/load.ts";
-import { join } from "node:path";
-import { findProjectRoot, ledgerPath, plansDir } from "../paths.ts";
+import { findProjectRoot, ledgerPath, planPath } from "../paths.ts";
 import {
   appendLedger,
   closes,
@@ -11,14 +9,15 @@ import {
   readLedger,
   requestId,
 } from "../ledger/ledger.ts";
+import type { PlanStatus } from "../plan/parse.ts";
 import { parsePlan } from "../plan/parse.ts";
-import type { CliContext, CommandRun, LedgerEntry, LedgerStats } from "../types.ts";
+import type { CliContext, CommandRun, LedgerEntry, LedgerStats, Limits } from "../types.ts";
 import { usageError } from "../util/errors.ts";
-import { formatIssue } from "./config.ts";
-import { parseArgs } from "../util/args.ts";
+import { parseArgs, positiveInt } from "../util/args.ts";
 import { checkPlanSlug, checkUnitId } from "../util/ids.ts";
 import { readFileIfExists } from "../util/fs.ts";
-import { printJson, renderTable } from "../util/output.ts";
+import { formatJson, renderTable } from "../util/output.ts";
+import { loadConfigReporting } from "./shared.ts";
 
 export const summary = "Record and list delegation events in .omt/ledger.jsonl.";
 
@@ -75,12 +74,6 @@ const OPTIONS = {
 
 type Values = ReturnType<typeof parseArgs<typeof OPTIONS>>["values"];
 
-function positiveInt(flag: string, value: string | undefined): number | undefined {
-  if (value === undefined) return undefined;
-  if (!/^[1-9]\d*$/.test(value)) throw usageError(`--${flag} must be a positive integer, got "${value}"`);
-  return Number(value);
-}
-
 function required(flag: string, value: string | undefined, subcommand: string): string {
   if (value === undefined || value === "") throw usageError(`ledger ${subcommand} needs --${flag}`);
   return value;
@@ -124,7 +117,7 @@ async function add(ctx: CliContext, root: string, values: Values) {
   const path = ledgerPath(root);
   const closesOne = isTerminal(status) ? (await readLedger(path)).entries.some((other) => closes(entry, other)) : true;
   await appendLedger(path, entry);
-  printJson(ctx.stdout, entry);
+  ctx.stdout(formatJson(entry));
   if (!closesOne) ctx.stderr("omt: no dispatched entry matches; nothing was closed\n");
   return 0;
 }
@@ -135,13 +128,7 @@ async function load(ctx: CliContext, root: string, plan: string | undefined): Pr
   return plan === undefined ? entries : entries.filter((entry) => entry.plan === plan);
 }
 
-async function list(ctx: CliContext, root: string, values: Values) {
-  onlyFlags("list", values, ["plan", "json"]);
-  const entries = await load(ctx, root, values.plan);
-  if (values.json === true) {
-    printJson(ctx.stdout, entries);
-    return 0;
-  }
+function formatLedgerList(entries: LedgerEntry[]): string {
   const rows = entries.map((entry) => [
     entry.ts.slice(11, 19),
     entry.plan ?? "-",
@@ -152,44 +139,56 @@ async function list(ctx: CliContext, root: string, values: Values) {
     entry.verdict ?? "-",
     entry.taskId === undefined ? "-" : entry.taskId.slice(-12),
   ]);
-  ctx.stdout(renderTable(["TIME", "PLAN", "UNIT", "ROLE", "ROUND", "STATUS", "VERDICT", "TASK"], rows));
-  return 0;
+  return renderTable(["TIME", "PLAN", "UNIT", "ROLE", "ROUND", "STATUS", "VERDICT", "TASK"], rows);
 }
 
-async function stats(ctx: CliContext, root: string, values: Values) {
-  onlyFlags("stats", values, ["plan", "json"]);
-  const { config, issues } = await loadConfig({ cwd: ctx.cwd, env: ctx.env, homedir: ctx.homedir });
-  for (const issue of issues) ctx.stderr(formatIssue(issue));
-  const markdown = values.plan === undefined ? undefined : await readFileIfExists(join(plansDir(root), `${values.plan}.md`));
-  const plan = markdown === undefined ? undefined : parsePlan(markdown);
+function effectiveLimits(limits: Limits, plan: PlanStatus | undefined) {
   const planMaxParallel = plan?.maxParallel;
   const planMaxTasks = plan?.maxTasks;
-  const limits = {
-    maxParallel: Math.min(config.limits.maxParallel, planMaxParallel ?? config.limits.maxParallel),
-    maxTasksPerRun: planMaxTasks ?? config.limits.maxTasksPerRun,
+  return {
+    limits: {
+      maxParallel: Math.min(limits.maxParallel, planMaxParallel ?? limits.maxParallel),
+      maxTasksPerRun: planMaxTasks ?? limits.maxTasksPerRun,
+    },
+    planMaxParallel,
+    planMaxTasks,
   };
-  const stats = ledgerStats(await load(ctx, root, values.plan), limits, values.plan);
-  const result: LedgerStats = { ...stats };
-  if (planMaxParallel !== undefined) result.planMaxParallel = planMaxParallel;
-  if (planMaxTasks !== undefined) result.planMaxTasks = planMaxTasks;
-  if (values.json === true) {
-    printJson(ctx.stdout, result);
-    return 0;
-  }
+}
+
+function formatLedgerStats(result: LedgerStats, limits: Limits): string {
   const lines = [
     ...(result.plan === undefined ? [] : [`plan: ${result.plan}`]),
     `dispatched: ${result.dispatched}`,
     `active: ${result.active}`,
     `terminal: ${result.terminal}`,
-    planMaxParallel === undefined
+    result.planMaxParallel === undefined
       ? `max parallel: ${result.limits.maxParallel}`
-      : `max parallel: ${result.limits.maxParallel} (plan ${planMaxParallel}, config ${config.limits.maxParallel})`,
-    planMaxTasks === undefined
+      : `max parallel: ${result.limits.maxParallel} (plan ${result.planMaxParallel}, config ${limits.maxParallel})`,
+    result.planMaxTasks === undefined
       ? `max tasks per run: ${result.limits.maxTasksPerRun}`
-      : `max tasks per run: ${result.limits.maxTasksPerRun} (plan ${planMaxTasks}, config ${config.limits.maxTasksPerRun})`,
+      : `max tasks per run: ${result.limits.maxTasksPerRun} (plan ${result.planMaxTasks}, config ${limits.maxTasksPerRun})`,
     `can dispatch: ${result.canDispatch ? "yes" : "no"}`,
   ];
-  ctx.stdout(lines.map((line) => `${line}\n`).join(""));
+  return lines.map((line) => `${line}\n`).join("");
+}
+
+async function list(ctx: CliContext, root: string, values: Values) {
+  onlyFlags("list", values, ["plan", "json"]);
+  const entries = await load(ctx, root, values.plan);
+  ctx.stdout(values.json ? formatJson(entries) : formatLedgerList(entries));
+  return 0;
+}
+
+async function stats(ctx: CliContext, root: string, values: Values) {
+  onlyFlags("stats", values, ["plan", "json"]);
+  const { config } = await loadConfigReporting(ctx);
+  const markdown = values.plan === undefined ? undefined : await readFileIfExists(planPath(root, values.plan));
+  const plan = markdown === undefined ? undefined : parsePlan(markdown);
+  const { limits, planMaxParallel, planMaxTasks } = effectiveLimits(config.limits, plan);
+  const result = ledgerStats(await load(ctx, root, undefined), limits, values.plan);
+  if (planMaxParallel !== undefined) result.planMaxParallel = planMaxParallel;
+  if (planMaxTasks !== undefined) result.planMaxTasks = planMaxTasks;
+  ctx.stdout(values.json ? formatJson(result) : formatLedgerStats(result, config.limits));
   return 0;
 }
 
@@ -207,9 +206,8 @@ function printRequestId(ctx: CliContext, values: Values) {
 }
 
 export const run: CommandRun = async (ctx) => {
-  const { values, positionals } = parseArgs(ctx.argv, OPTIONS);
-  const [subcommand, extra] = positionals;
-  if (extra !== undefined) throw usageError(`unexpected argument "${extra}"`);
+  const { values, positionals } = parseArgs(ctx.argv, OPTIONS, { maxPositionals: 1 });
+  const [subcommand] = positionals;
   if (values.plan !== undefined) checkPlanSlug(values.plan, "--plan");
   if (values.unit !== undefined) checkUnitId(values.unit);
   const root = findProjectRoot(ctx.cwd);

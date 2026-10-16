@@ -9,13 +9,14 @@ import {
   ensureDir,
   hashDir,
   isSymlink,
+  lstatIfExists,
   MANAGED_MARKER,
   pathExists,
   readFileIfExists,
   writeFileAtomic,
 } from "../src/util/fs.ts";
 import { formatJson, renderTable } from "../src/util/output.ts";
-import { tempDir } from "./helpers.ts";
+import { omtExit, tempDir } from "./helpers.ts";
 
 test("OmtError defaults to exit code 1 and keeps code, hint, and cause", () => {
   const cause = new Error("inner");
@@ -56,6 +57,13 @@ test("readFileIfExists, pathExists, and isSymlink handle missing paths", async (
   assert.equal(await isSymlink(link), true);
 });
 
+test("lstatIfExists rejects a path under a regular file with ENOTDIR", async (t) => {
+  const root = tempDir(t);
+  const file = join(root, "file");
+  writeFileSync(file, "content");
+  await assert.rejects(lstatIfExists(join(file, "child")), { code: "ENOTDIR" });
+});
+
 test("parseArgs returns values and positionals", () => {
   const parsed = parseArgs(["show", "--json", "--role", "a", "--role", "b"], {
     json: { type: "boolean" },
@@ -69,11 +77,11 @@ test("parseArgs returns values and positionals", () => {
 test("parseArgs turns a parse error into an OmtError with exit code 2", () => {
   assert.throws(
     () => parseArgs(["--nope"], { json: { type: "boolean" } }),
-    (error: unknown) => error instanceof OmtError && error.exitCode === 2 && error.code === "usage",
+    (error: unknown) => omtExit(2)(error) && error.code === "usage",
   );
   assert.throws(
     () => parseArgs(["--role"], { role: { type: "string" } }),
-    (error: unknown) => error instanceof OmtError && error.exitCode === 2,
+    omtExit(2),
   );
 });
 

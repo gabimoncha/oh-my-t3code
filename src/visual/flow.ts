@@ -73,6 +73,10 @@ const SIDE_MARGIN = 14;
 const GROW = 4;
 const MAX_LINES = 4;
 
+function columnWidthOf(widest: number): number {
+  return widest <= 4 ? (BASE_WIDTH - 2 * MARGIN) / widest : WIDE_COLUMN;
+}
+
 interface IndexedEdge {
   index: number;
   s: number;
@@ -128,7 +132,7 @@ export function assignRows(block: FlowBlock): { rows: number[]; back: Set<number
 
 // The characters per label line of a node in a grid whose widest row has `widest` nodes.
 export function labelCharsPerLine(widest: number, kind: NodeKind): number {
-  const columnWidth = widest <= 4 ? (BASE_WIDTH - 2 * MARGIN) / widest : WIDE_COLUMN;
+  const columnWidth = columnWidthOf(widest);
   const pad = kind === "decision" ? 34 : 22;
   return Math.max(1, Math.floor((columnWidth - NODE_INSET - pad) / 7.1));
 }
@@ -230,99 +234,69 @@ function candidatesFor(edge: IndexedEdge, rows: number[], place: number[], hasRi
   const rt = rows[t] as number;
   const box = (g: Geometry, node: number) => g.boxes[node] as Placed;
   const out: Candidate[] = [];
-  const toRightLane = (g: Geometry): Point[] => {
-    const a = box(g, s);
+  const route = (name: string, gaps: number[], draw: (a: Placed, b: Placed, g: Geometry) => Point[], side?: "left" | "right"): Candidate => ({
+    name,
+    gaps,
+    side,
+    build: (g) => draw(box(g, s), box(g, t), g),
+  });
+  const exit = (a: Placed): Point => ({ x: a.cx, y: a.bottom });
+  const entry = (b: Placed): Point => ({ x: b.cx, y: b.y - 1 });
+  const via = (gap: number, endY: (b: Placed) => number) => (a: Placed, b: Placed, g: Geometry): Point[] => {
+    const lane = g.lane(gap, e);
+    return [exit(a), { x: a.cx, y: lane }, { x: b.cx, y: lane }, { x: b.cx, y: endY(b) }];
+  };
+  const toRightLane = (a: Placed, g: Geometry): Point[] => {
     const x = g.side("right", e);
     if (s !== t && !hasRightNeighbor(s)) return [{ x: a.right, y: a.cy }, { x, y: a.cy }];
     const lane = g.lane(rs, e);
-    return [{ x: a.cx, y: a.bottom }, { x: a.cx, y: lane }, { x, y: lane }];
+    return [exit(a), { x: a.cx, y: lane }, { x, y: lane }];
   };
-  const fromRightLane = (g: Geometry): Point[] => {
-    const b = box(g, t);
+  const fromRightLane = (b: Placed, g: Geometry): Point[] => {
     const x = g.side("right", e);
     if (!hasRightNeighbor(t)) return [{ x, y: b.cy }, { x: b.right + 1, y: b.cy }];
     const lane = g.lane(rt - 1, e);
-    return [{ x, y: lane }, { x: b.cx, y: lane }, { x: b.cx, y: b.y - 1 }];
+    return [{ x, y: lane }, { x: b.cx, y: lane }, entry(b)];
   };
   const rightLane = (): Candidate => {
     const gaps: number[] = [];
     if (s === t || hasRightNeighbor(s)) gaps.push(rs);
     if (hasRightNeighbor(t)) gaps.push(rt - 1);
-    return { name: "right-lane", gaps, side: "right", build: (g) => [...toRightLane(g), ...fromRightLane(g)] };
+    return route("right-lane", gaps, (a, b, g) => [...toRightLane(a, g), ...fromRightLane(b, g)], "right");
   };
   if (s === t) return [rightLane()];
   const sameX = Math.abs((place[s] as number) - (place[t] as number)) < 1e-6;
   if (rt > rs) {
     if (sameX) {
-      out.push({ name: "straight", gaps: [], build: (g) => [{ x: box(g, s).cx, y: box(g, s).bottom }, { x: box(g, s).cx, y: box(g, t).y - 1 }] });
+      out.push(route("straight", [], (a, b) => [exit(a), { x: a.cx, y: b.y - 1 }]));
     } else {
-      const via = (gap: number) => (g: Geometry): Point[] => {
-        const a = box(g, s);
-        const b = box(g, t);
-        const lane = g.lane(gap, e);
-        return [{ x: a.cx, y: a.bottom }, { x: a.cx, y: lane }, { x: b.cx, y: lane }, { x: b.cx, y: b.y - 1 }];
-      };
-      out.push({ name: "below-source", gaps: [rs], build: via(rs) });
-      if (rt - 1 !== rs) out.push({ name: "above-target", gaps: [rt - 1], build: via(rt - 1) });
+      out.push(route("below-source", [rs], via(rs, (b) => b.y - 1)));
+      if (rt - 1 !== rs) out.push(route("above-target", [rt - 1], via(rt - 1, (b) => b.y - 1)));
     }
     if (rt - rs >= 2) {
       const side = nearSide(s);
-      out.push({
-        name: `${side}-lane`,
-        gaps: [rs, rt - 1],
-        side,
-        build: (g) => {
-          const a = box(g, s);
-          const b = box(g, t);
-          const x = g.side(side, e);
-          const down = g.lane(rs, e);
-          const up = g.lane(rt - 1, e);
-          return [{ x: a.cx, y: a.bottom }, { x: a.cx, y: down }, { x, y: down }, { x, y: up }, { x: b.cx, y: up }, { x: b.cx, y: b.y - 1 }];
-        },
-      });
+      out.push(route(`${side}-lane`, [rs, rt - 1], (a, b, g) => {
+        const x = g.side(side, e);
+        const down = g.lane(rs, e);
+        const up = g.lane(rt - 1, e);
+        return [exit(a), { x: a.cx, y: down }, { x, y: down }, { x, y: up }, { x: b.cx, y: up }, entry(b)];
+      }, side));
     }
     return out;
   }
   if (rt === rs) {
-    out.push({
-      name: "across",
-      gaps: [],
-      build: (g) => {
-        const a = box(g, s);
-        const b = box(g, t);
-        return b.cx > a.cx ? [{ x: a.right, y: a.cy }, { x: b.x - 1, y: a.cy }] : [{ x: a.x, y: a.cy }, { x: b.right + 1, y: a.cy }];
-      },
-    });
-    out.push({
-      name: "under",
-      gaps: [rs],
-      build: (g) => {
-        const a = box(g, s);
-        const b = box(g, t);
-        const lane = g.lane(rs, e);
-        return [{ x: a.cx, y: a.bottom }, { x: a.cx, y: lane }, { x: b.cx, y: lane }, { x: b.cx, y: b.bottom + 1 }];
-      },
-    });
+    out.push(route("across", [], (a, b) =>
+      b.cx > a.cx ? [{ x: a.right, y: a.cy }, { x: b.x - 1, y: a.cy }] : [{ x: a.x, y: a.cy }, { x: b.right + 1, y: a.cy }],
+    ));
+    out.push(route("under", [rs], via(rs, (b) => b.bottom + 1)));
     return out;
   }
-  out.push({
-    name: "up-then-across",
-    gaps: [],
-    build: (g) => {
-      const a = box(g, s);
-      const b = box(g, t);
-      return [{ x: a.cx, y: a.y }, { x: a.cx, y: b.cy }, { x: b.cx < a.cx ? b.right + 1 : b.x - 1, y: b.cy }];
-    },
-  });
-  out.push({
-    name: "across-then-up",
-    gaps: [],
-    build: (g) => {
-      const a = box(g, s);
-      const b = box(g, t);
-      return [{ x: b.cx > a.cx ? a.right : a.x, y: a.cy }, { x: b.cx, y: a.cy }, { x: b.cx, y: b.bottom + 1 }];
-    },
-  });
+  out.push(route("up-then-across", [], (a, b) =>
+    [{ x: a.cx, y: a.y }, { x: a.cx, y: b.cy }, { x: b.cx < a.cx ? b.right + 1 : b.x - 1, y: b.cy }],
+  ));
+  out.push(route("across-then-up", [], (a, b) =>
+    [{ x: b.cx > a.cx ? a.right : a.x, y: a.cy }, { x: b.cx, y: a.cy }, { x: b.cx, y: b.bottom + 1 }],
+  ));
   out.push(rightLane());
   return out;
 }
@@ -521,38 +495,34 @@ export function layoutFlow(block: FlowBlock): FlowLayout {
 
   const cols = new Array<number>(count).fill(0);
   const taken = new Map<number, Set<number>>();
-  const takenIn = (row: number): Set<number> => {
+  const claim = (row: number, start: number): number => {
     let set = taken.get(row);
     if (set === undefined) {
       set = new Set();
       taken.set(row, set);
     }
-    return set;
+    let col = start;
+    while (set.has(col)) col += 1;
+    set.add(col);
+    return col;
   };
   block.nodes.forEach((node, i) => {
     if (node.col === undefined) return;
     const row = rows[i] as number;
-    const set = takenIn(row);
-    let col = node.col;
-    while (set.has(col)) col += 1;
+    const col = claim(row, node.col);
     if (col !== node.col) warnings.push(`${name}: node "${node.id}" moved from column ${node.col} to ${col}, because its cell is taken`);
-    set.add(col);
     cols[i] = col;
   });
   block.nodes.forEach((node, i) => {
     if (node.col !== undefined) return;
-    const set = takenIn(rows[i] as number);
-    let col = 0;
-    while (set.has(col)) col += 1;
-    set.add(col);
-    cols[i] = col;
+    cols[i] = claim(rows[i] as number, 0);
   });
   const widest = Math.max(1, ...cols.map((col) => col + 1));
   // A flow with a pinned column keeps every row on the grid, so its main column stays straight.
   const pinned = block.nodes.some((node) => node.col !== undefined);
   const place = cols.map((col, i) => (pinned ? col : col + (widest - (taken.get(rows[i] as number)?.size ?? 1)) / 2));
 
-  const columnWidth = widest <= 4 ? (BASE_WIDTH - 2 * MARGIN) / widest : WIDE_COLUMN;
+  const columnWidth = columnWidthOf(widest);
   const baseWidth = widest <= 4 ? BASE_WIDTH : 2 * MARGIN + WIDE_COLUMN * widest;
   const width = columnWidth - NODE_INSET;
   const nodes: LayoutNode[] = block.nodes.map((node, i) => {
@@ -600,18 +570,19 @@ export function layoutFlow(block: FlowBlock): FlowLayout {
     (side, edge) => (side === "right" ? areaRight + SIDE_STEP * (edge + 1) : areaLeft - SIDE_STEP * (edge + 1)),
     0,
   );
-  const chosen = new Map<number, Candidate>();
+  const chosen = new Map<number, { pick: Candidate; draft: Point[] }>();
   const routed: TakenSegment[] = [];
   const laneYs = new Set(Array.from({ length: lastRow + 2 }, (_, i) => provisional.gapTop(i - 1) + MIN_GAP / 2));
   // Forward edges have fewer routes than back edges, so they choose first.
   for (const edge of [...edges.filter((e) => !back.has(e.index)), ...edges.filter((e) => back.has(e.index))]) {
     const candidates = candidatesFor(edge, rows, place, hasRightNeighbor, nearSide);
-    const valid = candidates.filter((candidate) => routeValid(candidate.build(provisional.geometry), edge.s, edge.t, provisional.boxes));
-    const pick =
-      valid.find((candidate) => !sharesLine(segmentsOf(candidate.build(provisional.geometry)), edge, routed, laneYs)) ?? valid[0] ?? candidates[candidates.length - 1];
-    if (pick === undefined) continue;
-    chosen.set(edge.index, pick);
-    for (const segment of segmentsOf(pick.build(provisional.geometry))) {
+    const drafts = candidates.map((candidate) => ({ candidate, points: candidate.build(provisional.geometry) }));
+    const valid = drafts.filter(({ points }) => routeValid(points, edge.s, edge.t, provisional.boxes));
+    const selected = valid.find(({ points }) => !sharesLine(segmentsOf(points), edge, routed, laneYs)) ?? valid[0] ?? drafts[drafts.length - 1];
+    if (selected === undefined) continue;
+    const { candidate: pick, points: draft } = selected;
+    chosen.set(edge.index, { pick, draft });
+    for (const segment of segmentsOf(draft)) {
       routed.push({ segment, s: edge.s, t: edge.t });
     }
   }
@@ -619,7 +590,7 @@ export function layoutFlow(block: FlowBlock): FlowLayout {
   const laneSlots = new Map<number, number[]>();
   const sideSlots: Record<"left" | "right", number[]> = { left: [], right: [] };
   for (const edge of edges) {
-    const pick = chosen.get(edge.index);
+    const pick = chosen.get(edge.index)?.pick;
     if (pick === undefined) continue;
     for (const gap of new Set(pick.gaps)) {
       const list = laneSlots.get(gap) ?? [];
@@ -630,7 +601,7 @@ export function layoutFlow(block: FlowBlock): FlowLayout {
   }
   for (const [gap, list] of laneSlots) {
     const laneY = provisional.gapTop(gap) + MIN_GAP / 2;
-    const ends = new Map(list.map((index) => [index, laneEnds(chosen.get(index)?.build(provisional.geometry) ?? [], laneY)]));
+    const ends = new Map(list.map((index) => [index, laneEnds(chosen.get(index)?.draft ?? [], laneY)]));
     laneSlots.set(gap, orderLanes(list, ends));
   }
   const lanesIn = (gap: number) => laneSlots.get(gap)?.length ?? 0;
@@ -663,7 +634,7 @@ export function layoutFlow(block: FlowBlock): FlowLayout {
   const nodeBoxes: LabelBox[] = final.boxes.map((box) => ({ left: box.x, right: box.right, top: box.y, bottom: box.bottom }));
   const outEdges: LayoutEdge[] = [];
   for (const edge of edges) {
-    const pick = chosen.get(edge.index);
+    const pick = chosen.get(edge.index)?.pick;
     const spec = block.edges[edge.index];
     if (pick === undefined || spec === undefined) continue;
     const points = pick.build(final.geometry);
@@ -695,7 +666,7 @@ export function layoutFlow(block: FlowBlock): FlowLayout {
   return { width: canvas.width, height: canvas.height, nodes, edges: outEdges, warnings };
 }
 
-export function fmt(value: number): string {
+function fmt(value: number): string {
   const rounded = Math.round(value * 10) / 10;
   return String(Object.is(rounded, -0) ? 0 : rounded);
 }
@@ -715,13 +686,13 @@ function pathData(points: Point[]): string {
   return d;
 }
 
-function nodeClass(kind: NodeKind, tone: NodeTone | undefined): string {
-  return tone === undefined ? `nd ${kind}` : `nd ${kind} ${tone}`;
+function toned(base: string, tone: NodeTone | undefined): string {
+  return tone === undefined ? base : `${base} ${tone}`;
 }
 
 function shapeSvg(kind: NodeKind, tone: NodeTone | undefined, box: Box): string {
   const { x, y, w, h } = box;
-  const cls = nodeClass(kind, tone);
+  const cls = toned(`nd ${kind}`, tone);
   let out: string;
   if (kind === "decision") {
     const s = Math.min(14, w / 4);
@@ -741,7 +712,7 @@ function shapeSvg(kind: NodeKind, tone: NodeTone | undefined, box: Box): string 
     out = `<rect class="${cls}" x="${fmt(x)}" y="${fmt(y)}" width="${fmt(w)}" height="${fmt(h)}" rx="${fmt(rx)}"/>`;
   }
   if (kind === "task") {
-    out += `<rect class="taskbar${tone === undefined ? "" : ` ${tone}`}" x="${fmt(x)}" y="${fmt(y)}" width="5" height="${fmt(h)}" rx="2"/>`;
+    out += `<rect class="${toned("taskbar", tone)}" x="${fmt(x)}" y="${fmt(y)}" width="5" height="${fmt(h)}" rx="2"/>`;
   }
   return out;
 }
@@ -759,7 +730,7 @@ function nodeSvg(node: LayoutNode): string {
     ty += 14;
   }
   if (node.badge !== undefined) {
-    const cls = node.tone === undefined ? "badge" : `badge ${node.tone}`;
+    const cls = toned("badge", node.tone);
     out += `<text class="${cls}" x="${fmt(node.x + node.w - 6)}" y="${fmt(node.y - 4)}" text-anchor="end">${escapeHtml(node.badge)}</text>`;
   }
   return out;

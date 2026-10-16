@@ -1,9 +1,8 @@
 import { formatDoctor, runDoctor } from "../install/doctor.ts";
 import type { CommandRun } from "../types.ts";
 import { parseArgs } from "../util/args.ts";
-import { usageError } from "../util/errors.ts";
-import { printJson } from "../util/output.ts";
-import { readCapabilities } from "./route.ts";
+import { formatJson } from "../util/output.ts";
+import { readCapabilities } from "./shared.ts";
 
 export const summary = "Check the Node version, config, skills, links, hooks, T3, and roles.";
 
@@ -22,17 +21,12 @@ Options:
 `;
 
 export const run: CommandRun = async (ctx) => {
-  const { values, positionals } = parseArgs(ctx.argv, {
+  const { values } = parseArgs(ctx.argv, {
     capabilities: { type: "string" },
     json: { type: "boolean" },
     project: { type: "boolean" },
-  });
-  if (positionals.length > 0) throw usageError(`unexpected argument "${positionals[0]}"`);
+  }, { maxPositionals: 0 });
   const report = await runDoctor(ctx, await readCapabilities(ctx, values.capabilities), values.project === true ? "project" : "user");
-  if (values.json === true) {
-    printJson(ctx.stdout, report);
-  } else {
-    ctx.stdout(formatDoctor(report));
-  }
+  ctx.stdout(values.json ? formatJson(report) : formatDoctor(report));
   return report.ok ? 0 : 1;
 };

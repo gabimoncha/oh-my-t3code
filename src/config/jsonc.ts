@@ -1,4 +1,4 @@
-import { OmtError } from "../util/errors.ts";
+import { errorMessage, OmtError } from "../util/errors.ts";
 
 function position(text: string, offset: number): { line: number; column: number } {
   let line = 1;
@@ -21,17 +21,21 @@ function blank(char: string): string {
   return char === "\n" || char === "\r" ? char : " ";
 }
 
+function skipString(chars: ArrayLike<string>, start: number): number {
+  let i = start + 1;
+  while (i < chars.length && chars[i] !== '"' && chars[i] !== "\n") {
+    i += chars[i] === "\\" ? 2 : 1;
+  }
+  return i + 1;
+}
+
 function stripComments(text: string, source: string): string[] {
   const out = text.split("");
   let i = 0;
   while (i < text.length) {
     const char = text[i];
     if (char === '"') {
-      i++;
-      while (i < text.length && text[i] !== '"' && text[i] !== "\n") {
-        i += text[i] === "\\" ? 2 : 1;
-      }
-      i++;
+      i = skipString(text, i);
     } else if (char === "/" && text[i + 1] === "/") {
       while (i < text.length && text[i] !== "\n") {
         out[i] = blank(text[i] as string);
@@ -54,11 +58,7 @@ function stripTrailingCommas(chars: string[]): void {
   while (i < chars.length) {
     const char = chars[i];
     if (char === '"') {
-      i++;
-      while (i < chars.length && chars[i] !== '"' && chars[i] !== "\n") {
-        i += chars[i] === "\\" ? 2 : 1;
-      }
-      i++;
+      i = skipString(chars, i);
       continue;
     }
     if (char === ",") {
@@ -173,8 +173,7 @@ export function parseJsonc(text: string, source: string): unknown {
   try {
     return JSON.parse(json);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    const reason = message.replace(/, ".*" is not valid JSON$/s, "").replace(/ in JSON at position \d+.*$/s, "");
+    const reason = errorMessage(error).replace(/, ".*" is not valid JSON$/s, "").replace(/ in JSON at position \d+.*$/s, "");
     throw parseError(body, source, errorOffset(json), reason);
   }
 }

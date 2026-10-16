@@ -4,20 +4,20 @@ import { DEFAULT_CONFIG } from "../src/config/defaults.ts";
 import { PROJECT_STARTER_CONFIG, USER_STARTER_CONFIG } from "../src/config/starter.ts";
 import { EFFORT_LADDER } from "../src/types.ts";
 
-const EXPECTED: Record<string, [access: string, result: string, t3Role: string, mode: string]> = {
-  explore: ["read-only", "research", "research", "plan"],
-  research: ["read-only", "research", "research", "plan"],
-  plan: ["edit", "plan", "design", "default"],
-  "plan-review": ["read-only", "review", "review", "plan"],
-  execute: ["edit", "work", "implementation", "default"],
-  quick: ["edit", "work", "implementation", "default"],
-  deep: ["edit", "work", "implementation", "default"],
-  review: ["read-only", "review", "review", "plan"],
-  oracle: ["read-only", "review", "review", "plan"],
-  test: ["edit", "test", "test", "default"],
-  writing: ["edit", "work", "implementation", "default"],
-  design: ["edit", "work", "design", "default"],
-  ui: ["edit", "work", "implementation", "default"],
+const EXPECTED: Record<string, [access: string, result: string, t3Role: string, mode: string, crossFamily: boolean, chain: string[]]> = {
+  explore: ["read-only", "research", "research", "plan", false, ["codex/gpt-6-luna/low", "claudeAgent/claude-sonnet-5-5/low"]],
+  research: ["read-only", "research", "research", "plan", false, ["codex/gpt-6.1-sol/low", "claudeAgent/claude-opus-5-5/low"]],
+  plan: ["edit", "plan", "design", "default", false, ["claudeAgent/claude-opus-5-5/xhigh", "codex/gpt-6-astra/xhigh"]],
+  "plan-review": ["read-only", "review", "review", "plan", true, ["codex/gpt-6-astra/high", "claudeAgent/claude-opus-5-5/high"]],
+  execute: ["edit", "work", "implementation", "default", false, ["claudeAgent/claude-opus-5-5/medium", "codex/gpt-6.1-sol/xhigh"]],
+  quick: ["edit", "work", "implementation", "default", false, ["codex/gpt-6-luna/high", "claudeAgent/claude-sonnet-5-5/low"]],
+  deep: ["edit", "work", "implementation", "default", false, ["claudeAgent/claude-opus-5-5/max", "codex/gpt-6-astra/xhigh"]],
+  review: ["read-only", "review", "review", "plan", true, ["codex/gpt-6-astra/high", "claudeAgent/claude-opus-5-5/high"]],
+  oracle: ["read-only", "review", "review", "plan", true, ["codex/gpt-6-astra/high", "claudeAgent/claude-opus-5-5/high"]],
+  test: ["edit", "test", "test", "default", false, ["codex/gpt-6.1-sol/low", "claudeAgent/claude-sonnet-5-5/low"]],
+  writing: ["edit", "work", "implementation", "default", false, ["claudeAgent/claude-opus-5-5/high", "codex/gpt-6-astra/medium"]],
+  design: ["edit", "work", "design", "default", false, ["claudeAgent/claude-opus-5-5/high"]],
+  ui: ["edit", "work", "implementation", "default", false, ["claudeAgent/claude-opus-5-5/medium"]],
 };
 
 test("the defaults hold the 13 roles with the values from spec section 6.4", () => {
@@ -46,30 +46,12 @@ test("every default rung names the built-in provider instance of its driver, a m
   }
 });
 
-// [...rungs, crossFamily]; each rung is "driver/model/effort", and its provider is the driver.
-const CHAINS: Record<string, (string | boolean)[]> = {
-  explore: ["codex/gpt-6-luna/low", "claudeAgent/claude-sonnet-5-5/low", false],
-  research: ["codex/gpt-6.1-sol/low", "claudeAgent/claude-opus-5-5/low", false],
-  plan: ["claudeAgent/claude-opus-5-5/xhigh", "codex/gpt-6-astra/xhigh", false],
-  "plan-review": ["codex/gpt-6-astra/high", "claudeAgent/claude-opus-5-5/high", true],
-  execute: ["claudeAgent/claude-opus-5-5/medium", "codex/gpt-6.1-sol/xhigh", false],
-  quick: ["codex/gpt-6-luna/high", "claudeAgent/claude-sonnet-5-5/low", false],
-  deep: ["claudeAgent/claude-opus-5-5/max", "codex/gpt-6-astra/xhigh", false],
-  review: ["codex/gpt-6-astra/high", "claudeAgent/claude-opus-5-5/high", true],
-  oracle: ["codex/gpt-6-astra/high", "claudeAgent/claude-opus-5-5/high", true],
-  test: ["codex/gpt-6.1-sol/low", "claudeAgent/claude-sonnet-5-5/low", false],
-  writing: ["claudeAgent/claude-opus-5-5/high", "codex/gpt-6-astra/medium", false],
-  design: ["claudeAgent/claude-opus-5-5/high", false],
-  ui: ["claudeAgent/claude-opus-5-5/medium", false],
-};
-
 test("the default chains and crossFamily flags match spec section 6.4 exactly", () => {
-  assert.deepEqual(Object.keys(CHAINS).sort(), Object.keys(DEFAULT_CONFIG.roles).sort());
-  for (const [name, rungs] of Object.entries(CHAINS)) {
+  assert.deepEqual(Object.keys(EXPECTED).sort(), Object.keys(DEFAULT_CONFIG.roles).sort());
+  for (const [name, [, , , , crossFamily, rungs]] of Object.entries(EXPECTED)) {
     const role = DEFAULT_CONFIG.roles[name];
     assert.ok(role, name);
-    const crossFamily = rungs.at(-1) === true;
-    const chain = rungs.filter((rung): rung is string => typeof rung === "string").map((text) => {
+    const chain = rungs.map((text) => {
       const [driver, model, effort] = text.split("/");
       return { provider: driver, driver, model, effort };
     });

@@ -1,5 +1,7 @@
 import { EFFORT_LADDER, RESULT_KINDS } from "../types.ts";
 import type { ConfigIssue, ConfigLayer, Effort, Limits, OptionValue, RoleConfig, Rung, Visuals } from "../types.ts";
+import { usageError } from "../util/errors.ts";
+import { isRecord } from "../util/json.ts";
 
 export const ROOT_KEYS: readonly string[] = ["$schema", "version", "roles", "limits", "visuals"];
 export const ROLE_KEYS: readonly string[] = [
@@ -41,6 +43,20 @@ export const LIMIT_RANGES: Readonly<Record<keyof Limits, readonly [number, numbe
   maxReviewRounds: [1, 10],
 };
 
+export function parseLimit(value: string, key: keyof Limits): number | undefined {
+  if (!/^(0|[1-9]\d*)$/.test(value)) return undefined;
+  const [min, max] = LIMIT_RANGES[key];
+  const number = Number(value);
+  return number >= min && number <= max ? number : undefined;
+}
+
+export function limitArg(flag: string, value: string, key: keyof Limits): number {
+  const number = parseLimit(value, key);
+  const [min, max] = LIMIT_RANGES[key];
+  if (number === undefined) throw usageError(`${flag} must be an integer from ${min} to ${max}, got "${value}"`);
+  return number;
+}
+
 const ROLE_NAME_RE = new RegExp(ROLE_NAME_PATTERN);
 const PROVIDER_RE = new RegExp(PROVIDER_PATTERN);
 
@@ -51,10 +67,6 @@ const ENUM_KEYS: Readonly<Record<string, readonly string[]>> = {
   interactionMode: INTERACTION_MODE_VALUES,
   runtimeMode: RUNTIME_MODE_VALUES,
 };
-
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function describe(value: unknown): string {
   if (value === null) return "null";
@@ -82,7 +94,7 @@ class Collector {
 }
 
 function validateRung(value: unknown, path: string, out: Collector): Rung | undefined {
-  if (!isObject(value)) {
+  if (!isRecord(value)) {
     out.error(path, `a rung must be an object, got ${describe(value)}`);
     return undefined;
   }
@@ -102,7 +114,7 @@ function validateRung(value: unknown, path: string, out: Collector): Rung | unde
       if (typeof item === "string" && (EFFORT_LADDER as readonly string[]).includes(item)) rung.effort = item as Effort;
       else out.error(keyPath, `must be one of ${oneOf(EFFORT_LADDER)}, got ${describe(item)}`);
     } else if (key === "options") {
-      if (!isObject(item)) {
+      if (!isRecord(item)) {
         out.error(keyPath, `must be an object, got ${describe(item)}`);
         continue;
       }
@@ -121,7 +133,7 @@ function validateRung(value: unknown, path: string, out: Collector): Rung | unde
 
 function validateRole(value: unknown, path: string, out: Collector): Partial<RoleConfig> | null | undefined {
   if (value === null) return null;
-  if (!isObject(value)) {
+  if (!isRecord(value)) {
     out.error(path, `a role must be an object or null, got ${describe(value)}`);
     return undefined;
   }
@@ -153,7 +165,7 @@ function validateRole(value: unknown, path: string, out: Collector): Partial<Rol
 }
 
 function validateLimits(value: unknown, out: Collector): Partial<Limits> | undefined {
-  if (!isObject(value)) {
+  if (!isRecord(value)) {
     out.error("limits", `must be an object, got ${describe(value)}`);
     return undefined;
   }
@@ -175,7 +187,7 @@ function validateLimits(value: unknown, out: Collector): Partial<Limits> | undef
 }
 
 function validateVisuals(value: unknown, out: Collector): Partial<Visuals> | undefined {
-  if (!isObject(value)) {
+  if (!isRecord(value)) {
     out.error("visuals", `must be an object, got ${describe(value)}`);
     return undefined;
   }
@@ -196,7 +208,7 @@ function validateVisuals(value: unknown, out: Collector): Partial<Visuals> | und
 export function validateLayer(value: unknown, source: string): { layer: ConfigLayer; issues: ConfigIssue[] } {
   const out = new Collector(source);
   const layer: ConfigLayer = {};
-  if (!isObject(value)) {
+  if (!isRecord(value)) {
     out.error("", `the config must be an object, got ${describe(value)}`);
     return { layer, issues: out.issues };
   }
@@ -209,7 +221,7 @@ export function validateLayer(value: unknown, source: string): { layer: ConfigLa
       if (item === 1) layer.version = 1;
       else out.error(key, `must be 1, got ${describe(item)}`);
     } else if (key === "roles") {
-      if (!isObject(item)) {
+      if (!isRecord(item)) {
         out.error(key, `must be an object, got ${describe(item)}`);
         continue;
       }

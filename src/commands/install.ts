@@ -4,6 +4,7 @@ import { buildInstallPlan, installConflicts, installHasChanges, parseTargets, re
 import type { CommandRun } from "../types.ts";
 import { parseArgs } from "../util/args.ts";
 import { usageError } from "../util/errors.ts";
+import { plural } from "../util/output.ts";
 
 export const summary = "Install the omt skills, links, starter config, and optional Claude hook.";
 
@@ -31,7 +32,7 @@ Options:
 `;
 
 export const run: CommandRun = async (ctx) => {
-  const { values, positionals } = parseArgs(ctx.argv, {
+  const { values } = parseArgs(ctx.argv, {
     targets: { type: "string" },
     hooks: { type: "boolean" },
     yes: { type: "boolean" },
@@ -39,8 +40,7 @@ export const run: CommandRun = async (ctx) => {
     force: { type: "boolean" },
     project: { type: "boolean" },
     "no-git-exclude": { type: "boolean" },
-  });
-  if (positionals.length > 0) throw usageError(`unexpected argument "${positionals[0]}"`);
+  }, { maxPositionals: 0 });
   const scope = values.project === true ? "project" : "user";
   if (values["no-git-exclude"] === true && scope !== "project") throw usageError("--no-git-exclude needs --project");
   const targets = await parseTargets(values.targets, ctx.homedir, scope);
@@ -56,7 +56,7 @@ export const run: CommandRun = async (ctx) => {
   const conflicts = installConflicts(plan);
   if (conflicts > 0) {
     ctx.stderr(
-      `${conflicts} conflict${conflicts === 1 ? "" : "s"}: these paths exist and omt does not manage them, or they were edited.\n` +
+      `${plural(conflicts, "conflict")}: these paths exist and omt does not manage them, or they were edited.\n` +
         "hint: re-run with --force to back them up and replace them\n",
     );
     return 1;
@@ -73,7 +73,7 @@ export const run: CommandRun = async (ctx) => {
     ctx.stdout("Everything is up to date.\n");
     return 0;
   }
-  ctx.stdout(`Applied ${result.changed.length} change${result.changed.length === 1 ? "" : "s"}.\n`);
+  ctx.stdout(`Applied ${plural(result.changed.length, "change")}.\n`);
   for (const backup of result.backups) ctx.stdout(`backup   ${backup}\n`);
   if (plan.project?.excludeNote !== undefined && plan.project.excludeNote !== "--no-git-exclude") {
     ctx.stdout(`note: ${plan.project.excludeNote}\n`);

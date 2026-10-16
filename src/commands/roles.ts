@@ -1,12 +1,9 @@
-import { loadConfig } from "../config/load.ts";
 import { formatRolesTable } from "../routing/format.ts";
 import { resolveAll } from "../routing/resolve.ts";
 import type { CommandRun } from "../types.ts";
 import { parseArgs } from "../util/args.ts";
-import { usageError } from "../util/errors.ts";
-import { printJson } from "../util/output.ts";
-import { formatIssue } from "./config.ts";
-import { readCapabilities } from "./route.ts";
+import { formatJson } from "../util/output.ts";
+import { loadConfigReporting, readCapabilities } from "./shared.ts";
 
 export const summary = "Resolve every role to a provider, model, and options.";
 
@@ -22,20 +19,14 @@ Options:
 `;
 
 export const run: CommandRun = async (ctx) => {
-  const { values, positionals } = parseArgs(ctx.argv, {
+  const { values } = parseArgs(ctx.argv, {
     capabilities: { type: "string" },
     role: { type: "string", multiple: true },
     json: { type: "boolean" },
-  });
-  if (positionals.length > 0) throw usageError(`unexpected argument "${positionals[0]}"`);
-  const { config, issues } = await loadConfig({ cwd: ctx.cwd, env: ctx.env, homedir: ctx.homedir });
-  for (const issue of issues) ctx.stderr(formatIssue(issue));
+  }, { maxPositionals: 0 });
+  const { config } = await loadConfigReporting(ctx);
   const caps = await readCapabilities(ctx, values.capabilities);
   const report = resolveAll(config, caps, values.role);
-  if (values.json === true) {
-    printJson(ctx.stdout, report);
-  } else {
-    ctx.stdout(formatRolesTable(report));
-  }
+  ctx.stdout(values.json ? formatJson(report) : formatRolesTable(report));
   return 0;
 };

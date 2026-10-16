@@ -1,12 +1,8 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { test } from "node:test";
 import { parseCapabilities } from "../../src/routing/capabilities.ts";
 import { OmtError } from "../../src/util/errors.ts";
-import { PACKAGE_ROOT } from "../helpers.ts";
-
-const FIXTURE = readFileSync(join(PACKAGE_ROOT, "test", "fixtures", "capabilities.json"), "utf8");
+import { CAPS_TEXT } from "./shared.ts";
 
 function capsError(text: string): OmtError {
   try {
@@ -19,7 +15,7 @@ function capsError(text: string): OmtError {
 }
 
 test("parses the fixture and keeps only the section 3 fields", () => {
-  const caps = parseCapabilities(FIXTURE);
+  const caps = parseCapabilities(CAPS_TEXT);
   assert.equal(caps.inheritedProviderInstanceId, "claudeAgent");
   assert.equal(caps.inheritedModel, "claude-opus-5-5");
   assert.equal(caps.runtimeMode, "auto");
@@ -50,13 +46,13 @@ test("parses the fixture and keeps only the section 3 fields", () => {
 });
 
 test("a model without an options key gets an empty options array", () => {
-  const caps = parseCapabilities(FIXTURE);
+  const caps = parseCapabilities(CAPS_TEXT);
   const cursor = caps.providers.find((p) => p.providerInstanceId === "cursor");
   assert.deepEqual(cursor?.models[1], { id: "default", label: "Auto", options: [] });
 });
 
 test("null optional strings become undefined", () => {
-  const caps = parseCapabilities(FIXTURE);
+  const caps = parseCapabilities(CAPS_TEXT);
   const model = caps.providers.find((p) => p.providerInstanceId === "cursor")?.models[0];
   assert.equal(model?.id, "composer-3");
   assert.equal(model !== undefined && "label" in model, false);
@@ -80,8 +76,8 @@ test("missing models, constraints, and canRunChildTask get defaults", () => {
 });
 
 test("accepts the MCP content wrapper object", () => {
-  const wrapped = JSON.stringify({ content: [{ type: "text", text: FIXTURE }] });
-  assert.deepEqual(parseCapabilities(wrapped), parseCapabilities(FIXTURE));
+  const wrapped = JSON.stringify({ content: [{ type: "text", text: CAPS_TEXT }] });
+  assert.deepEqual(parseCapabilities(wrapped), parseCapabilities(CAPS_TEXT));
 });
 
 test("accepts a bare array of content items and picks the first text item with providers", () => {
@@ -89,7 +85,7 @@ test("accepts a bare array of content items and picks the first text item with p
     { type: "image", data: "..." },
     { type: "text", text: "not json" },
     { type: "text", text: JSON.stringify({ note: "no providers" }) },
-    { type: "text", text: FIXTURE },
+    { type: "text", text: CAPS_TEXT },
     { type: "text", text: JSON.stringify({ providers: [] }) },
   ]);
   assert.equal(parseCapabilities(wrapped).providers.length, 6);

@@ -1,7 +1,8 @@
 import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
-import { omtDir, plansDir, projectClaudeSettingsPath, projectConfigPath, projectShimPath, projectSkillRoots } from "../paths.ts";
+import { omtDir, projectClaudeSettingsPath, projectConfigPath, projectInstallDirs, projectShimPath, projectSkillRoots } from "../paths.ts";
 import { OmtError } from "../util/errors.ts";
 import { readFileIfExists, writeFileAtomic } from "../util/fs.ts";
+import { isRecord } from "../util/json.ts";
 import { PACKAGE_NAME } from "./skills.ts";
 
 export interface ManifestLink {
@@ -72,10 +73,7 @@ function manifestFiles(value: unknown[]): ManifestFile[] {
   return value
     .filter(
       (file): file is ManifestFile =>
-        file !== null &&
-        typeof file === "object" &&
-        typeof (file as Record<string, unknown>).path === "string" &&
-        typeof (file as Record<string, unknown>).sha256 === "string",
+        isRecord(file) && typeof file.path === "string" && typeof file.sha256 === "string",
     )
     .map((file) => ({ path: file.path, sha256: file.sha256 }));
 }
@@ -101,15 +99,14 @@ export async function readManifest(path: string): Promise<Manifest | undefined> 
   const links = Array.isArray(value.links)
     ? value.links.filter(
         (link): link is ManifestLink =>
-          link !== null && typeof link === "object" && typeof link.path === "string" && typeof link.target === "string",
+          isRecord(link) && typeof link.path === "string" && typeof link.target === "string",
       )
     : [];
   const hooks = Array.isArray(value.hooks)
     ? value.hooks
         .filter(
           (hook): hook is ManifestHook =>
-            hook !== null &&
-            typeof hook === "object" &&
+            isRecord(hook) &&
             hook.kind === "claude-user-prompt-submit" &&
             typeof hook.settingsPath === "string" &&
             typeof hook.command === "string",
@@ -122,10 +119,10 @@ export async function readManifest(path: string): Promise<Manifest | undefined> 
           ...(typeof hook.backup === "string" ? { backup: hook.backup } : {}),
         }))
     : [];
-  const config = value.config as { path?: unknown; created?: unknown } | undefined;
+  const config = value.config;
   const project = value.project as Record<string, unknown> | null | undefined;
   const excludeFile = project?.excludeFile as Record<string, unknown> | null | undefined;
-  const restore = project?.gitignoreRestore as Record<string, unknown> | null | undefined;
+  const restore = project?.gitignoreRestore;
   const existing = project?.existing as Record<string, unknown> | null | undefined;
   return {
     ...(value.scope === "project" ? { scope: "project" as const } : {}),
@@ -136,7 +133,7 @@ export async function readManifest(path: string): Promise<Manifest | undefined> 
     skillsRoot: typeof value.skillsRoot === "string" ? value.skillsRoot : "",
     skills: strings(value.skills),
     links,
-    ...(config !== null && typeof config === "object" && typeof config.path === "string"
+    ...(isRecord(config) && typeof config.path === "string"
       ? { config: { path: config.path, created: config.created === true } }
       : {}),
     hooks,
@@ -158,7 +155,7 @@ export async function readManifest(path: string): Promise<Manifest | undefined> 
                 }
               : {}),
             ...(project.gitExcludeOff === true ? { gitExcludeOff: true } : {}),
-            ...(restore !== null && typeof restore === "object" && typeof restore.before === "string" && typeof restore.sha256 === "string"
+            ...(isRecord(restore) && typeof restore.before === "string" && typeof restore.sha256 === "string"
               ? { gitignoreRestore: { before: restore.before, sha256: restore.sha256 } }
               : {}),
             ...(existing !== null && typeof existing === "object"
@@ -238,16 +235,7 @@ function projectAllowlist(root: string) {
     backups,
     skills,
     files: new Set([join(omt, ".gitignore"), projectConfigPath(root), join(backups, ".gitignore")]),
-    dirs: new Set([
-      omt,
-      plansDir(root),
-      dirname(projectShimPath(root)),
-      backups,
-      dirname(skills.agents),
-      skills.agents,
-      dirname(skills.claude),
-      skills.claude,
-    ]),
+    dirs: new Set(projectInstallDirs(root)),
   };
 }
 

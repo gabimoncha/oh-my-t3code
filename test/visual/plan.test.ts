@@ -1,10 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { layoutFlow, segmentCrossesBox } from "../../src/visual/flow.ts";
+import { layoutFlow } from "../../src/visual/flow.ts";
 import { mergeSpec, planSections, reduceDependencies } from "../../src/visual/plan.ts";
 import type { Block, FlowBlock } from "../../src/visual/spec.ts";
 import { WORKFLOW_PROFILES_PLAN } from "./fixtures.ts";
-import { sharedLines } from "./geometry.ts";
+import { assertClean, sharedLines } from "./geometry.ts";
 
 function flowOf(blocks: Block[] | undefined): FlowBlock {
   const flow = blocks?.find((block) => block.type === "flow");
@@ -28,13 +28,7 @@ test("the workflow-profiles plan has 6 layers and the reduced dependency edges",
     flow.edges.map((edge) => `${edge.from}->${edge.to}`),
     ["U1->U2", "U2->U3", "U3->U4", "U3->U5", "U2->U6", "U4->U7", "U5->U7", "U6->U7", "U5->U8", "U6->U8", "U7->U9", "U8->U9", "U10->U9", "U4->U10", "U5->U10", "U6->U10"],
   );
-  for (const edge of layout.edges) {
-    for (const segment of edge.segments) {
-      for (const node of layout.nodes) {
-        if (node.id !== edge.from && node.id !== edge.to) assert.ok(!segmentCrossesBox(segment, node, 4), `${edge.from}->${edge.to} crosses ${node.id}`);
-      }
-    }
-  }
+  assertClean("workflow-profiles", layout);
   assert.deepEqual(sharedLines(layout), [], "U3 -> U5 and the edges out of U6 meet U5 and U6 at the same x");
   const u1 = flow.nodes[0];
   assert.deepEqual(u1, { id: "U1", label: "U1 Split the skills test file by owner", kind: "task", tone: "open", sub: "quick" });

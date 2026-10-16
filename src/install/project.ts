@@ -1,7 +1,7 @@
 import { stat } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { OmtError } from "../util/errors.ts";
-import { readFileIfExists } from "../util/fs.ts";
+import { errorCode, readFileIfExists } from "../util/fs.ts";
 
 export const SHIM_SIGNATURE = "# oh-my-t3code project shim";
 export const OMT_GITIGNORE_LINES: readonly string[] = ["ledger.jsonl", "evidence/", "bin/", "install.json", "backups/", "plans/"];
@@ -65,7 +65,7 @@ async function dotGitKind(path: string): Promise<"dir" | "file" | undefined> {
   try {
     return (await stat(path)).isDirectory() ? "dir" : "file";
   } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
+    const code = errorCode(error);
     if (code === "ENOENT" || code === "ENOTDIR") return undefined;
     throw error;
   }
@@ -183,8 +183,4 @@ export function withoutExcludeBlocks(text: string, roots: string[], addedNewline
   if (lines.length === 0) return "";
   const finalNewline = removedLast ? !addedNewline : text.endsWith("\n");
   return `${lines.join("\n")}${finalNewline ? "\n" : ""}`;
-}
-
-export function withoutExcludeBlock(text: string, root: string, addedNewline = false): string {
-  return withoutExcludeBlocks(text, [root], addedNewline);
 }

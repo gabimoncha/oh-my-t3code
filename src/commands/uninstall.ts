@@ -3,7 +3,7 @@ import { confirmApply } from "../install/confirm.ts";
 import { buildUninstallPlan, renderUninstallPlan, uninstallHasChanges } from "../install/plan.ts";
 import type { CommandRun } from "../types.ts";
 import { parseArgs } from "../util/args.ts";
-import { usageError } from "../util/errors.ts";
+import { plural } from "../util/output.ts";
 
 export const summary = "Remove the skills, links, and hooks that omt installed.";
 
@@ -26,14 +26,13 @@ Options:
 `;
 
 export const run: CommandRun = async (ctx) => {
-  const { values, positionals } = parseArgs(ctx.argv, {
+  const { values } = parseArgs(ctx.argv, {
     yes: { type: "boolean" },
     "dry-run": { type: "boolean" },
     purge: { type: "boolean" },
     force: { type: "boolean" },
     project: { type: "boolean" },
-  });
-  if (positionals.length > 0) throw usageError(`unexpected argument "${positionals[0]}"`);
+  }, { maxPositionals: 0 });
   const plan = await buildUninstallPlan(ctx, {
     purge: values.purge === true,
     force: values.force === true,
@@ -52,7 +51,7 @@ export const run: CommandRun = async (ctx) => {
   if (!(await confirmApply(ctx, values.yes === true))) return 1;
 
   const result = await applyUninstall(plan, ctx.now());
-  ctx.stdout(`Removed ${result.changed.length} path${result.changed.length === 1 ? "" : "s"}.\n`);
+  ctx.stdout(`Removed ${plural(result.changed.length, "path")}.\n`);
   for (const backup of result.backups) ctx.stdout(`backup   ${backup}\n`);
   ctx.stdout("Restart agent sessions in T3 Code so they stop loading the skills.\n");
   return 0;

@@ -2,12 +2,13 @@ import { DEFAULT_CONFIG } from "../config/defaults.ts";
 import { loadConfig } from "../config/load.ts";
 import { USER_STARTER_CONFIG } from "../config/starter.ts";
 import { findProjectRoot, projectConfigPath, userConfigPath } from "../paths.ts";
-import type { CliContext, CommandRun, ConfigIssue } from "../types.ts";
+import type { CliContext, CommandRun } from "../types.ts";
 import { parseArgs } from "../util/args.ts";
 import { OmtError, usageError } from "../util/errors.ts";
 import { writeTargetFor } from "../install/fsops.ts";
 import { pathExists, writeFileAtomic } from "../util/fs.ts";
-import { printJson } from "../util/output.ts";
+import { formatJson } from "../util/output.ts";
+import { formatIssue, loadConfigReporting } from "./shared.ts";
 
 export const summary = "Show, locate, validate, or create the omt config.";
 
@@ -28,23 +29,13 @@ Options:
 
 const SUBCOMMANDS = ["show", "path", "validate", "init"];
 
-export function formatIssue(issue: ConfigIssue): string {
-  const where = issue.path === "" ? issue.source : `${issue.source} ${issue.path}`;
-  return `${issue.severity} ${where}: ${issue.message}\n`;
-}
-
-function loadFor(ctx: CliContext) {
-  return loadConfig({ cwd: ctx.cwd, env: ctx.env, homedir: ctx.homedir });
-}
-
 async function show(ctx: CliContext, defaults: boolean): Promise<number> {
   if (defaults) {
-    printJson(ctx.stdout, DEFAULT_CONFIG);
+    ctx.stdout(formatJson(DEFAULT_CONFIG));
     return 0;
   }
-  const loaded = await loadFor(ctx);
-  for (const issue of loaded.issues) ctx.stderr(formatIssue(issue));
-  printJson(ctx.stdout, loaded.config);
+  const loaded = await loadConfigReporting(ctx);
+  ctx.stdout(formatJson(loaded.config));
   return 0;
 }
 
@@ -58,10 +49,10 @@ async function path(ctx: CliContext): Promise<number> {
 }
 
 async function validate(ctx: CliContext, json: boolean): Promise<number> {
-  const { issues } = await loadFor(ctx);
+  const { issues } = await loadConfig(ctx);
   const ok = !issues.some((issue) => issue.severity === "error");
   if (json) {
-    printJson(ctx.stdout, { ok, issues });
+    ctx.stdout(formatJson({ ok, issues }));
   } else if (issues.length === 0) {
     ctx.stdout("config ok\n");
   } else {
@@ -86,8 +77,7 @@ export const run: CommandRun = async (ctx) => {
     json: { type: "boolean" },
     defaults: { type: "boolean" },
     force: { type: "boolean" },
-  });
-  if (positionals.length > 1) throw usageError(`unexpected argument "${positionals[1]}"`);
+  }, { maxPositionals: 1 });
   const sub = positionals[0] ?? "show";
   if (!SUBCOMMANDS.includes(sub)) {
     throw usageError(`unknown subcommand "${sub}"`, `use one of: ${SUBCOMMANDS.join(", ")}`);

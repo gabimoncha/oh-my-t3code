@@ -5,8 +5,14 @@ import assert from "node:assert/strict";
 import { run } from "../../src/commands/plan.ts";
 import { parsePlan } from "../../src/plan/parse.ts";
 import { planTemplate } from "../../src/plan/template.ts";
-import { OmtError } from "../../src/util/errors.ts";
-import { fakeContext, tempDir } from "../helpers.ts";
+import { omtExit, projectContext } from "../helpers.ts";
+
+const header = (extra: string) => `# P\n\n<!-- omt-plan v1 slug=p created=2026-01-01T00:00:00.000Z${extra} -->\n`;
+const DEMO_HEADER = "<!-- omt-plan v1 slug=demo created=2026-01-02T03:04:05.000Z";
+
+function withHeaderKeys(text: string, keys: string): string {
+  return text.replace(`${DEMO_HEADER} -->`, `${DEMO_HEADER} ${keys} -->`);
+}
 
 const SAMPLE = `# Auth refactor
 
@@ -90,13 +96,6 @@ test("parsePlan sets complete only when every U, D, and F item is done", () => {
   assert.equal(blockedOnly.complete, false);
 });
 
-function projectContext(t: Parameters<typeof tempDir>[0], argv: string[]) {
-  const root = tempDir(t);
-  const ctx = fakeContext({ root, argv });
-  mkdirSync(join(ctx.cwd, ".git"));
-  return ctx;
-}
-
 test("plan new writes the template and refuses to overwrite without --force", async (t) => {
   const ctx = projectContext(t, ["new", "auth", "--title", "Auth work"]);
   assert.equal(await run(ctx), 0);
@@ -104,16 +103,16 @@ test("plan new writes the template and refuses to overwrite without --force", as
   assert.equal(ctx.out(), `${path}\n`);
   assert.equal(readFileSync(path, "utf8"), planTemplate("auth", "Auth work", "2026-01-02T03:04:05.000Z"));
 
-  await assert.rejects(run(ctx), (error: unknown) => error instanceof OmtError && error.exitCode === 1);
+  await assert.rejects(run(ctx), omtExit(1));
   writeFileSync(path, "changed");
-  assert.equal(await run({ ...ctx, argv: ["new", "auth", "--force"] }), 0);
+  assert.equal(await run(ctx.at(["new", "auth", "--force"])), 0);
   assert.match(readFileSync(path, "utf8"), /^# auth\n/);
 });
 
 test("plan new rejects an invalid slug with exit code 2", async (t) => {
   for (const slug of ["Auth", "-a", "a_b", "a".repeat(65)]) {
     const ctx = projectContext(t, ["new", slug]);
-    await assert.rejects(run(ctx), (error: unknown) => error instanceof OmtError && error.exitCode === 2);
+    await assert.rejects(run(ctx), omtExit(2));
   }
 });
 
@@ -138,7 +137,7 @@ test("plan status prints counts and the next unit, defaulting to the newest plan
     ].join("\n"),
   );
 
-  const json = fakeContext({ homedir: ctx.homedir, cwd: ctx.cwd, argv: ["status", "older", "--json"] });
+  const json = ctx.at(["status", "older", "--json"]);
   assert.equal(await run(json), 0);
   const parsed = JSON.parse(json.out());
   assert.equal(parsed.title, "Older");
@@ -149,10 +148,10 @@ test("plan status prints counts and the next unit, defaulting to the newest plan
 
 test("plan status fails when there is no plan or the slug is missing", async (t) => {
   const ctx = projectContext(t, ["status"]);
-  await assert.rejects(run(ctx), (error: unknown) => error instanceof OmtError && error.exitCode === 1);
+  await assert.rejects(run(ctx), omtExit(1));
   await assert.rejects(
-    run({ ...ctx, argv: ["status", "nope"] }),
-    (error: unknown) => error instanceof OmtError && error.exitCode === 1,
+    run(ctx.at(["status", "nope"])),
+    omtExit(1),
   );
 });
 
@@ -174,7 +173,7 @@ test("plan list prints one line per plan and --json prints an array", async (t) 
     ].join("\n"),
   );
 
-  const json = fakeContext({ homedir: ctx.homedir, cwd: ctx.cwd, argv: ["list", "--json"] });
+  const json = ctx.at(["list", "--json"]);
   assert.equal(await run(json), 0);
   const parsed = JSON.parse(json.out());
   assert.deepEqual(
@@ -187,7 +186,7 @@ test("plan list prints one line per plan and --json prints an array", async (t) 
 test("plan rejects a missing or unknown subcommand with exit code 2", async (t) => {
   for (const argv of [[], ["nope"]]) {
     const ctx = projectContext(t, argv);
-    await assert.rejects(run(ctx), (error: unknown) => error instanceof OmtError && error.exitCode === 2);
+    await assert.rejects(run(ctx), omtExit(2));
   }
 });
 
@@ -204,14 +203,13 @@ test("plan mark rewrites the checkbox and appends a log line", async (t) => {
   const ctx = projectContext(t, ["new", "demo"]);
   assert.equal(await run(ctx), 0);
   const path = join(ctx.cwd, ".omt", "plans", "demo.md");
-  const at = (argv: string[]) => fakeContext({ homedir: ctx.homedir, cwd: ctx.cwd, argv });
 
-  const done = at(["mark", "demo", "U1", "done"]);
+  const done = ctx.at(["mark", "demo", "U1", "done"]);
   assert.equal(await run(done), 0);
   assert.equal(done.out(), "marked U1 done\n");
-  assert.equal(await run(at(["mark", "demo", "F2", "blocked"])), 0);
-  assert.equal(await run(at(["mark", "demo", "D1", "done"])), 0);
-  assert.equal(await run(at(["mark", "demo", "D1", "open"])), 0);
+  assert.equal(await run(ctx.at(["mark", "demo", "F2", "blocked"])), 0);
+  assert.equal(await run(ctx.at(["mark", "demo", "D1", "done"])), 0);
+  assert.equal(await run(ctx.at(["mark", "demo", "D1", "open"])), 0);
 
   const text = readFileSync(path, "utf8");
   assert.match(text, /^- \[x\] U1\. <title>$/m);
@@ -232,23 +230,21 @@ test("plan mark rewrites the checkbox and appends a log line", async (t) => {
 test("plan mark exits 1 for a missing plan or id and 2 for a bad state", async (t) => {
   const ctx = projectContext(t, ["new", "demo"]);
   assert.equal(await run(ctx), 0);
-  const at = (argv: string[]) => fakeContext({ homedir: ctx.homedir, cwd: ctx.cwd, argv });
-  const exitCode = (code: number) => (error: unknown) => error instanceof OmtError && error.exitCode === code;
-  await assert.rejects(run(at(["mark", "nope", "U1", "done"])), exitCode(1));
-  await assert.rejects(run(at(["mark", "demo", "U7", "done"])), exitCode(1));
-  await assert.rejects(run(at(["mark", "demo", "X1", "done"])), exitCode(1));
-  await assert.rejects(run(at(["mark", "demo", "U1", "finished"])), exitCode(2));
-  await assert.rejects(run(at(["mark", "demo", "U1"])), exitCode(2));
+  await assert.rejects(run(ctx.at(["mark", "nope", "U1", "done"])), omtExit(1));
+  await assert.rejects(run(ctx.at(["mark", "demo", "U7", "done"])), omtExit(1));
+  await assert.rejects(run(ctx.at(["mark", "demo", "X1", "done"])), omtExit(1));
+  await assert.rejects(run(ctx.at(["mark", "demo", "U1", "finished"])), omtExit(2));
+  await assert.rejects(run(ctx.at(["mark", "demo", "U1"])), omtExit(2));
 });
 
 test("plan list and status skip a dangling plan symlink", async (t) => {
   const ctx = projectContext(t, ["new", "demo"]);
   assert.equal(await run(ctx), 0);
   symlinkSync(join(ctx.cwd, "missing.md"), join(ctx.cwd, ".omt", "plans", "gone.md"));
-  const list = fakeContext({ homedir: ctx.homedir, cwd: ctx.cwd, argv: ["list"] });
+  const list = ctx.at(["list"]);
   assert.equal(await run(list), 0);
   assert.match(list.out(), /^demo /);
-  const status = fakeContext({ homedir: ctx.homedir, cwd: ctx.cwd, argv: ["status"] });
+  const status = ctx.at(["status"]);
   assert.equal(await run(status), 0);
   assert.match(status.out(), /^plan: demo /);
 });
@@ -261,19 +257,17 @@ test("plan mark and plan new --force write through a symlinked plan file", async
   mkdirSync(join(ctx.cwd, ".omt", "plans"), { recursive: true });
   writeFileSync(real, planTemplate("linked", "Linked", "2026-01-01T00:00:00.000Z"));
   symlinkSync(join("..", "..", "shared", "real.md"), link);
-  const at = (argv: string[]) => fakeContext({ homedir: ctx.homedir, cwd: ctx.cwd, argv });
 
-  assert.equal(await run(at(["mark", "linked", "U1", "done"])), 0);
+  assert.equal(await run(ctx.at(["mark", "linked", "U1", "done"])), 0);
   assert.ok(lstatSync(link).isSymbolicLink());
   assert.match(readFileSync(real, "utf8"), /^- \[x\] U1\. /m);
 
-  assert.equal(await run(at(["new", "linked", "--force", "--title", "Rewritten"])), 0);
+  assert.equal(await run(ctx.at(["new", "linked", "--force", "--title", "Rewritten"])), 0);
   assert.ok(lstatSync(link).isSymbolicLink());
   assert.match(readFileSync(real, "utf8"), /^# Rewritten$/m);
 });
 
 test("parsePlan reads a valid max-parallel header key and ignores a missing or invalid one", () => {
-  const header = (extra: string) => `# P\n\n<!-- omt-plan v1 slug=p created=2026-01-01T00:00:00.000Z${extra} -->\n`;
   assert.equal(parsePlan(header(" max-parallel=1")).maxParallel, 1);
   assert.equal(parsePlan(header(" max-parallel=32")).maxParallel, 32);
   assert.equal(parsePlan(header(" max-parallel=1")).slug, "p");
@@ -284,7 +278,6 @@ test("parsePlan reads a valid max-parallel header key and ignores a missing or i
 });
 
 test("parsePlan reads a valid max-tasks header key and ignores a missing or invalid one", () => {
-  const header = (extra: string) => `# P\n\n<!-- omt-plan v1 slug=p created=2026-01-01T00:00:00.000Z${extra} -->\n`;
   assert.equal(parsePlan(header(" max-tasks=1")).maxTasks, 1);
   assert.equal(parsePlan(header(" max-parallel=2 max-tasks=500")).maxTasks, 500);
   for (const extra of ["", " max-tasks=0", " max-tasks=501", " max-tasks=many"]) {
@@ -326,16 +319,16 @@ test("plan new --max-parallel writes the header key and rejects a bad value", as
   assert.match(text, /^<!-- omt-plan v1 slug=demo created=2026-01-02T03:04:05\.000Z max-parallel=1 -->$/m);
   assert.equal(parsePlan(text).maxParallel, 1);
 
-  const status = fakeContext({ homedir: ctx.homedir, cwd: ctx.cwd, argv: ["status", "demo"] });
+  const status = ctx.at(["status", "demo"]);
   assert.equal(await run(status), 0);
   assert.match(status.out(), /^max parallel: 1$/m);
-  const json = fakeContext({ homedir: ctx.homedir, cwd: ctx.cwd, argv: ["status", "demo", "--json"] });
+  const json = ctx.at(["status", "demo", "--json"]);
   assert.equal(await run(json), 0);
   assert.equal(JSON.parse(json.out()).maxParallel, 1);
 
   for (const value of ["0", "33", "x"]) {
-    const bad = fakeContext({ homedir: ctx.homedir, cwd: ctx.cwd, argv: ["new", "other", "--max-parallel", value] });
-    await assert.rejects(run(bad), (error: unknown) => error instanceof OmtError && error.exitCode === 2);
+    const bad = ctx.at(["new", "other", "--max-parallel", value]);
+    await assert.rejects(run(bad), omtExit(2));
   }
 });
 
@@ -344,17 +337,15 @@ test("plan limit sets, changes, and clears max-parallel in the header only", asy
   assert.equal(await run(ctx), 0);
   const path = join(ctx.cwd, ".omt", "plans", "demo.md");
   const original = readFileSync(path, "utf8");
-  const at = (argv: string[]) => fakeContext({ homedir: ctx.homedir, cwd: ctx.cwd, argv });
-  const header = "<!-- omt-plan v1 slug=demo created=2026-01-02T03:04:05.000Z";
 
-  assert.equal(await run(at(["limit", "demo", "2"])), 0);
-  assert.equal(readFileSync(path, "utf8"), original.replace(`${header} -->`, `${header} max-parallel=2 -->`));
-  assert.equal(await run(at(["limit", "demo", "1"])), 0);
+  assert.equal(await run(ctx.at(["limit", "demo", "2"])), 0);
+  assert.equal(readFileSync(path, "utf8"), withHeaderKeys(original, "max-parallel=2"));
+  assert.equal(await run(ctx.at(["limit", "demo", "1"])), 0);
   const changed = readFileSync(path, "utf8");
-  assert.equal(changed, original.replace(`${header} -->`, `${header} max-parallel=1 -->`));
+  assert.equal(changed, withHeaderKeys(original, "max-parallel=1"));
   assert.equal(parsePlan(changed).maxParallel, 1);
   assert.equal(parsePlan(changed).slug, "demo");
-  assert.equal(await run(at(["limit", "demo", "none"])), 0);
+  assert.equal(await run(ctx.at(["limit", "demo", "none"])), 0);
   assert.equal(readFileSync(path, "utf8"), original);
 });
 
@@ -364,27 +355,23 @@ test("plan limit changes only the first header comment and leaves quoted example
   const path = join(ctx.cwd, ".omt", "plans", "demo.md");
   const original = `${readFileSync(path, "utf8")}${QUOTED}`;
   writeFileSync(path, original);
-  const at = (argv: string[]) => fakeContext({ homedir: ctx.homedir, cwd: ctx.cwd, argv });
-  const header = "<!-- omt-plan v1 slug=demo created=2026-01-02T03:04:05.000Z";
 
   assert.equal(parsePlan(original).maxParallel, undefined);
-  assert.equal(await run(at(["limit", "demo", "4"])), 0);
+  assert.equal(await run(ctx.at(["limit", "demo", "4"])), 0);
   const changed = readFileSync(path, "utf8");
-  assert.equal(changed, original.replace(`${header} -->`, `${header} max-parallel=4 -->`));
+  assert.equal(changed, withHeaderKeys(original, "max-parallel=4"));
   assert.ok(changed.endsWith(QUOTED));
   assert.equal(parsePlan(changed).maxParallel, 4);
-  assert.equal(await run(at(["limit", "demo", "none"])), 0);
+  assert.equal(await run(ctx.at(["limit", "demo", "none"])), 0);
   assert.equal(readFileSync(path, "utf8"), original);
 });
 
 test("plan limit exits 1 for a missing plan and 2 for a bad value", async (t) => {
   const ctx = projectContext(t, ["new", "demo"]);
   assert.equal(await run(ctx), 0);
-  const at = (argv: string[]) => fakeContext({ homedir: ctx.homedir, cwd: ctx.cwd, argv });
-  const exitCode = (code: number) => (error: unknown) => error instanceof OmtError && error.exitCode === code;
-  await assert.rejects(run(at(["limit", "nope", "1"])), exitCode(1));
-  for (const value of ["0", "33", "abc", "-1"]) await assert.rejects(run(at(["limit", "demo", value])), exitCode(2));
-  await assert.rejects(run(at(["limit", "demo"])), exitCode(2));
+  await assert.rejects(run(ctx.at(["limit", "nope", "1"])), omtExit(1));
+  for (const value of ["0", "33", "abc", "-1"]) await assert.rejects(run(ctx.at(["limit", "demo", value])), omtExit(2));
+  await assert.rejects(run(ctx.at(["limit", "demo"])), omtExit(2));
 });
 
 test("plan limit --tasks exits 2 for a value out of range and leaves the plan unchanged", async (t) => {
@@ -392,10 +379,8 @@ test("plan limit --tasks exits 2 for a value out of range and leaves the plan un
   assert.equal(await run(ctx), 0);
   const path = join(ctx.cwd, ".omt", "plans", "demo.md");
   const original = readFileSync(path, "utf8");
-  const at = (argv: string[]) => fakeContext({ homedir: ctx.homedir, cwd: ctx.cwd, argv });
-  const usage = (error: unknown) => error instanceof OmtError && error.exitCode === 2;
-  for (const value of ["0", "501"]) await assert.rejects(run(at(["limit", "demo", "--tasks", value])), usage);
-  await assert.rejects(run(at(["limit", "demo", "2", "--tasks", "0"])), usage);
+  for (const value of ["0", "501"]) await assert.rejects(run(ctx.at(["limit", "demo", "--tasks", value])), omtExit(2));
+  await assert.rejects(run(ctx.at(["limit", "demo", "2", "--tasks", "0"])), omtExit(2));
   assert.equal(readFileSync(path, "utf8"), original);
 });
 
@@ -405,13 +390,13 @@ test("plan new --max-tasks writes the header key after max-parallel and rejects 
   const text = readFileSync(join(ctx.cwd, ".omt", "plans", "demo.md"), "utf8");
   assert.match(text, /^<!-- omt-plan v1 slug=demo created=2026-01-02T03:04:05\.000Z max-parallel=2 max-tasks=80 -->$/m);
 
-  const status = fakeContext({ homedir: ctx.homedir, cwd: ctx.cwd, argv: ["status", "demo"] });
+  const status = ctx.at(["status", "demo"]);
   assert.equal(await run(status), 0);
   assert.match(status.out(), /^max parallel: 2\nmax tasks: 80$/m);
 
   for (const value of ["0", "501", "x"]) {
-    const bad = fakeContext({ homedir: ctx.homedir, cwd: ctx.cwd, argv: ["new", "other", "--max-tasks", value] });
-    await assert.rejects(run(bad), (error: unknown) => error instanceof OmtError && error.exitCode === 2);
+    const bad = ctx.at(["new", "other", "--max-tasks", value]);
+    await assert.rejects(run(bad), omtExit(2));
   }
 });
 
@@ -420,23 +405,21 @@ test("plan limit --tasks sets and removes max-tasks, also with the positional va
   assert.equal(await run(ctx), 0);
   const path = join(ctx.cwd, ".omt", "plans", "demo.md");
   const original = readFileSync(path, "utf8");
-  const at = (argv: string[]) => fakeContext({ homedir: ctx.homedir, cwd: ctx.cwd, argv });
-  const header = "<!-- omt-plan v1 slug=demo created=2026-01-02T03:04:05.000Z";
 
-  const set = at(["limit", "demo", "--tasks", "80"]);
+  const set = ctx.at(["limit", "demo", "--tasks", "80"]);
   assert.equal(await run(set), 0);
   assert.equal(set.out(), "set max-tasks=80 for demo\n");
-  assert.equal(readFileSync(path, "utf8"), original.replace(`${header} -->`, `${header} max-tasks=80 -->`));
+  assert.equal(readFileSync(path, "utf8"), withHeaderKeys(original, "max-tasks=80"));
 
-  const both = at(["limit", "demo", "3", "--tasks", "none"]);
+  const both = ctx.at(["limit", "demo", "3", "--tasks", "none"]);
   assert.equal(await run(both), 0);
   assert.equal(both.out(), "set max-parallel=3 for demo\nremoved the max-tasks limit of demo\n");
-  assert.equal(readFileSync(path, "utf8"), original.replace(`${header} -->`, `${header} max-parallel=3 -->`));
+  assert.equal(readFileSync(path, "utf8"), withHeaderKeys(original, "max-parallel=3"));
 });
 
 test("plan limit with neither a value nor --tasks exits 2", async (t) => {
   const ctx = projectContext(t, ["new", "demo"]);
   assert.equal(await run(ctx), 0);
-  const bare = fakeContext({ homedir: ctx.homedir, cwd: ctx.cwd, argv: ["limit", "demo"] });
-  await assert.rejects(run(bare), (error: unknown) => error instanceof OmtError && error.exitCode === 2);
+  const bare = ctx.at(["limit", "demo"]);
+  await assert.rejects(run(bare), omtExit(2));
 });

@@ -101,6 +101,18 @@ function makeTarget(
   return target;
 }
 
+function rungOptions(
+  rung: Rung,
+  descriptors: OptionDescriptor[] | undefined,
+  driver: string | undefined,
+  notes: string[],
+): Record<string, OptionValue> {
+  if (rung.effort === undefined) return { ...rung.options };
+  const mapped = mapEffort(rung.effort, descriptors, driver);
+  if (mapped.note !== undefined) notes.push(mapped.note);
+  return { ...mapped.options, ...rung.options };
+}
+
 function resolveVerified(rung: Rung, caps: Capabilities, notes: string[]): ResolvedTarget {
   const provider = findProvider(rung, caps, notes);
   const id = provider.providerInstanceId;
@@ -115,13 +127,7 @@ function resolveVerified(rung: Rung, caps: Capabilities, notes: string[]): Resol
   } else {
     notes.push(`provider ${id} lists no models; T3 will check the model and its options`);
   }
-  let options: Record<string, OptionValue> = {};
-  if (rung.effort !== undefined) {
-    const mapped = mapEffort(rung.effort, model?.options, provider.driverKind);
-    options = mapped.options;
-    if (mapped.note !== undefined) notes.push(mapped.note);
-  }
-  options = { ...options, ...rung.options };
+  const options = rungOptions(rung, model?.options, provider.driverKind, notes);
   if (model !== undefined && model.options.length > 0) {
     const problems = optionProblems(options, model.options, model.id);
     if (problems.length > 0) throw new RungFailure(`invalid options: ${problems.join("; ")}`);
@@ -135,13 +141,7 @@ function resolveUnverified(rung: Rung, notes: string[]): ResolvedTarget {
   if (rung.provider === undefined && rung.driver === undefined) {
     throw new RungFailure("the rung names no provider or driver");
   }
-  let options: Record<string, OptionValue> = {};
-  if (rung.effort !== undefined) {
-    const mapped = mapEffort(rung.effort, undefined, rung.driver ?? rung.provider);
-    options = mapped.options;
-    if (mapped.note !== undefined) notes.push(mapped.note);
-  }
-  options = { ...options, ...rung.options };
+  const options = rungOptions(rung, undefined, rung.driver ?? rung.provider, notes);
   const ref = rung.provider !== undefined ? { providerInstanceId: rung.provider } : { driverKind: rung.driver as string };
   return makeTarget(ref, rung.model, options);
 }
@@ -223,15 +223,20 @@ export function resolveRole(
   };
 }
 
+export function findRole(config: OmtConfig, name: string): RoleConfig {
+  const role = Object.hasOwn(config.roles, name) ? config.roles[name] : undefined;
+  if (role === undefined) {
+    throw new OmtError("unknown_role", `unknown role ${name}; known roles: ${Object.keys(config.roles).join(", ")}`);
+  }
+  return role;
+}
+
 export function resolveAll(config: OmtConfig, caps?: Capabilities, only?: string[]): RolesReport {
   const known = Object.keys(config.roles);
   const names = only === undefined ? known : [...new Set(only)];
   const roles: Record<string, RoleResolution> = {};
   for (const name of names) {
-    const role = Object.hasOwn(config.roles, name) ? config.roles[name] : undefined;
-    if (role === undefined) {
-      throw new OmtError("unknown_role", `unknown role ${name}; known roles: ${known.join(", ")}`);
-    }
+    const role = findRole(config, name);
     roles[name] = resolveRole(name, role, caps);
   }
   return { version: 1, verified: caps !== undefined, roles, limits: config.limits };

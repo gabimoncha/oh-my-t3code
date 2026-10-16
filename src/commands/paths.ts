@@ -2,7 +2,7 @@ import { evidenceDir, findProjectRoot, ledgerPath, omtDir, plansDir, projectConf
 import type { CommandRun } from "../types.ts";
 import { parseArgs } from "../util/args.ts";
 import { usageError } from "../util/errors.ts";
-import { printJson } from "../util/output.ts";
+import { formatJson } from "../util/output.ts";
 
 export const summary = "Print the absolute paths of the project's .omt state.";
 
@@ -27,7 +27,7 @@ Options:
 const SINGLE = ["root", "plans", "ledger", "evidence", "config", "shim"] as const;
 
 export const run: CommandRun = async (ctx) => {
-  const { values, positionals } = parseArgs(ctx.argv, {
+  const { values } = parseArgs(ctx.argv, {
     json: { type: "boolean" },
     root: { type: "boolean" },
     plans: { type: "boolean" },
@@ -35,8 +35,7 @@ export const run: CommandRun = async (ctx) => {
     evidence: { type: "boolean" },
     config: { type: "boolean" },
     shim: { type: "boolean" },
-  });
-  if (positionals.length > 0) throw usageError(`unexpected argument "${positionals[0]}"`);
+  }, { maxPositionals: 0 });
   const picked = SINGLE.filter((name) => values[name] === true);
   if (picked.length > 1) throw usageError(`give at most one path flag, not ${picked.map((name) => `--${name}`).join(" and ")}`);
   if (picked.length === 1 && values.json === true) throw usageError(`--json and --${picked[0]} cannot be used together`);
@@ -54,7 +53,7 @@ export const run: CommandRun = async (ctx) => {
   if (one !== undefined) {
     ctx.stdout(`${paths[one]}\n`);
   } else if (values.json === true) {
-    printJson(ctx.stdout, paths);
+    ctx.stdout(formatJson(paths));
   } else {
     for (const [name, path] of Object.entries(paths)) ctx.stdout(`${name}: ${path}\n`);
   }

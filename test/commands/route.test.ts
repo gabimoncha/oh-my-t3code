@@ -1,15 +1,18 @@
 import assert from "node:assert/strict";
-import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 import { test } from "node:test";
 import { DEFAULT_CONFIG } from "../../src/config/defaults.ts";
 import type { RouteOutput } from "../../src/types.ts";
 import { CAPS_FILE, makeProject } from "./shared.ts";
+import type { Project } from "./shared.ts";
+
+async function route(project: Project, argv: string[]) {
+  const { code, ctx } = await project.run(["route", ...argv]);
+  assert.equal(code, 0, ctx.err());
+  return { ctx, output: JSON.parse(ctx.out()) as RouteOutput };
+}
 
 test("route prints an unverified RouteOutput and exits 0", async (t) => {
-  const { code, ctx } = await makeProject(t).run(["route", "review"]);
-  assert.equal(code, 0);
-  const output = JSON.parse(ctx.out()) as RouteOutput;
+  const { output } = await route(makeProject(t), ["review"]);
   assert.deepEqual(output, {
     role: "review",
     status: "unverified",
@@ -28,9 +31,7 @@ test("route prints an unverified RouteOutput and exits 0", async (t) => {
 });
 
 test("route --capabilities resolves against the provider instances", async (t) => {
-  const { code, ctx } = await makeProject(t).run(["route", "execute", "--capabilities", CAPS_FILE]);
-  assert.equal(code, 0);
-  const output = JSON.parse(ctx.out()) as RouteOutput;
+  const { output } = await route(makeProject(t), ["execute", "--capabilities", CAPS_FILE]);
   assert.equal(output.status, "resolved");
   assert.deepEqual(output.delegateTask?.target, {
     providerInstanceId: "claudeAgent",
@@ -61,13 +62,12 @@ test("route fails on an unknown role and needs exactly one role", async (t) => {
 
 test("route --against reorders a cross-family role and prints the note", async (t) => {
   const project = makeProject(t);
-  const claude = await project.run(["route", "review", "--against", "claudeAgent"]);
-  assert.equal(claude.code, 0);
-  const againstClaude = JSON.parse(claude.ctx.out()) as RouteOutput;
+  const claude = await route(project, ["review", "--against", "claudeAgent"]);
+  const againstClaude = claude.output;
   assert.equal(againstClaude.delegateTask?.target.providerInstanceId, "codex");
   assert.deepEqual(againstClaude.notes, ["cross-family: worker family claudeAgent; the configured order applies"]);
-  const codex = await project.run(["route", "review", "--against", "codex", "--capabilities", CAPS_FILE]);
-  const againstCodex = JSON.parse(codex.ctx.out()) as RouteOutput;
+  const codex = await route(project, ["review", "--against", "codex", "--capabilities", CAPS_FILE]);
+  const againstCodex = codex.output;
   assert.deepEqual(againstCodex.delegateTask?.target, {
     providerInstanceId: "claudeAgent",
     model: "claude-opus-5-5",
@@ -84,9 +84,8 @@ function ledger(lines: object[]): string {
 
 test("route --against auto reads the worker from the ledger", async (t) => {
   const project = makeProject(t);
-  mkdirSync(join(project.cwd, ".omt"), { recursive: true });
-  writeFileSync(
-    join(project.cwd, ".omt", "ledger.jsonl"),
+  project.writeOmt(
+    "ledger.jsonl",
     ledger([
       { plan: "p", unit: "U1", role: "execute", provider: "codex", model: "gpt-6.1-sol" },
       { plan: "p", unit: "U2", role: "execute", provider: "claudeAgent", model: "claude-opus-5-5" },
@@ -94,9 +93,8 @@ test("route --against auto reads the worker from the ledger", async (t) => {
       { plan: "p", unit: "U2", role: "review", provider: "codex", model: "gpt-6-astra" },
     ]) + "not json\n",
   );
-  const unit = await project.run(["route", "review", "--against", "auto", "--plan", "p", "--unit", "U1"]);
-  assert.equal(unit.code, 0);
-  const forUnit = JSON.parse(unit.ctx.out()) as RouteOutput;
+  const unit = await route(project, ["review", "--against", "auto", "--plan", "p", "--unit", "U1"]);
+  const forUnit = unit.output;
   assert.equal(forUnit.delegateTask?.target.providerInstanceId, "claudeAgent");
   assert.deepEqual(forUnit.notes, [
     "--against auto: worker codex from the last work dispatch of unit U1",
@@ -104,30 +102,29 @@ test("route --against auto reads the worker from the ledger", async (t) => {
   ]);
   assert.match(unit.ctx.err(), /^warning: .*ledger\.jsonl:5: skipped a malformed ledger line$/m);
 
-  const oracle = await project.run(["route", "oracle", "--against", "auto", "--plan", "p", "--unit", "F2"]);
-  const forOracle = JSON.parse(oracle.ctx.out()) as RouteOutput;
+  const oracle = await route(project, ["oracle", "--against", "auto", "--plan", "p", "--unit", "F2"]);
+  const forOracle = oracle.output;
   assert.equal(forOracle.delegateTask?.target.providerInstanceId, "codex");
   assert.deepEqual(forOracle.notes, [
     "--against auto: worker claudeAgent from the provider of most units in plan p",
     "cross-family: worker family claudeAgent; the configured order applies",
   ]);
 
-  const empty = await project.run(["route", "review", "--against", "auto", "--plan", "q"]);
-  const forEmpty = JSON.parse(empty.ctx.out()) as RouteOutput;
+  const empty = await route(project, ["review", "--against", "auto", "--plan", "q"]);
+  const forEmpty = empty.output;
   assert.equal(forEmpty.delegateTask?.target.providerInstanceId, "codex");
   assert.deepEqual(forEmpty.notes, ["--against auto: no worker dispatch with a provider in plan q; the configured order applies"]);
 
-  const plain = await project.run(["route", "execute", "--against", "auto", "--plan", "p"]);
-  assert.deepEqual((JSON.parse(plain.ctx.out()) as RouteOutput).notes, [
+  const plain = await route(project, ["execute", "--against", "auto", "--plan", "p"]);
+  assert.deepEqual(plain.output.notes, [
     "role execute is not cross-family; --against has no effect",
   ]);
 });
 
 test("route --against auto re-reviews each fix with the provider of its own fix worker", async (t) => {
   const project = makeProject(t);
-  mkdirSync(join(project.cwd, ".omt"), { recursive: true });
-  writeFileSync(
-    join(project.cwd, ".omt", "ledger.jsonl"),
+  project.writeOmt(
+    "ledger.jsonl",
     ledger([
       { plan: "review-x", unit: "G1", role: "review", provider: "codex", model: "gpt-6-astra" },
       { plan: "review-x", unit: "F1", role: "execute", provider: "codex", model: "gpt-6.1-sol" },
@@ -135,28 +132,25 @@ test("route --against auto re-reviews each fix with the provider of its own fix 
       { plan: "review-x", unit: "F3", role: "execute", provider: "claudeAgent", model: "claude-opus-5-5" },
     ]),
   );
-  const f1 = await project.run(["route", "review", "--against", "auto", "--plan", "review-x", "--unit", "F1"]);
-  const forF1 = JSON.parse(f1.ctx.out()) as RouteOutput;
+  const f1 = await route(project, ["review", "--against", "auto", "--plan", "review-x", "--unit", "F1"]);
+  const forF1 = f1.output;
   assert.equal(forF1.delegateTask?.target.providerInstanceId, "claudeAgent");
   assert.equal(forF1.notes[0], "--against auto: worker codex from the last work dispatch of unit F1");
-  const f2 = await project.run(["route", "review", "--against", "auto", "--plan", "review-x", "--unit", "F2"]);
-  assert.equal((JSON.parse(f2.ctx.out()) as RouteOutput).delegateTask?.target.providerInstanceId, "codex");
+  const f2 = await route(project, ["review", "--against", "auto", "--plan", "review-x", "--unit", "F2"]);
+  assert.equal(f2.output.delegateTask?.target.providerInstanceId, "codex");
 });
 
 test("route --against auto skips a worker entry whose provider is not a non-empty string, with a warning", async (t) => {
   const project = makeProject(t);
-  mkdirSync(join(project.cwd, ".omt"), { recursive: true });
-  writeFileSync(
-    join(project.cwd, ".omt", "ledger.jsonl"),
+  project.writeOmt(
+    "ledger.jsonl",
     ledger([
       { plan: "p", unit: "U1", role: "execute", provider: "codex", model: "gpt-6.1-sol" },
       { plan: "p", unit: "U1", role: "execute", provider: null, model: "claude-opus-5-5" },
       { plan: "p", unit: "U1", role: "execute", provider: "", model: "claude-opus-5-5" },
     ]),
   );
-  const { code, ctx } = await project.run(["route", "review", "--against", "auto", "--plan", "p", "--unit", "U1"]);
-  assert.equal(code, 0);
-  const output = JSON.parse(ctx.out()) as RouteOutput;
+  const { ctx, output } = await route(project, ["review", "--against", "auto", "--plan", "p", "--unit", "U1"]);
   assert.equal(output.delegateTask?.target.providerInstanceId, "claudeAgent");
   assert.equal(output.notes[0], "--against auto: worker codex from the last work dispatch of unit U1");
   const warnings = ctx.err().split("\n").filter((line) => line.startsWith("warning: "));
@@ -181,13 +175,13 @@ test("route --against maps a configured provider instance to its driver without 
       },
     }) + "\n",
   );
-  const mapped = await project.run(["route", "review", "--against", "claude-max"]);
-  const output = JSON.parse(mapped.ctx.out()) as RouteOutput;
+  const mapped = await route(project, ["review", "--against", "claude-max"]);
+  const output = mapped.output;
   assert.equal(output.delegateTask?.target.providerInstanceId, "codex-pro");
   assert.deepEqual(output.notes, ["cross-family: worker family claudeAgent; other families first"]);
 
-  const unknown = await project.run(["route", "review", "--against", "claude-other"]);
-  const forUnknown = JSON.parse(unknown.ctx.out()) as RouteOutput;
+  const unknown = await route(project, ["review", "--against", "claude-other"]);
+  const forUnknown = unknown.output;
   assert.equal(forUnknown.delegateTask?.target.providerInstanceId, "claude-max");
   assert.deepEqual(forUnknown.notes, [
     "cross-family: no rung is in family claude-other; check that --against names a driver or a configured provider, or pass --capabilities",
@@ -216,13 +210,12 @@ test("route --against maps a rung that names only a provider through the configu
       },
     }) + "\n",
   );
-  writeFileSync(
-    join(project.cwd, ".omt", "ledger.jsonl"),
+  project.writeOmt(
+    "ledger.jsonl",
     ledger([{ plan: "p", unit: "U1", role: "execute", provider: "claude-max", model: "claude-opus-5-5" }]),
   );
-  const oracle = await project.run(["route", "oracle", "--against", "auto", "--plan", "p", "--unit", "U1"]);
-  assert.equal(oracle.code, 0);
-  const forOracle = JSON.parse(oracle.ctx.out()) as RouteOutput;
+  const oracle = await route(project, ["oracle", "--against", "auto", "--plan", "p", "--unit", "U1"]);
+  const forOracle = oracle.output;
   assert.equal(forOracle.delegateTask?.target.providerInstanceId, "codex-pro");
   assert.deepEqual(forOracle.fallbacks.map((f) => f.providerInstanceId), ["claude-max"]);
   assert.deepEqual(forOracle.notes.slice(0, 2), [
@@ -230,8 +223,8 @@ test("route --against maps a rung that names only a provider through the configu
     "cross-family: worker family claudeAgent; other families first",
   ]);
 
-  const review = await project.run(["route", "review", "--against", "claude-max"]);
-  const forReview = JSON.parse(review.ctx.out()) as RouteOutput;
+  const review = await route(project, ["review", "--against", "claude-max"]);
+  const forReview = review.output;
   assert.deepEqual(forReview.delegateTask?.target, {
     providerInstanceId: "codex",
     model: "gpt-6-astra",

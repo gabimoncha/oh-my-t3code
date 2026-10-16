@@ -5,7 +5,8 @@ import { dirname, join } from "node:path";
 import { test } from "node:test";
 import type { TestContext } from "node:test";
 import type { BriefJsonOutput, LedgerStats, RouteOutput } from "../src/types.ts";
-import { CLI_PATH, childEnv, GIT, tempDir } from "./helpers.ts";
+import { childEnv, CLI_PATH, gitEnv, gitRepo, spawnOmt, tempDir } from "./helpers.ts";
+import { contentTree } from "./install/fixture.ts";
 
 function omtEntries(dir: string): string[] {
   return existsSync(dir) ? readdirSync(dir).filter((name) => name.startsWith("omt")) : [];
@@ -19,11 +20,7 @@ test("end to end: install, use every command in a project, then uninstall", (t) 
   mkdirSync(home, { recursive: true });
   mkdirSync(join(project, ".git"), { recursive: true });
 
-  // process.execPath, not a `node` shim: a version-manager shim can fail when HOME is a temp dir.
-  const omt = (args: string[], input = "") => {
-    const result = spawnSync(process.execPath, [CLI_PATH, ...args], { cwd: project, env, encoding: "utf8", input });
-    return { code: result.status, stdout: result.stdout, stderr: result.stderr };
-  };
+  const omt = (args: string[], input = "") => spawnOmt(args, { root, cwd: project, env, input });
   const ok = (args: string[], input = "") => {
     const result = omt(args, input);
     assert.equal(result.code, 0, `omt ${args.join(" ")}\n${result.stdout}\n${result.stderr}`);
@@ -81,40 +78,24 @@ test("end to end: install, use every command in a project, then uninstall", (t) 
   assert.deepEqual(omtEntries(join(home, ".claude", "skills")), []);
 });
 
-// Lists every path under `dir` except `.git`, relative to `dir`.
-function tree(dir: string, rel = ""): string[] {
-  const out: string[] = [];
-  for (const entry of readdirSync(join(dir, rel), { withFileTypes: true })) {
-    const path = rel === "" ? entry.name : `${rel}/${entry.name}`;
-    if (path === ".git") continue;
-    out.push(path);
-    if (entry.isDirectory()) out.push(...tree(dir, path));
-  }
-  return out.sort();
-}
-
 // A committed git repository in a temp root, with an omt runner whose HOME and git config point into the root.
 function gitProject(t: TestContext, files: Record<string, string>) {
   const root = tempDir(t, "omt-e2e-project-");
-  const env: NodeJS.ProcessEnv = { ...childEnv(root), GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" };
+  const env = gitEnv(root);
   const project = join(root, "project");
   mkdirSync(env.HOME as string, { recursive: true });
-  mkdirSync(project, { recursive: true });
+  const git = gitRepo(root, project, files);
   const run = (command: string, args: string[]) => {
     const result = spawnSync(command, args, { cwd: project, env, encoding: "utf8" });
     assert.equal(result.status, 0, `${command} ${args.join(" ")}\n${result.stdout}\n${result.stderr}`);
     return result.stdout;
   };
-  const git = (...args: string[]) => run(GIT, ["-c", "user.name=omt", "-c", "user.email=omt@example.com", ...args]);
-  git("init", "-q");
-  for (const [path, content] of Object.entries(files)) {
-    mkdirSync(dirname(join(project, path)), { recursive: true });
-    writeFileSync(join(project, path), content);
-  }
-  git("add", "-A");
-  git("commit", "-q", "-m", "init");
-  const omt = (...args: string[]) => run(process.execPath, [CLI_PATH, ...args]);
-  const status = () => git("status", "--porcelain", "--untracked-files=all", "--ignored");
+  const omt = (...args: string[]) => {
+    const result = spawnOmt(args, { root, cwd: project, env });
+    assert.equal(result.code, 0, `${process.execPath} ${[CLI_PATH, ...args].join(" ")}\n${result.stdout}\n${result.stderr}`);
+    return result.stdout;
+  };
+  const status = () => git(["status", "--porcelain", "--untracked-files=all", "--ignored"]);
   return { env, project, run, git, omt, status };
 }
 
@@ -125,14 +106,14 @@ for (const [label, files] of [
   test(`end to end: install --project with ${label} leaves no trace in git, and uninstall restores the tree`, (t) => {
     const p = gitProject(t, files);
     const excludeBefore = readFileSync(join(p.project, ".git", "info", "exclude"), "utf8");
-    const treeBefore = tree(p.project);
+    const treeBefore = Object.keys(contentTree(p.project));
 
     assert.match(p.omt("install", "--project", "--hooks", "--yes"), /^Applied \d+ changes\.$/m);
     const written = [".agents/skills/omt-ulw", ".claude/skills/omt-ulw", ".claude/settings.local.json", ".omt/bin/omt", ".omt/config.jsonc"];
     for (const path of written) {
       assert.ok(existsSync(join(p.project, path)), path);
     }
-    assert.equal(p.git("status", "--porcelain", "--untracked-files=all"), "");
+    assert.equal(p.git(["status", "--porcelain", "--untracked-files=all"]), "");
     assert.equal(p.run(join(p.project, ".omt", "bin", "omt"), ["--version"]).trim(), "0.1.0");
     assert.match(p.run(join(p.project, ".omt", "bin", "omt"), ["roles"]), /^execute\s+unverified\s+/m);
     assert.deepEqual(omtEntries(join(p.env.HOME as string, ".agents", "skills")), []);
@@ -140,7 +121,7 @@ for (const [label, files] of [
     assert.match(p.omt("uninstall", "--project", "--yes"), /^Removed \d+ paths\.$/m);
     assert.equal(p.status(), "");
     assert.equal(readFileSync(join(p.project, ".git", "info", "exclude"), "utf8"), excludeBefore);
-    assert.deepEqual(tree(p.project), treeBefore);
+    assert.deepEqual(Object.keys(contentTree(p.project)), treeBefore);
   });
 }
 
@@ -151,7 +132,7 @@ test("end to end: --project keeps the user's own settings.local.json keys and it
   const mine = `${JSON.stringify({ theme: "dark", permissions: { allow: ["Bash(ls)"] } }, null, 2)}\n`;
   writeFileSync(local, mine, { mode: 0o600 });
   chmodSync(local, 0o600);
-  const statusBefore = p.git("status", "--porcelain", "--untracked-files=all");
+  const statusBefore = p.git(["status", "--porcelain", "--untracked-files=all"]);
 
   p.omt("install", "--project", "--hooks", "--yes");
   const settings = JSON.parse(readFileSync(local, "utf8")) as Record<string, unknown>;
@@ -159,7 +140,7 @@ test("end to end: --project keeps the user's own settings.local.json keys and it
   assert.deepEqual(settings.permissions, { allow: ["Bash(ls)"] });
   assert.match(JSON.stringify(settings.hooks), /# oh-my-t3code/);
   assert.equal(statSync(local).mode & 0o777, 0o600);
-  assert.equal(p.git("status", "--porcelain", "--untracked-files=all"), statusBefore);
+  assert.equal(p.git(["status", "--porcelain", "--untracked-files=all"]), statusBefore);
 
   p.omt("uninstall", "--project", "--yes");
   assert.equal(readFileSync(local, "utf8"), mine);

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { assignRows, layoutFlow, renderFlow, renderLegend, segmentCrossesBox, wrapWords } from "../../src/visual/flow.ts";
 import type { EdgeLabel, FlowLayout, LayoutEdge } from "../../src/visual/flow.ts";
-import { sharedLines } from "./geometry.ts";
+import { assertClean, sharedLines } from "./geometry.ts";
 import type { FlowBlock, FlowEdge, FlowNode } from "../../src/visual/spec.ts";
 
 function flow(nodes: FlowNode[], edges: [string, string, string?][]): FlowBlock {
@@ -178,22 +178,6 @@ function assertLabels(name: string, title: string, layout: FlowLayout): void {
       const warned = (e: LayoutEdge) => layout.warnings.includes(overlapWarning(title, e));
       const partners = labeled.filter((other) => other !== edge && hits(box, labelRect(other.label as EdgeLabel)));
       assert.ok(warned(edge) || (!overNode && partners.every(warned)), `${name}: label "${edge.label?.text}" overlaps without a warning`);
-    }
-  }
-}
-
-function assertClean(name: string, layout: FlowLayout): void {
-  for (const edge of layout.edges) {
-    assert.ok(edge.segments.length > 0, `${name}: edge ${edge.from} -> ${edge.to} has no segments`);
-    for (const segment of edge.segments) {
-      assert.ok(segment.x1 === segment.x2 || segment.y1 === segment.y2, `${name}: edge ${edge.from} -> ${edge.to} has a diagonal segment`);
-      for (const node of layout.nodes) {
-        if (node.id === edge.from || node.id === edge.to) continue;
-        assert.ok(
-          !segmentCrossesBox(segment, node, 4),
-          `${name}: edge ${edge.from} -> ${edge.to} (${edge.route}) crosses node ${node.id}: ${JSON.stringify(segment)}`,
-        );
-      }
     }
   }
 }

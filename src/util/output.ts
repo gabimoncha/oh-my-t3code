@@ -2,8 +2,8 @@ export function formatJson(value: unknown): string {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
 
-export function printJson(write: (text: string) => void, value: unknown): void {
-  write(formatJson(value));
+export function plural(count: number, word: string): string {
+  return `${count} ${word}${count === 1 ? "" : "s"}`;
 }
 
 export function renderTable(headers: string[], rows: string[][]): string {

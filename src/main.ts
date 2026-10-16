@@ -18,7 +18,7 @@ import * as uninstall from "./commands/uninstall.ts";
 import * as visual from "./commands/visual.ts";
 import type { CliContext, CommandRun } from "./types.ts";
 import { findProjectRoot, hasProjectMarker, omtDir, shadowedWorktreeState } from "./paths.ts";
-import { OmtError } from "./util/errors.ts";
+import { errorMessage, OmtError } from "./util/errors.ts";
 
 export interface CommandModule {
   summary: string;
@@ -147,8 +147,7 @@ function reportError(ctx: CliContext, error: unknown): number {
     if (error.hint !== undefined) ctx.stderr(`hint: ${error.hint}\n`);
     return error.exitCode;
   }
-  const message = error instanceof Error ? error.message : String(error);
-  ctx.stderr(`omt: unexpected error: ${message}\n`);
+  ctx.stderr(`omt: unexpected error: ${errorMessage(error)}\n`);
   return 1;
 }
 

@@ -2,14 +2,14 @@ import { randomBytes } from "node:crypto";
 import { chmod, readdir, rename, rm, rmdir, symlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { PROJECT_STARTER_CONFIG, USER_STARTER_CONFIG } from "../config/starter.ts";
-import { OmtError } from "../util/errors.ts";
+import { errorMessage, OmtError } from "../util/errors.ts";
 import { copyDir, ensureDir, hashDir, pathExists, readFileIfExists, writeFileAtomic } from "../util/fs.ts";
 import { isOmtLayout, writeHookChange } from "./claudeHook.ts";
 import type { HookChange } from "./claudeHook.ts";
 import { movePath, newBackupDir, writeTargetFor } from "./fsops.ts";
 import { mergeManifest, writeManifest } from "./manifest.ts";
-import type { Manifest, ManifestFile } from "./manifest.ts";
-import { sha256 } from "./plan.ts";
+import type { Manifest, ManifestFile, ManifestHook } from "./manifest.ts";
+import { replaceableSteps, sha256 } from "./plan.ts";
 import type { FileStep, HookStep, InstallPlan, SkillStep, UninstallPlan } from "./plan.ts";
 import { BACKUPS_GITIGNORE } from "./project.ts";
 import { PACKAGE_NAME, writeMarker } from "./skills.ts";
@@ -25,12 +25,12 @@ function scratchPath(agentsRoot: string, kind: "tmp" | "old"): string {
 
 // Lazily creates one backup directory per run, so a run without backups leaves no empty directory.
 // In project scope, `backups/.gitignore` holds `*`, so git never shows a backup; `onIgnore` gets it when this run wrote it.
-function backupDirFor(configDir: string, now: Date, project: boolean, onIgnore?: (file: ManifestFile) => void): () => Promise<string> {
+function backupDirFor(stateDir: string, now: Date, project: boolean, onIgnore?: (file: ManifestFile) => void): () => Promise<string> {
   let dir: string | undefined;
   return async () => {
     if (dir !== undefined) return dir;
-    dir = await newBackupDir(configDir, now);
-    const ignore = join(configDir, "backups", ".gitignore");
+    dir = await newBackupDir(stateDir, now);
+    const ignore = join(stateDir, "backups", ".gitignore");
     if (project && !(await pathExists(ignore))) {
       await writeFileAtomic(ignore, BACKUPS_GITIGNORE);
       onIgnore?.({ path: ignore, sha256: sha256(BACKUPS_GITIGNORE) });
@@ -191,10 +191,6 @@ async function existing(paths: string[]): Promise<string[]> {
   return found;
 }
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
 function projectRecord(plan: InstallPlan, files: ManifestFile[], dirs: string[]): Manifest["project"] {
   const project = plan.project;
   if (project === undefined) return undefined;
@@ -216,9 +212,9 @@ function projectRecord(plan: InstallPlan, files: ManifestFile[], dirs: string[])
 // The backups .gitignore that this run will write, so the provisional manifest can record it.
 async function plannedBackupsIgnore(plan: InstallPlan, skipHookBackup: boolean): Promise<ManifestFile | undefined> {
   if (plan.project === undefined) return undefined;
-  const path = join(plan.configDir, "backups", ".gitignore");
+  const path = join(plan.stateDir, "backups", ".gitignore");
   if (await pathExists(path)) return undefined;
-  const replaces = [...plan.skills, ...plan.links, plan.project.shim].some((step) => step.action === "replace");
+  const replaces = replaceableSteps(plan).some((step) => step.action === "replace");
   const hook = plan.hook;
   const hookBackup = hook !== undefined && hook.action !== "unchanged" && hook.before !== undefined && !skipHookBackup;
   return replaces || hookBackup ? { path, sha256: sha256(BACKUPS_GITIGNORE) } : undefined;
@@ -246,6 +242,19 @@ function installManifest(plan: InstallPlan, now: Date, fields: Pick<Manifest, "c
       .map((link) => ({ path: link.path, target: link.target })),
     ...fields,
   };
+}
+
+function hookRecords(plan: InstallPlan, created: boolean, backup?: string): ManifestHook[] {
+  if (plan.hook === undefined) return [];
+  return [
+    {
+      kind: "claude-user-prompt-submit",
+      settingsPath: plan.hook.settingsPath,
+      command: plan.hook.command,
+      ...(created ? { created: true } : {}),
+      ...(backup === undefined ? {} : { backup }),
+    },
+  ];
 }
 
 // In project scope, the exclude block and a provisional manifest go first, so a failure later in
@@ -279,10 +288,7 @@ async function beginProjectInstall(
   if (backupsIgnore !== undefined) files.push(backupsIgnore);
   const provisional = installManifest(plan, now, {
     config: { path: plan.config.path, created: plan.config.action === "create" },
-    hooks:
-      plan.hook === undefined
-        ? []
-        : [{ kind: "claude-user-prompt-submit", settingsPath: plan.hook.settingsPath, command: plan.hook.command, ...(hookCreated ? { created: true } : {}) }],
+    hooks: hookRecords(plan, hookCreated),
     backups: [],
     project: projectRecord(plan, files, project.missingDirs),
   });
@@ -292,9 +298,9 @@ async function beginProjectInstall(
 export async function applyInstall(plan: InstallPlan, now: Date): Promise<ApplyResult> {
   const result: ApplyResult = { changed: [], backups: [] };
   const createdIgnores: ManifestFile[] = [];
-  const backupDir = backupDirFor(plan.configDir, now, plan.project !== undefined, (file) => createdIgnores.push(file));
+  const backupDir = backupDirFor(plan.stateDir, now, plan.project !== undefined, (file) => createdIgnores.push(file));
 
-  for (const step of [...plan.skills, ...plan.links, ...(plan.project === undefined ? [] : [plan.project.shim])]) {
+  for (const step of replaceableSteps(plan)) {
     if (step.action === "conflict") {
       throw new OmtError("conflict", `cannot apply a plan with conflicts (${step.path})`, { hint: "use --force" });
     }
@@ -352,18 +358,7 @@ export async function applyInstall(plan: InstallPlan, now: Date): Promise<ApplyR
 
   const manifest = installManifest(plan, now, {
     config: { path: plan.config.path, created: configCreated },
-    hooks:
-      plan.hook === undefined
-        ? []
-        : [
-            {
-              kind: "claude-user-prompt-submit",
-              settingsPath: plan.hook.settingsPath,
-              command: plan.hook.command,
-              ...(hookCreated ? { created: true } : {}),
-              ...(hookBackup === undefined ? {} : { backup: hookBackup }),
-            },
-          ],
+    hooks: hookRecords(plan, hookCreated, hookBackup),
     backups: result.backups,
     project: plan.project === undefined ? undefined : projectRecord(plan, [...createdFiles, ...createdIgnores], await existing(plan.project.missingDirs)),
   });
@@ -375,7 +370,7 @@ export async function applyInstall(plan: InstallPlan, now: Date): Promise<ApplyR
 // every remaining path hidden from git, and the next run finishes the work.
 export async function applyUninstall(plan: UninstallPlan, now: Date): Promise<ApplyResult> {
   const result: ApplyResult = { changed: [], backups: [] };
-  const backupDir = backupDirFor(plan.configDir, now, plan.project !== undefined);
+  const backupDir = backupDirFor(plan.stateDir, now, plan.project !== undefined);
   await removeScratchDirs(plan.scratch, result);
 
   for (const link of plan.links) {
@@ -447,8 +442,8 @@ export async function applyUninstall(plan: UninstallPlan, now: Date): Promise<Ap
   }
   if (plan.purge && plan.scope === "user") {
     try {
-      await rmdir(plan.configDir);
-      result.changed.push(plan.configDir);
+      await rmdir(plan.stateDir);
+      result.changed.push(plan.stateDir);
     } catch {
       // The directory is missing or still holds user files, such as backups or roles.
     }

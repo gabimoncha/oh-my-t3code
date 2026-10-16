@@ -1,11 +1,11 @@
 import { test } from "node:test";
 import type { TestContext } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { DEFAULT_CONFIG } from "../../src/config/defaults.ts";
 import { loadConfig } from "../../src/config/load.ts";
-import { tempDir } from "../helpers.ts";
+import { tempDir, writeFile } from "../helpers.ts";
 
 function setup(t: TestContext) {
   const root = tempDir(t);
@@ -18,12 +18,8 @@ function setup(t: TestContext) {
   const env = { OMT_CONFIG_DIR: configDir };
   const userPath = join(configDir, "config.jsonc");
   const projectPath = join(project, ".omt", "config.jsonc");
-  const write = (path: string, text: string) => {
-    mkdirSync(join(path, ".."), { recursive: true });
-    writeFileSync(path, text);
-  };
   const load = () => loadConfig({ cwd, env, homedir: home });
-  return { userPath, projectPath, write, load };
+  return { userPath, projectPath, write: writeFile, load };
 }
 
 test("with no files the result is the defaults, and every source is listed", async (t) => {

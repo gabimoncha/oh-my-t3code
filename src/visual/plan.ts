@@ -1,100 +1,14 @@
-import { parsePlan } from "../plan/parse.ts";
+import { blankFences, parsePlan, planSectionsText, unitFields } from "../plan/parse.ts";
 import type { PlanItem } from "../plan/parse.ts";
 import { assignRows, labelCharsPerLine, wrapWords } from "./flow.ts";
 import { plainText } from "./inline.ts";
 import type { Block, FlowBlock, FlowEdge, FlowNode, PageSpec, TabSpec } from "./spec.ts";
 
-export interface PlanPage {
+interface PlanPage {
   title: string;
   subtitle: string;
   tabs: TabSpec[];
   warnings: string[];
-}
-
-const ITEM_LINE_RE = /^- \[( |x|X|~)\] (U|D|F)(\d+)\. /;
-const FIELD_RE = /^\s+- ([A-Za-z][A-Za-z ]*?):\s*(.*)$/;
-
-const FENCE_RE = /^\s*(`{3,}|~{3,})(.*)$/;
-
-// For each line, true when it is a fence line or inside a fence. A fence closes only on a line of
-// the opening character, at least as long, with nothing after it (CommonMark); an unclosed fence
-// runs to the end.
-export function fencedLines(lines: string[]): boolean[] {
-  const out: boolean[] = [];
-  let open: { char: string; length: number } | undefined;
-  for (const line of lines) {
-    const fence = FENCE_RE.exec(line);
-    const marker = fence?.[1] ?? "";
-    const info = fence?.[2] ?? "";
-    if (open === undefined) {
-      if (fence !== null && !(marker.startsWith("`") && info.includes("`"))) open = { char: marker.charAt(0), length: marker.length };
-      out.push(open !== undefined);
-      continue;
-    }
-    out.push(true);
-    if (fence !== null && marker.charAt(0) === open.char && marker.length >= open.length && info.trim() === "") open = undefined;
-  }
-  return out;
-}
-
-function planLines(markdown: string): string[] {
-  return markdown.replace(/^\uFEFF/, "").split(/\r?\n/);
-}
-
-// The plan with every fenced line blank, so examples inside fences are never items, fields, or headings.
-export function blankFences(markdown: string): string {
-  const lines = planLines(markdown);
-  const fenced = fencedLines(lines);
-  return lines.map((line, i) => (fenced[i] === true ? "" : line)).join("\n");
-}
-
-// The text of each "## " section, keyed by heading. Lines inside code fences are never headings.
-export function planSectionsText(markdown: string): Map<string, string> {
-  const sections = new Map<string, string[]>();
-  let current: string[] | undefined;
-  const lines = planLines(markdown);
-  const fenced = fencedLines(lines);
-  lines.forEach((line, i) => {
-    if (fenced[i] !== true && line.startsWith("## ")) {
-      const name = line.slice(3).trim();
-      current = [];
-      if (!sections.has(name)) sections.set(name, current);
-      return;
-    }
-    if (fenced[i] !== true && line.startsWith("# ")) {
-      current = undefined;
-      return;
-    }
-    current?.push(line);
-  });
-  const out = new Map<string, string>();
-  for (const [name, lines] of sections) out.set(name, lines.join("\n").trim());
-  return out;
-}
-
-// The "  - <Field>: <value>" lines under each U item, up to the next item or heading. Takes the
-// plan after blankFences.
-function unitFields(markdown: string): Map<string, Map<string, string>> {
-  const out = new Map<string, Map<string, string>>();
-  let current: Map<string, string> | undefined;
-  for (const line of markdown.split("\n")) {
-    const item = ITEM_LINE_RE.exec(line);
-    if (item !== null) {
-      current = new Map();
-      if (item[2] === "U") out.set(`U${item[3]}`, current);
-      continue;
-    }
-    if (line.startsWith("#") || line.startsWith("- ")) {
-      current = undefined;
-      continue;
-    }
-    const field = FIELD_RE.exec(line);
-    if (current !== undefined && field !== null) {
-      const key = (field[1] ?? "").toLowerCase();
-      if (!current.has(key)) current.set(key, (field[2] ?? "").trim());
-    }
-  }
-  return out;
 }
 
 function findCycle(ids: string[], deps: Map<string, string[]>): string[] | undefined {

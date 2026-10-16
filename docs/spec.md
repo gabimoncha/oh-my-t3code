@@ -38,9 +38,9 @@ src/
   main.ts                main(), createContext(), command registry, help text
   types.ts               shared types (section 3)
   paths.ts               path helpers (section 4)
-  util/                  errors.ts, args.ts, fs.ts, output.ts
+  util/                  errors.ts, args.ts, fs.ts, output.ts, json.ts, ids.ts
   config/                jsonc.ts, defaults.ts, validate.ts, merge.ts, load.ts, starter.ts, schema.ts
-  routing/               capabilities.ts, effort.ts, resolve.ts, format.ts
+  routing/               capabilities.ts, effort.ts, resolve.ts, format.ts, family.ts
   brief/                 templates.ts, render.ts
   plan/                  template.ts, parse.ts
   visual/                spec.ts, inline.ts, flow.ts, plan.ts, page.ts
@@ -48,6 +48,7 @@ src/
   install/               skills.ts, links.ts, claudeHook.ts, manifest.ts, plan.ts, apply.ts, doctor.ts
   hooks/                 userPromptSubmit.ts
   commands/              one file per command, each exports `run: CommandRun`
+                         shared.ts holds the helpers that commands share and exports no `run`
 scripts/
   build-schema.ts        writes schema/omt.schema.json from src/config/schema.ts
 schema/
@@ -333,11 +334,13 @@ export class OmtError extends Error {
 | `projectConfigPath(root)` | `<root>/.omt/config.jsonc` |
 | `projectRolesDir(root)` | `<root>/.omt/roles` |
 | `plansDir(root)` | `<root>/.omt/plans` |
+| `planPath(root, slug)` | `<root>/.omt/plans/<slug>.md` |
 | `ledgerPath(root)` | `<root>/.omt/ledger.jsonl` |
 | `evidenceDir(root)` | `<root>/.omt/evidence` |
 | `projectManifestPath(root)` | `<root>/.omt/install.json` |
 | `projectShimPath(root)` | `<root>/.omt/bin/omt` |
 | `projectSkillRoots(root)` | `{ agents: <root>/.agents/skills, claude: <root>/.claude/skills }` |
+| `projectInstallDirs(root)` | Folders under `<root>`, in order: `.omt`, `.omt/plans`, `.omt/bin`, `.omt/backups`, `.agents`, `.agents/skills`, `.claude`, `.claude/skills` |
 | `projectClaudeSettingsPath(root)` | `<root>/.claude/settings.local.json` |
 | `claudeConfigDir(env, homedir)` | `$CLAUDE_CONFIG_DIR`, else `<home>/.claude` |
 | `skillRoots(env, homedir)` | `{ agents: <home>/.agents/skills, claude: <claudeConfigDir>/skills, gemini: <home>/.gemini/config/skills }` |

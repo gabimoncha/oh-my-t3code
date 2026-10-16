@@ -1,5 +1,6 @@
-import { lstat, readlink, realpath } from "node:fs/promises";
+import { readlink, realpath } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
+import { lstatIfExists } from "../util/fs.ts";
 import { resolveReal } from "./fsops.ts";
 
 export type LinkRootName = "claude" | "gemini";
@@ -32,13 +33,8 @@ export interface LinkPlan {
 }
 
 export async function classifyLink(path: string, canonical: string): Promise<{ action: LinkAction; reason?: string }> {
-  let stat;
-  try {
-    stat = await lstat(path);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return { action: "create" };
-    throw error;
-  }
+  const stat = await lstatIfExists(path);
+  if (stat === undefined) return { action: "create" };
   if (!stat.isSymbolicLink()) return { action: "conflict", reason: "exists and is not a symlink" };
   const realCanonical = await resolveReal(canonical);
   const lexical = resolve(dirname(path), await readlink(path));

@@ -1,6 +1,6 @@
-import { lstat, readdir } from "node:fs/promises";
+import { readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { hashDir, MANAGED_MARKER, pathExists, readFileIfExists, writeFileAtomic } from "../util/fs.ts";
+import { errorCode, hashDir, lstatIfExists, MANAGED_MARKER, pathExists, readFileIfExists, writeFileAtomic } from "../util/fs.ts";
 
 export const PACKAGE_NAME = "oh-my-t3code";
 
@@ -30,7 +30,7 @@ export async function listBundledSkills(packageRoot: string): Promise<BundledSki
   try {
     entries = await readdir(root, { withFileTypes: true });
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    if (errorCode(error) === "ENOENT") return [];
     throw error;
   }
   const skills: BundledSkill[] = [];
@@ -66,25 +66,14 @@ export async function writeMarker(dir: string, marker: Marker): Promise<void> {
 
 // A managed directory is a real directory (not a symlink) that holds the marker file.
 export async function isManagedDir(path: string): Promise<boolean> {
-  try {
-    const stat = await lstat(path);
-    if (!stat.isDirectory()) return false;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
-    throw error;
-  }
+  if (!(await lstatIfExists(path))?.isDirectory()) return false;
   return pathExists(join(path, MANAGED_MARKER));
 }
 
 export async function classifySkill(sourceDir: string, targetDir: string): Promise<SkillClassification> {
   const sourceHash = await hashDir(sourceDir);
-  let stat;
-  try {
-    stat = await lstat(targetDir);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return { action: "create", sourceHash };
-    throw error;
-  }
+  const stat = await lstatIfExists(targetDir);
+  if (stat === undefined) return { action: "create", sourceHash };
   if (!stat.isDirectory()) return { action: "conflict", sourceHash, reason: "exists and is not a directory" };
   const marker = await readMarker(targetDir);
   if (marker === undefined) return { action: "conflict", sourceHash, reason: "exists and is not managed by omt" };

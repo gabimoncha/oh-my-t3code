@@ -121,6 +121,10 @@ function cardsHtml(block: CardsBlock): string {
   return `<div class="cards">${cards.join("")}</div>`;
 }
 
+function heading(tag: "h3" | "h4", text: string | undefined): string {
+  return text === undefined || text === "" ? "" : `<${tag}>${escapeHtml(text)}</${tag}>`;
+}
+
 function tableHtml(block: TableBlock): string {
   const nowrap = new Set(block.nowrap ?? []);
   const cls = (index: number) => (nowrap.has(index) ? ' class="nw"' : "");
@@ -128,7 +132,7 @@ function tableHtml(block: TableBlock): string {
   const body = block.rows
     .map((row) => `<tr>${block.columns.map((_, index) => `<td${cls(index)}>${inlineHtml(row[index] ?? "")}</td>`).join("")}</tr>`)
     .join("\n");
-  const title = block.title === undefined || block.title === "" ? "" : `<h3>${escapeHtml(block.title)}</h3>`;
+  const title = heading("h3", block.title);
   return `${title}<div class="tw"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
 
@@ -139,12 +143,12 @@ function checklistHtml(block: ChecklistBlock): string {
     const state = item.state ?? "open";
     return `<li${STATE_CLASS[state]}><span class="sr">${state}: </span>${inlineHtml(item.text)}</li>`;
   });
-  const title = block.title === undefined || block.title === "" ? "" : `<h3>${escapeHtml(block.title)}</h3>`;
+  const title = heading("h3", block.title);
   return `${title}<ul class="todo">${items.join("")}</ul>`;
 }
 
 function calloutHtml(block: CalloutBlock): string {
-  const title = block.title === undefined || block.title === "" ? "" : `<h4>${escapeHtml(block.title)}</h4>`;
+  const title = heading("h4", block.title);
   return `<div class="callout ${block.tone ?? "muted"}">${title}${textHtml(block.text)}</div>`;
 }
 

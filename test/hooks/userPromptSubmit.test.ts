@@ -1,10 +1,8 @@
-import { spawnSync } from "node:child_process";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { run } from "../../src/commands/hook.ts";
 import { detectUltrawork, runUserPromptSubmitHook, ultraworkContext } from "../../src/hooks/userPromptSubmit.ts";
-import { OmtError } from "../../src/util/errors.ts";
-import { CLI_PATH, childEnv, fakeContext, tempDir } from "../helpers.ts";
+import { fakeContext, omtExit, spawnOmt, tempDir } from "../helpers.ts";
 
 const MATCHES: string[] = [
   "ulw add a flag",
@@ -134,7 +132,7 @@ test("hook rejects a missing or unknown hook name with exit code 2", async (t) =
   const root = tempDir(t);
   for (const argv of [[], ["pre-tool-use"], ["--bogus"]]) {
     const ctx = fakeContext({ root, argv });
-    await assert.rejects(run(ctx), (error: unknown) => error instanceof OmtError && error.exitCode === 2);
+    await assert.rejects(run(ctx), omtExit(2));
   }
 });
 
@@ -149,18 +147,12 @@ test("hook user-prompt-submit ignores extra arguments and exits 0", async (t) =>
 
 test("omt hook user-prompt-submit works as a child process", (t) => {
   const root = tempDir(t);
-  const spawn = (input: string) =>
-    spawnSync(process.execPath, [CLI_PATH, "hook", "user-prompt-submit"], {
-      cwd: root,
-      env: childEnv(root),
-      encoding: "utf8",
-      input,
-    });
+  const spawn = (input: string) => spawnOmt(["hook", "user-prompt-submit"], { root, input });
   const hit = spawn('{"prompt":"ulw add a flag"}');
-  assert.equal(hit.status, 0);
+  assert.equal(hit.code, 0);
   assert.equal(JSON.parse(hit.stdout).hookSpecificOutput.hookEventName, "UserPromptSubmit");
   const miss = spawn("not json");
-  assert.equal(miss.status, 0);
+  assert.equal(miss.code, 0);
   assert.equal(miss.stdout, "");
   assert.equal(miss.stderr, "");
 });

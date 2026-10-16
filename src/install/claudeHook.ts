@@ -1,9 +1,9 @@
-import { realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, isAbsolute } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { OmtError } from "../util/errors.ts";
-import { readFileIfExists, writeFileAtomic } from "../util/fs.ts";
+import { readFileIfExists, realOrSelf, writeFileAtomic } from "../util/fs.ts";
+import { isRecord } from "../util/json.ts";
 import { writeTargetFor } from "./fsops.ts";
 
 export const HOOK_SIGNATURE = "# oh-my-t3code";
@@ -17,14 +17,6 @@ type Json = Record<string, unknown>;
 function isInside(child: string, parent: string): boolean {
   const rel = relative(parent, child);
   return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
-}
-
-function realOrSelf(path: string): string {
-  try {
-    return realpathSync(path);
-  } catch {
-    return path;
-  }
 }
 
 function isPackageRunnerCache(path: string): boolean {
@@ -67,10 +59,6 @@ export function isManagedCommand(command: unknown): boolean {
   return typeof command === "string" && command.trimEnd().endsWith(HOOK_SIGNATURE);
 }
 
-function isObject(value: unknown): value is Json {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
 export function parseSettings(text: string | undefined, path: string): Json {
   if (text === undefined || text.trim() === "") return {};
   let value: unknown;
@@ -82,8 +70,8 @@ export function parseSettings(text: string | undefined, path: string): Json {
       cause: error,
     });
   }
-  if (!isObject(value)) throw new OmtError("claude_settings", `${path} does not hold a JSON object; nothing was changed`);
-  if (value.hooks !== undefined && !isObject(value.hooks)) {
+  if (!isRecord(value)) throw new OmtError("claude_settings", `${path} does not hold a JSON object; nothing was changed`);
+  if (value.hooks !== undefined && !isRecord(value.hooks)) {
     throw new OmtError("claude_settings", `"hooks" in ${path} is not an object; nothing was changed`);
   }
   const event = (value.hooks as Json | undefined)?.[HOOK_EVENT];
@@ -129,9 +117,9 @@ function managedHandlers(settings: Json): Json[] {
   if (!Array.isArray(groups)) return [];
   const found: Json[] = [];
   for (const group of groups) {
-    if (!isObject(group) || !Array.isArray(group.hooks)) continue;
+    if (!isRecord(group) || !Array.isArray(group.hooks)) continue;
     for (const handler of group.hooks) {
-      if (isObject(handler) && isManagedCommand(handler.command)) found.push(handler);
+      if (isRecord(handler) && isManagedCommand(handler.command)) found.push(handler);
     }
   }
   return found;
@@ -149,7 +137,7 @@ export function withHook(settings: Json, command: string): Json {
     for (const handler of existing) handler.command = command;
     return next;
   }
-  const hooks = isObject(next.hooks) ? next.hooks : {};
+  const hooks = isRecord(next.hooks) ? next.hooks : {};
   const groups = Array.isArray(hooks[HOOK_EVENT]) ? (hooks[HOOK_EVENT] as unknown[]) : [];
   groups.push({ hooks: [{ type: "command", command, timeout: HOOK_TIMEOUT_SECONDS }] });
   hooks[HOOK_EVENT] = groups;
@@ -162,15 +150,15 @@ export function withHook(settings: Json, command: string): Json {
 export function withoutHook(settings: Json): Json {
   const next = structuredClone(settings);
   const hooks = next.hooks;
-  if (!isObject(hooks) || !Array.isArray(hooks[HOOK_EVENT])) return next;
+  if (!isRecord(hooks) || !Array.isArray(hooks[HOOK_EVENT])) return next;
   const groups: unknown[] = [];
   let changed = false;
   for (const group of hooks[HOOK_EVENT] as unknown[]) {
-    if (!isObject(group) || !Array.isArray(group.hooks)) {
+    if (!isRecord(group) || !Array.isArray(group.hooks)) {
       groups.push(group);
       continue;
     }
-    const kept = group.hooks.filter((handler) => !(isObject(handler) && isManagedCommand(handler.command)));
+    const kept = group.hooks.filter((handler) => !(isRecord(handler) && isManagedCommand(handler.command)));
     if (kept.length === group.hooks.length) {
       groups.push(group);
       continue;

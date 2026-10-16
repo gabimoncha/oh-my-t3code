@@ -1,24 +1,16 @@
-import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import type { TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { run } from "../../src/commands/ledger.ts";
 import { appendLedger, ledgerStats, readLedger, requestId } from "../../src/ledger/ledger.ts";
 import type { LedgerEntry } from "../../src/types.ts";
-import { OmtError } from "../../src/util/errors.ts";
-import { fakeContext, tempDir } from "../helpers.ts";
+import { omtExit, projectContext, tempDir, writeFile } from "../helpers.ts";
 
 const TS = "2026-01-02T03:04:05.000Z";
 
 function entry(fields: Partial<LedgerEntry>): LedgerEntry {
   return { ts: TS, role: "execute", status: "dispatched", ...fields };
-}
-
-function projectContext(t: TestContext, argv: string[]) {
-  const ctx = fakeContext({ root: tempDir(t), argv });
-  mkdirSync(join(ctx.cwd, ".git"));
-  return ctx;
 }
 
 test("appendLedger creates .omt and writes one JSON line per entry", async (t) => {
@@ -148,7 +140,7 @@ test("ledger add rejects bad input with exit code 2", async (t) => {
   ];
   for (const argv of cases) {
     const ctx = projectContext(t, argv);
-    await assert.rejects(run(ctx), (error: unknown) => error instanceof OmtError && error.exitCode === 2, argv.join(" "));
+    await assert.rejects(run(ctx), omtExit(2), argv.join(" "));
   }
 });
 
@@ -166,7 +158,7 @@ test("ledger list prints a table, filters by plan, and warns on malformed lines"
   assert.match(lines[2] ?? "", /^03:04:05\s+other\s+-\s+execute\s+-\s+completed\s+DONE\s+-$/);
   assert.match(ctx.err(), /warning: .*ledger\.jsonl:2: /);
 
-  const json = fakeContext({ homedir: ctx.homedir, cwd: ctx.cwd, argv: ["list", "--plan", "auth", "--json"] });
+  const json = ctx.at(["list", "--plan", "auth", "--json"]);
   assert.equal(await run(json), 0);
   const parsed = JSON.parse(json.out());
   assert.equal(parsed.length, 1);
@@ -186,7 +178,7 @@ test("ledger stats prints LedgerStats as text and JSON", async (t) => {
     "dispatched: 2\nactive: 1\nterminal: 1\nmax parallel: 4\nmax tasks per run: 24\ncan dispatch: yes\n",
   );
 
-  const json = fakeContext({ homedir: ctx.homedir, cwd: ctx.cwd, argv: ["stats", "--plan", "auth", "--json"] });
+  const json = ctx.at(["stats", "--plan", "auth", "--json"]);
   assert.equal(await run(json), 0);
   assert.deepEqual(JSON.parse(json.out()), {
     plan: "auth",
@@ -200,8 +192,7 @@ test("ledger stats prints LedgerStats as text and JSON", async (t) => {
 
 test("ledger stats reads the limits from the project config", async (t) => {
   const ctx = projectContext(t, ["stats", "--plan", "auth"]);
-  mkdirSync(join(ctx.cwd, ".omt"));
-  writeFileSync(join(ctx.cwd, ".omt", "config.jsonc"), '{ "version": 1, "limits": { "maxParallel": 1 } }\n');
+  writeFile(join(ctx.cwd, ".omt", "config.jsonc"), '{ "version": 1, "limits": { "maxParallel": 1 } }\n');
   await appendLedger(join(ctx.cwd, ".omt", "ledger.jsonl"), entry({ plan: "auth", taskId: "t1" }));
   assert.equal(await run(ctx), 0);
   assert.match(ctx.out(), /^max parallel: 1$/m);
@@ -210,9 +201,8 @@ test("ledger stats reads the limits from the project config", async (t) => {
 
 test("ledger stats --plan uses the lower of the plan and config max parallel", async (t) => {
   const ctx = projectContext(t, ["stats", "--plan", "auth"]);
-  mkdirSync(join(ctx.cwd, ".omt", "plans"), { recursive: true });
-  writeFileSync(join(ctx.cwd, ".omt", "config.jsonc"), '{ "version": 1, "limits": { "maxParallel": 4 } }\n');
-  writeFileSync(
+  writeFile(join(ctx.cwd, ".omt", "config.jsonc"), '{ "version": 1, "limits": { "maxParallel": 4 } }\n');
+  writeFile(
     join(ctx.cwd, ".omt", "plans", "auth.md"),
     "# Auth\n\n<!-- omt-plan v1 slug=auth created=2026-01-01T00:00:00.000Z max-parallel=1 -->\n",
   );
@@ -221,14 +211,14 @@ test("ledger stats --plan uses the lower of the plan and config max parallel", a
   assert.match(ctx.out(), /^max parallel: 1 \(plan 1, config 4\)$/m);
   assert.match(ctx.out(), /^can dispatch: no$/m);
 
-  const json = fakeContext({ homedir: ctx.homedir, cwd: ctx.cwd, argv: ["stats", "--plan", "auth", "--json"] });
+  const json = ctx.at(["stats", "--plan", "auth", "--json"]);
   assert.equal(await run(json), 0);
   const parsed = JSON.parse(json.out());
   assert.equal(parsed.limits.maxParallel, 1);
   assert.equal(parsed.planMaxParallel, 1);
   assert.equal(parsed.canDispatch, false);
 
-  const other = fakeContext({ homedir: ctx.homedir, cwd: ctx.cwd, argv: ["stats", "--plan", "nofile", "--json"] });
+  const other = ctx.at(["stats", "--plan", "nofile", "--json"]);
   assert.equal(await run(other), 0);
   assert.deepEqual(JSON.parse(other.out()), {
     plan: "nofile",
@@ -242,9 +232,8 @@ test("ledger stats --plan uses the lower of the plan and config max parallel", a
 
 test("ledger stats --plan ignores a max-parallel key quoted in the plan body", async (t) => {
   const ctx = projectContext(t, ["stats", "--plan", "auth"]);
-  mkdirSync(join(ctx.cwd, ".omt", "plans"), { recursive: true });
-  writeFileSync(join(ctx.cwd, ".omt", "config.jsonc"), '{ "version": 1, "limits": { "maxParallel": 4 } }\n');
-  writeFileSync(
+  writeFile(join(ctx.cwd, ".omt", "config.jsonc"), '{ "version": 1, "limits": { "maxParallel": 4 } }\n');
+  writeFile(
     join(ctx.cwd, ".omt", "plans", "auth.md"),
     "# Auth\n\n<!-- omt-plan v1 slug=auth created=2026-01-01T00:00:00.000Z -->\n\n" +
       "- [ ] U2. Example `<!-- omt-plan v1 slug=x created=... max-parallel=1 -->`\n\n" +
@@ -256,9 +245,8 @@ test("ledger stats --plan ignores a max-parallel key quoted in the plan body", a
 
 test("ledger stats --plan uses the plan max-tasks also when it is above the config value", async (t) => {
   const ctx = projectContext(t, ["stats", "--plan", "auth"]);
-  mkdirSync(join(ctx.cwd, ".omt", "plans"), { recursive: true });
-  writeFileSync(join(ctx.cwd, ".omt", "config.jsonc"), '{ "version": 1, "limits": { "maxTasksPerRun": 1 } }\n');
-  writeFileSync(
+  writeFile(join(ctx.cwd, ".omt", "config.jsonc"), '{ "version": 1, "limits": { "maxTasksPerRun": 1 } }\n');
+  writeFile(
     join(ctx.cwd, ".omt", "plans", "auth.md"),
     "# Auth\n\n<!-- omt-plan v1 slug=auth created=2026-01-01T00:00:00.000Z max-tasks=80 -->\n",
   );
@@ -267,7 +255,7 @@ test("ledger stats --plan uses the plan max-tasks also when it is above the conf
   assert.match(ctx.out(), /^max tasks per run: 80 \(plan 80, config 1\)$/m);
   assert.match(ctx.out(), /^can dispatch: yes$/m);
 
-  const json = fakeContext({ homedir: ctx.homedir, cwd: ctx.cwd, argv: ["stats", "--plan", "auth", "--json"] });
+  const json = ctx.at(["stats", "--plan", "auth", "--json"]);
   assert.equal(await run(json), 0);
   const parsed = JSON.parse(json.out());
   assert.equal(parsed.limits.maxTasksPerRun, 80);
@@ -294,7 +282,7 @@ test("ledger request-id prints the id and requires plan, unit, and role", async 
   assert.equal(withAttempt.out(), "omt:a:U1:r:r1:a4\n");
 
   const missing = projectContext(t, ["request-id", "--plan", "auth", "--role", "review"]);
-  await assert.rejects(run(missing), (error: unknown) => error instanceof OmtError && error.exitCode === 2);
+  await assert.rejects(run(missing), omtExit(2));
 });
 
 test("a terminal entry without a task id closes the dispatched entry with the same plan, unit, role, round, and attempt", () => {
@@ -321,9 +309,8 @@ test("a terminal entry with neither a task id nor a unit closes nothing", () => 
 
 test("ledger add without --task-id or --unit warns that it closed nothing", async (t) => {
   const base = projectContext(t, []);
-  const at = (argv: string[]) => fakeContext({ homedir: base.homedir, cwd: base.cwd, argv });
-  assert.equal(await run(at(["add", "--plan", "demo", "--role", "execute", "--status", "dispatched", "--task-id", "t1"])), 0);
-  const done = at(["add", "--plan", "demo", "--role", "execute", "--status", "completed"]);
+  assert.equal(await run(base.at(["add", "--plan", "demo", "--role", "execute", "--status", "dispatched", "--task-id", "t1"])), 0);
+  const done = base.at(["add", "--plan", "demo", "--role", "execute", "--status", "completed"]);
   assert.equal(await run(done), 0);
   assert.equal(done.err(), "omt: no dispatched entry matches; nothing was closed\n");
 });
@@ -339,7 +326,7 @@ test("interrupted, verified, and rejected are terminal and close by task id", ()
 
 test("ledger add --status dispatched needs --task-id or --unit", async (t) => {
   const ctx = projectContext(t, ["add", "--role", "execute", "--status", "dispatched"]);
-  await assert.rejects(run(ctx), (error: unknown) => error instanceof OmtError && error.exitCode === 2);
+  await assert.rejects(run(ctx), omtExit(2));
   const withId = projectContext(t, ["add", "--role", "execute", "--status", "dispatched", "--task-id", "t1"]);
   assert.equal(await run(withId), 0);
   assert.equal(withId.err(), "");
@@ -358,13 +345,12 @@ test("ledger add with a terminal status that closes nothing still appends and wa
 
 test("ledger add, then a terminal add without a task id, leaves no active task", async (t) => {
   const base = projectContext(t, []);
-  const at = (argv: string[]) => fakeContext({ homedir: base.homedir, cwd: base.cwd, argv });
   const common = ["--plan", "demo", "--unit", "U1", "--role", "execute"];
-  assert.equal(await run(at(["add", ...common, "--status", "dispatched", "--task-id", "t1"])), 0);
-  const done = at(["add", ...common, "--status", "completed"]);
+  assert.equal(await run(base.at(["add", ...common, "--status", "dispatched", "--task-id", "t1"])), 0);
+  const done = base.at(["add", ...common, "--status", "completed"]);
   assert.equal(await run(done), 0);
   assert.equal(done.err(), "");
-  const stats = at(["stats", "--plan", "demo"]);
+  const stats = base.at(["stats", "--plan", "demo"]);
   assert.equal(await run(stats), 0);
   assert.match(stats.out(), /^active: 0$/m);
 });
@@ -381,7 +367,7 @@ test("ledger rejects an invalid --plan or --unit with exit code 2", async (t) =>
   for (const argv of cases) {
     await assert.rejects(
       run(projectContext(t, argv)),
-      (error: unknown) => error instanceof OmtError && error.exitCode === 2,
+      omtExit(2),
       argv.join(" "),
     );
   }

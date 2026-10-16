@@ -159,6 +159,10 @@ export function plansDir(root: string): string {
   return join(omtDir(root), "plans");
 }
 
+export function planPath(root: string, slug: string): string {
+  return join(plansDir(root), `${slug}.md`);
+}
+
 export function ledgerPath(root: string): string {
   return join(omtDir(root), "ledger.jsonl");
 }
@@ -177,6 +181,20 @@ export function projectShimPath(root: string): string {
 
 export function projectSkillRoots(root: string): { agents: string; claude: string } {
   return { agents: join(root, ".agents", "skills"), claude: join(root, ".claude", "skills") };
+}
+
+export function projectInstallDirs(root: string): string[] {
+  const skills = projectSkillRoots(root);
+  return [
+    omtDir(root),
+    plansDir(root),
+    dirname(projectShimPath(root)),
+    join(omtDir(root), "backups"),
+    dirname(skills.agents),
+    skills.agents,
+    dirname(skills.claude),
+    skills.claude,
+  ];
 }
 
 export function projectClaudeSettingsPath(root: string): string {

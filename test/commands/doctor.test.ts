@@ -3,27 +3,14 @@ import { chmodSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync 
 import { join } from "node:path";
 import { test } from "node:test";
 import type { TestContext } from "node:test";
-import type { DoctorCheck, DoctorReport } from "../../src/install/doctor.ts";
 import { CLI_PATH } from "../helpers.ts";
+import { doctor } from "../run.ts";
 import { CAPS_FILE, makeProject } from "./shared.ts";
 import type { Project } from "./shared.ts";
 
-async function doctor(project: Project, argv: string[] = [], options = {}) {
-  const { code, ctx } = await project.run(["doctor", "--json", ...argv], options);
-  const report = JSON.parse(ctx.out()) as DoctorReport;
-  const byId = new Map(report.checks.map((c) => [c.id, c]));
-  const get = (id: string): DoctorCheck => {
-    const found = byId.get(id);
-    assert.ok(found, id);
-    return found;
-  };
-  return { code, report, get };
-}
-
 async function installed(t: TestContext, args: string[] = []): Promise<Project> {
   const project = makeProject(t);
-  const { code, ctx } = await project.run(["install", "--yes", ...args]);
-  assert.equal(code, 0, ctx.err());
+  await project.runOk(["install", "--yes", ...args]);
   return project;
 }
 
@@ -34,8 +21,7 @@ function t3Settings(project: Project, value: unknown): void {
 
 test("doctor prints one line per check and exits 0 without failures", async (t) => {
   const project = makeProject(t);
-  const { code, ctx } = await project.run(["doctor"]);
-  assert.equal(code, 0);
+  const { ctx } = await project.runOk(["doctor"]);
   const ids = ctx.out().trimEnd().split("\n").map((line) => line.split(/\s+/)[1]);
   assert.deepEqual(ids, ["node", "config", "skills", "links", "hooks", "path", "t3", "homes"]);
   assert.match(ctx.out(), /^PASS  config  13 roles$/m);
@@ -154,8 +140,7 @@ test("doctor homes check: INFO, PASS, and WARN, and it never writes the T3 setti
   assert.equal(lacking.status, "WARN");
   assert.match(lacking.message, /claudeWork .* lacks omt, /);
 
-  const linked = await project.run(["install", "--yes"], { env: { HOME: project.home, CLAUDE_CONFIG_DIR: work } });
-  assert.equal(linked.code, 0, linked.ctx.err());
+  await project.runOk(["install", "--yes"], { env: { HOME: project.home, CLAUDE_CONFIG_DIR: work } });
   assert.equal((await doctor(project)).get("homes").status, "PASS");
   assert.equal(readFileSync(settingsPath, "utf8"), before);
 });

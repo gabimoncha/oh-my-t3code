@@ -1,5 +1,5 @@
-import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { mkdirSync } from "node:fs";
+import { join } from "node:path";
 import { test } from "node:test";
 import type { TestContext } from "node:test";
 import assert from "node:assert/strict";
@@ -7,8 +7,7 @@ import { briefTitle, renderBrief } from "../../src/brief/render.ts";
 import type { BriefInput } from "../../src/brief/render.ts";
 import { findRoleTemplate, loadResultContract } from "../../src/brief/templates.ts";
 import type { TemplateRoots } from "../../src/brief/templates.ts";
-import { OmtError } from "../../src/util/errors.ts";
-import { tempDir } from "../helpers.ts";
+import { omtExit, tempDir, writeFile } from "../helpers.ts";
 
 const PERSONA = "# Role: execute (persona)\n\nYou implement one unit.\n";
 const CONTRACT = "```text\nSTATUS: DONE | BLOCKED | ESCALATE\n```";
@@ -189,11 +188,6 @@ test("briefTitle follows the title rule", () => {
   assert.ok(long.startsWith("execute U1: xxx"));
 });
 
-function writeFile(path: string, content: string): void {
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, content);
-}
-
 function fixture(t: TestContext): TemplateRoots & { configDir: string } {
   const root = tempDir(t);
   const homedir = join(root, "home");
@@ -228,7 +222,7 @@ test("findRoleTemplate uses project, user, package, then the generic template", 
 
 test("findRoleTemplate fails when no template exists", async (t) => {
   const roots = fixture(t);
-  await assert.rejects(findRoleTemplate(roots, "review"), (error: unknown) => error instanceof OmtError);
+  await assert.rejects(findRoleTemplate(roots, "review"), omtExit(1));
 });
 
 test("findRoleTemplate never reads outside the roles directories for a path-like role", async (t) => {
@@ -243,5 +237,5 @@ test("loadResultContract reads and trims the contract for a result kind", async 
   const roots = fixture(t);
   writeFile(join(roots.packageRoot, "skills", "omt", "references", "results", "review.md"), `\n${CONTRACT}\n\n`);
   assert.equal(await loadResultContract(roots.packageRoot, "review"), CONTRACT);
-  await assert.rejects(loadResultContract(roots.packageRoot, "work"), (error: unknown) => error instanceof OmtError);
+  await assert.rejects(loadResultContract(roots.packageRoot, "work"), omtExit(1));
 });

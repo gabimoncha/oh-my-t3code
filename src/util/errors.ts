@@ -12,6 +12,10 @@ export class OmtError extends Error {
   }
 }
 
+export function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 export function usageError(message: string, hint?: string): OmtError {
   return new OmtError("usage", message, { exitCode: 2, ...(hint === undefined ? {} : { hint }) });
 }

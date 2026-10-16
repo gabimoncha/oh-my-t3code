@@ -4,15 +4,20 @@ import { delimiter, join } from "node:path";
 import { loadConfig } from "../config/load.ts";
 import { projectShimPath, skillRoots, t3SettingsPath } from "../paths.ts";
 import { resolveAll } from "../routing/resolve.ts";
-import type { Capabilities, CliContext } from "../types.ts";
+import type { Capabilities, CliContext, LoadedConfig } from "../types.ts";
+import { errorMessage } from "../util/errors.ts";
 import { pathExists, readFileIfExists } from "../util/fs.ts";
+import { isRecord } from "../util/json.ts";
+import { plural } from "../util/output.ts";
 import { findManagedCommands, parseSettings } from "./claudeHook.ts";
 import { resolveReal } from "./fsops.ts";
 import { classifyLink, planLinks } from "./links.ts";
+import type { Manifest } from "./manifest.ts";
 import { loadScopeManifest, scopePaths } from "./plan.ts";
 import type { InstallScope, ScopePaths } from "./plan.ts";
 import { excludeBlockLines, excludeBlockRoots, findGitExclude, isManagedShim, shimPaths } from "./project.ts";
 import { classifySkill, isManagedDir, listBundledSkills } from "./skills.ts";
+import type { BundledSkill } from "./skills.ts";
 
 export type CheckStatus = "PASS" | "WARN" | "FAIL" | "INFO";
 
@@ -27,18 +32,12 @@ export interface DoctorReport {
   checks: DoctorCheck[];
 }
 
+type ScopeManifest = { manifest: Manifest | undefined } | { error: unknown };
+
 export const MIN_NODE = [22, 18] as const;
 
 function check(id: string, status: CheckStatus, message: string): DoctorCheck {
   return { id, status, message };
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
-function plural(count: number, word: string): string {
-  return `${count} ${word}${count === 1 ? "" : "s"}`;
 }
 
 export function checkNode(version: string): DoctorCheck {
@@ -49,8 +48,7 @@ export function checkNode(version: string): DoctorCheck {
     : check("node", "FAIL", `node ${version} is older than ${MIN_NODE.join(".")}; install Node ${MIN_NODE.join(".")} or later`);
 }
 
-async function checkConfig(ctx: CliContext): Promise<DoctorCheck> {
-  const { config, issues } = await loadConfig({ cwd: ctx.cwd, env: ctx.env, homedir: ctx.homedir });
+function checkConfig({ config, issues }: LoadedConfig): DoctorCheck {
   const errors = issues.filter((issue) => issue.severity === "error").length;
   const warnings = issues.length - errors;
   const roles = plural(Object.keys(config.roles).length, "role");
@@ -66,9 +64,8 @@ function installHint(ctx: CliContext, paths: ScopePaths, flags = ""): string {
   return `node ${cli} install --project${flags}`;
 }
 
-async function checkSkills(ctx: CliContext, paths: ScopePaths): Promise<DoctorCheck> {
+async function checkSkills(ctx: CliContext, paths: ScopePaths, bundled: BundledSkill[]): Promise<DoctorCheck> {
   const root = paths.agentsRoot;
-  const bundled = await listBundledSkills(ctx.packageRoot);
   const groups: Record<string, string[]> = { missing: [], outdated: [], modified: [], unmanaged: [] };
   for (const skill of bundled) {
     const result = await classifySkill(skill.dir, join(root, skill.name));
@@ -85,9 +82,8 @@ async function checkSkills(ctx: CliContext, paths: ScopePaths): Promise<DoctorCh
   return check("skills", "PASS", `${plural(bundled.length, "skill")} installed in ${root}`);
 }
 
-async function checkLinks(ctx: CliContext, paths: ScopePaths): Promise<DoctorCheck> {
+async function checkLinks(ctx: CliContext, paths: ScopePaths, names: string[]): Promise<DoctorCheck> {
   const claude = paths.linkRoots.claude ?? "";
-  const names = (await listBundledSkills(ctx.packageRoot)).map((skill) => skill.name);
   const plan = await planLinks(paths.agentsRoot, [{ name: "claude", path: claude }], names);
   if (plan.skipped.length > 0) return check("links", "PASS", `${claude} is the agents skill root`);
   const missing: string[] = [];
@@ -109,15 +105,10 @@ function commandPaths(command: string): string[] {
   return [match[1] ?? "", ...(match[2] === undefined ? [] : [match[2]])];
 }
 
-async function checkHooks(ctx: CliContext, paths: ScopePaths): Promise<DoctorCheck> {
-  let settingsPaths: string[];
+async function checkHooks(ctx: CliContext, paths: ScopePaths, loaded: ScopeManifest): Promise<DoctorCheck> {
   const hint = installHint(ctx, paths, " --hooks");
-  try {
-    const { manifest } = await loadScopeManifest(paths);
-    settingsPaths = (manifest?.hooks ?? []).map((hook) => hook.settingsPath);
-  } catch (error) {
-    return check("hooks", "WARN", errorMessage(error));
-  }
+  if ("error" in loaded) return check("hooks", "WARN", errorMessage(loaded.error));
+  let settingsPaths = (loaded.manifest?.hooks ?? []).map((hook) => hook.settingsPath);
   const fromManifest = settingsPaths.length > 0;
   if (!fromManifest) settingsPaths = [paths.settingsPath];
   const commands: string[] = [];
@@ -148,15 +139,11 @@ async function checkHooks(ctx: CliContext, paths: ScopePaths): Promise<DoctorChe
   return check("hooks", "PASS", `Claude UserPromptSubmit hook in ${settingsPaths.join(", ")}`);
 }
 
-async function checkShim(ctx: CliContext, paths: ScopePaths): Promise<DoctorCheck> {
+async function checkShim(ctx: CliContext, paths: ScopePaths, loaded: ScopeManifest): Promise<DoctorCheck> {
   const root = paths.root ?? "";
   const hint = installHint(ctx, paths);
-  let shimPath: string;
-  try {
-    shimPath = (await loadScopeManifest(paths)).manifest?.project?.shim ?? projectShimPath(root);
-  } catch (error) {
-    return check("shim", "WARN", errorMessage(error));
-  }
+  if ("error" in loaded) return check("shim", "WARN", errorMessage(loaded.error));
+  const shimPath = loaded.manifest?.project?.shim ?? projectShimPath(root);
   let text: string | undefined;
   try {
     text = await readFileIfExists(shimPath);
@@ -176,14 +163,14 @@ async function checkShim(ctx: CliContext, paths: ScopePaths): Promise<DoctorChec
   return check("shim", "PASS", shimPath);
 }
 
-async function checkExclude(ctx: CliContext, paths: ScopePaths): Promise<DoctorCheck> {
+async function checkExclude(ctx: CliContext, paths: ScopePaths, loaded: ScopeManifest): Promise<DoctorCheck> {
   const root = paths.root ?? "";
   const found = await findGitExclude(root);
   if (found.path === undefined) return check("exclude", "INFO", found.note ?? "no .git");
-  let off = false;
+  if ("error" in loaded) return check("exclude", "WARN", errorMessage(loaded.error));
+  const off = loaded.manifest?.project?.gitExcludeOff === true;
   let text: string | undefined;
   try {
-    off = (await loadScopeManifest(paths)).manifest?.project?.gitExcludeOff === true;
     text = await readFileIfExists(found.path);
   } catch (error) {
     return check("exclude", "WARN", errorMessage(error));
@@ -244,16 +231,15 @@ function expandHome(path: string, homedir: string): string {
 }
 
 function claudeHomePaths(settings: unknown): { id: string; homePath: string }[] {
-  if (settings === null || typeof settings !== "object") return [];
-  const instances = (settings as Record<string, unknown>).providerInstances;
+  if (!isRecord(settings)) return [];
+  const instances = settings.providerInstances;
   if (instances === null || typeof instances !== "object") return [];
   const found: { id: string; homePath: string }[] = [];
   for (const [id, value] of Object.entries(instances as Record<string, unknown>)) {
-    if (value === null || typeof value !== "object") continue;
-    const instance = value as Record<string, unknown>;
-    const config = instance.config as Record<string, unknown> | null | undefined;
-    const homePath = config !== null && typeof config === "object" ? config.homePath : undefined;
-    if (instance.driver === "claudeAgent" && typeof homePath === "string" && homePath.trim() !== "") {
+    if (!isRecord(value)) continue;
+    const config = value.config;
+    const homePath = isRecord(config) ? config.homePath : undefined;
+    if (value.driver === "claudeAgent" && typeof homePath === "string" && homePath.trim() !== "") {
       found.push({ id, homePath: homePath.trim() });
     }
   }
@@ -271,7 +257,7 @@ async function linkedInto(skillsDir: string, agentsRoot: string, name: string): 
   }
 }
 
-async function checkHomes(ctx: CliContext): Promise<DoctorCheck> {
+async function checkHomes(ctx: CliContext, names: string[]): Promise<DoctorCheck> {
   const path = t3SettingsPath(ctx.env, ctx.homedir);
   const text = await readFileIfExists(path);
   if (text === undefined) return check("homes", "INFO", "no T3 settings file; no instance sets a homePath");
@@ -284,7 +270,6 @@ async function checkHomes(ctx: CliContext): Promise<DoctorCheck> {
   const homes = claudeHomePaths(settings);
   if (homes.length === 0) return check("homes", "INFO", "no claudeAgent instance sets a homePath");
   const agentsRoot = skillRoots(ctx.env, ctx.homedir).agents;
-  const names = (await listBundledSkills(ctx.packageRoot)).map((skill) => skill.name);
   const lacking: string[] = [];
   for (const home of homes) {
     const skillsDir = join(expandHome(home.homePath, ctx.homedir), "skills");
@@ -305,32 +290,38 @@ async function checkHomes(ctx: CliContext): Promise<DoctorCheck> {
 function checkRoles(report: ReturnType<typeof resolveAll>): DoctorCheck {
   const resolutions = Object.values(report.roles);
   const unavailable = resolutions.filter((r) => r.status === "unavailable").map((r) => r.role);
-  if (unavailable.includes("execute")) {
-    return check("roles", "FAIL", `unavailable: ${unavailable.join(", ")}; run omt roles --capabilities <file>`);
-  }
   if (unavailable.length > 0) {
-    return check("roles", "WARN", `unavailable: ${unavailable.join(", ")}; run omt roles --capabilities <file>`);
+    const status = unavailable.includes("execute") ? "FAIL" : "WARN";
+    return check("roles", status, `unavailable: ${unavailable.join(", ")}; run omt roles --capabilities <file>`);
   }
   return check("roles", "PASS", `${plural(resolutions.length, "role")} resolve against orchestrator_capabilities`);
 }
 
 export async function runDoctor(ctx: CliContext, caps?: Capabilities, scope: InstallScope = "user"): Promise<DoctorReport> {
   const paths = scopePaths(ctx, scope);
+  const loadedConfig = await loadConfig(ctx);
+  const bundled = await listBundledSkills(ctx.packageRoot);
+  const names = bundled.map((skill) => skill.name);
   const checks = [
     checkNode(ctx.nodeVersion),
-    await checkConfig(ctx),
-    await checkSkills(ctx, paths),
-    await checkLinks(ctx, paths),
-    await checkHooks(ctx, paths),
+    checkConfig(loadedConfig),
+    await checkSkills(ctx, paths, bundled),
+    await checkLinks(ctx, paths, names),
   ];
+  let loaded: ScopeManifest;
+  try {
+    loaded = { manifest: (await loadScopeManifest(paths)).manifest };
+  } catch (error) {
+    loaded = { error };
+  }
+  checks.push(await checkHooks(ctx, paths, loaded));
   if (scope === "project") {
-    checks.push(await checkShim(ctx, paths), await checkExclude(ctx, paths), await checkT3(ctx));
+    checks.push(await checkShim(ctx, paths, loaded), await checkExclude(ctx, paths, loaded), await checkT3(ctx));
   } else {
-    checks.push(await checkPath(ctx), await checkT3(ctx), await checkHomes(ctx));
+    checks.push(await checkPath(ctx), await checkT3(ctx), await checkHomes(ctx, names));
   }
   if (caps !== undefined) {
-    const { config } = await loadConfig({ cwd: ctx.cwd, env: ctx.env, homedir: ctx.homedir });
-    checks.push(checkRoles(resolveAll(config, caps)));
+    checks.push(checkRoles(resolveAll(loadedConfig.config, caps)));
   }
   return { ok: !checks.some((c) => c.status === "FAIL"), checks };
 }

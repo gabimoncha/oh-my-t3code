@@ -1,11 +1,10 @@
-import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import type { TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { main } from "../src/main.ts";
-import { CLI_PATH, PACKAGE_ROOT, childEnv, fakeContext, tempDir } from "./helpers.ts";
+import { PACKAGE_ROOT, fakeContext, spawnOmt, tempDir } from "./helpers.ts";
 
 const COMMAND_NAMES = [
   "install",
@@ -24,13 +23,7 @@ const COMMAND_NAMES = [
 
 function runCli(t: TestContext, args: string[]) {
   const root = tempDir(t);
-  const result = spawnSync(process.execPath, [CLI_PATH, ...args], {
-    cwd: root,
-    env: childEnv(root),
-    encoding: "utf8",
-    input: "",
-  });
-  return { code: result.status, stdout: result.stdout, stderr: result.stderr };
+  return spawnOmt(args, { root });
 }
 
 test("--help lists every command and exits 0", (t) => {

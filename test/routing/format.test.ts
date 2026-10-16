@@ -1,15 +1,10 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { test } from "node:test";
 import { DEFAULT_CONFIG } from "../../src/config/defaults.ts";
-import { parseCapabilities } from "../../src/routing/capabilities.ts";
 import { formatRolesTable, formatTarget } from "../../src/routing/format.ts";
 import { resolveAll } from "../../src/routing/resolve.ts";
 import type { OmtConfig } from "../../src/types.ts";
-import { PACKAGE_ROOT } from "../helpers.ts";
-
-const CAPS = parseCapabilities(readFileSync(join(PACKAGE_ROOT, "test", "fixtures", "capabilities.json"), "utf8"));
+import { caps } from "./shared.ts";
 
 test("formatTarget prints instance and driver targets with sorted options", () => {
   assert.equal(formatTarget({ providerInstanceId: "codex", model: "gpt-6-astra" }), "codex/gpt-6-astra");
@@ -38,7 +33,7 @@ test("formatRolesTable matches the section 5.3 layout", () => {
     },
   };
   assert.equal(
-    formatRolesTable(resolveAll(config, CAPS)),
+    formatRolesTable(resolveAll(config, caps())),
     [
       "ROLE         STATUS      TARGET                                         ACCESS     MODE     CROSS",
       "execute      resolved    claudeAgent/claude-opus-5-5 effort=medium      edit       default  no",
@@ -66,7 +61,7 @@ test("formatRolesTable shows skipped rungs and the chosen rung's notes, not late
       },
     },
   };
-  const lines = formatRolesTable(resolveAll(config, CAPS)).split("\n");
+  const lines = formatRolesTable(resolveAll(config, caps())).split("\n");
   assert.equal(lines[1], "deep         resolved    codex/gpt-6-luna reasoningEffort=xhigh         edit       default  no");
   assert.deepEqual(lines.slice(2, 4), [
     "  rung 1 grok/grok-build: provider grok cannot run child tasks: Provider instance is disabled.; Provider executable is not installed.",
@@ -94,7 +89,7 @@ test("formatRolesTable widens columns and prints the unverified footer", () => {
       },
     },
   };
-  const longLines = formatRolesTable(resolveAll(long, CAPS)).split("\n");
+  const longLines = formatRolesTable(resolveAll(long, caps())).split("\n");
   assert.equal(
     longLines[0],
     "ROLE                   STATUS      TARGET                                                      ACCESS     MODE     CROSS",
@@ -116,6 +111,6 @@ test("formatRolesTable takes MODE from the role's interactionMode, also when una
       },
     },
   };
-  const lines = formatRolesTable(resolveAll(config, CAPS)).split("\n");
+  const lines = formatRolesTable(resolveAll(config, caps())).split("\n");
   assert.match(lines[1] ?? "", /^odd\s+unavailable\s+-\s+edit\s+inherit\s+no$/);
 });

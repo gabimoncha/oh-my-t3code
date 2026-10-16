@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import { realpathSync } from "node:fs";
 import { lstat, readdir, readlink, realpath, stat } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import {
@@ -13,6 +12,7 @@ import {
   plansDir,
   projectClaudeSettingsPath,
   projectConfigPath,
+  projectInstallDirs,
   projectManifestPath,
   projectShimPath,
   projectSkillRoots,
@@ -21,7 +21,8 @@ import {
 } from "../paths.ts";
 import type { CliContext } from "../types.ts";
 import { usageError } from "../util/errors.ts";
-import { hashDir, isSymlink, pathExists, readFileIfExists } from "../util/fs.ts";
+import { errorCode, hashDir, isSymlink, pathExists, readFileIfExists, realOrSelf } from "../util/fs.ts";
+import { plural } from "../util/output.ts";
 import { assertStableCliPath, hookCommand, planHookInstall, planHookRemoval, shimHookCommand } from "./claudeHook.ts";
 import type { HookChange } from "./claudeHook.ts";
 import { resolveReal } from "./fsops.ts";
@@ -106,14 +107,6 @@ export interface ScopePaths {
   settingsPath: string;
 }
 
-function realSync(path: string): string {
-  try {
-    return realpathSync(path);
-  } catch {
-    return path;
-  }
-}
-
 // A project root whose paths are the user-scope paths (the home directory, for example) would make
 // a project install write, and a project uninstall delete, the user install.
 function assertProjectRoot(ctx: CliContext, root: string): void {
@@ -126,7 +119,7 @@ function assertProjectRoot(ctx: CliContext, root: string): void {
     [projectClaudeSettingsPath(root), claudeSettingsPath(ctx.env, ctx.homedir)],
     [omtDir(root), configDir(ctx.env, ctx.homedir)],
   ];
-  if (pairs.some(([a, b]) => resolve(a) === resolve(b) || realSync(a) === realSync(b))) {
+  if (pairs.some(([a, b]) => resolve(a) === resolve(b) || realOrSelf(a) === realOrSelf(b))) {
     throw usageError(
       `refusing --project: the project root ${root} is your home directory or shares paths with the user install`,
       "run the command inside a project directory (run git init there first when it has no .git), or drop --project for the user install",
@@ -185,7 +178,7 @@ export interface InstallPlan {
   version: string;
   targets: TargetName[];
   agentsRoot: string;
-  configDir: string;
+  stateDir: string;
   manifestPath: string;
   skills: SkillStep[];
   links: LinkStep[];
@@ -218,7 +211,7 @@ export interface ProjectUninstallSteps {
 
 export interface UninstallPlan {
   scope: InstallScope;
-  configDir: string;
+  stateDir: string;
   links: LinkStep[];
   skills: SkillStep[];
   hooks: HookStep[];
@@ -266,7 +259,7 @@ async function isRegularFile(path: string): Promise<boolean> {
   }
 }
 
-async function isFile(path: string): Promise<boolean> {
+async function isFileOrLinkToFile(path: string): Promise<boolean> {
   try {
     return (await stat(path)).isFile();
   } catch {
@@ -300,14 +293,14 @@ async function staleExcludeRoots(root: string, excludePath: string, text: string
   const stale: string[] = [];
   for (const other of excludeBlockRoots(text)) {
     if (other === root) continue;
-    if (realSync(other) === realSync(root) || !(await pathExists(other))) {
+    if (realOrSelf(other) === realOrSelf(root) || !(await pathExists(other))) {
       stale.push(other);
       continue;
     }
     if (other !== from) continue;
     const otherExclude = (await findGitExclude(other)).path;
     const otherManifest = await readManifest(projectManifestPath(other)).catch(() => undefined);
-    if (otherExclude === undefined || realSync(otherExclude) !== realSync(excludePath) || otherManifest?.root !== other) {
+    if (otherExclude === undefined || realOrSelf(otherExclude) !== realOrSelf(excludePath) || otherManifest?.root !== other) {
       stale.push(other);
     }
   }
@@ -321,7 +314,7 @@ async function sharedExcludeFacts(excludePath: string, text: string | undefined,
   for (const other of excludeBlockRoots(text)) {
     if (skip.includes(other)) continue;
     const project = (await readManifest(projectManifestPath(other)).catch(() => undefined))?.project;
-    if (project?.excludeFile !== undefined && project.gitExclude !== undefined && realSync(project.gitExclude) === realSync(excludePath)) {
+    if (project?.excludeFile !== undefined && project.gitExclude !== undefined && realOrSelf(project.gitExclude) === realOrSelf(excludePath)) {
       return project.excludeFile;
     }
   }
@@ -431,19 +424,8 @@ async function planProjectInstall(
   if (!gitignoreCreated && gitignoreBefore !== undefined && gitignoreAfter !== gitignoreBefore) {
     gitignoreRestore = { before: gitignoreRestore?.before ?? gitignoreBefore, sha256: sha256(gitignoreAfter) };
   }
-  const skillDirs = projectSkillRoots(root);
   const missingDirs = [...previousDirs];
-  const candidates = [
-    omtDir(root),
-    plans,
-    dirname(projectShimPath(root)),
-    join(omtDir(root), "backups"),
-    dirname(skillDirs.agents),
-    skillDirs.agents,
-    dirname(skillDirs.claude),
-    skillDirs.claude,
-  ];
-  for (const dir of candidates) {
+  for (const dir of projectInstallDirs(root)) {
     if (!missingDirs.includes(dir) && !(await pathExists(dir))) missingDirs.push(dir);
   }
 
@@ -539,7 +521,7 @@ export async function buildInstallPlan(ctx: CliContext, options: InstallOptions)
     version: ctx.version,
     targets: options.targets,
     agentsRoot: paths.agentsRoot,
-    configDir: paths.stateDir,
+    stateDir: paths.stateDir,
     manifestPath: paths.manifestPath,
     skills,
     links,
@@ -552,17 +534,19 @@ export async function buildInstallPlan(ctx: CliContext, options: InstallOptions)
   if (command !== undefined) plan.hook = await planHookInstall(paths.settingsPath, command);
   if (paths.root !== undefined) plan.project = await planProjectInstall(ctx, plan, paths.root, options.gitExclude !== false, from);
   if (options.force) {
-    for (const step of [...plan.skills, ...plan.links, ...(plan.project === undefined ? [] : [plan.project.shim])]) {
+    for (const step of replaceableSteps(plan)) {
       if (step.action === "conflict") step.action = "replace";
     }
   }
   return plan;
 }
 
+export function replaceableSteps(plan: InstallPlan): { action: PlanAction; path: string }[] {
+  return [...plan.skills, ...plan.links, ...(plan.project === undefined ? [] : [plan.project.shim])];
+}
+
 export function installConflicts(plan: InstallPlan): number {
-  const steps: { action: PlanAction }[] = [...plan.skills, ...plan.links];
-  if (plan.project !== undefined) steps.push(plan.project.shim);
-  return steps.filter((step) => step.action === "conflict").length;
+  return replaceableSteps(plan).filter((step) => step.action === "conflict").length;
 }
 
 export function installHasChanges(plan: InstallPlan): boolean {
@@ -580,7 +564,7 @@ async function listDir(dir: string): Promise<string[]> {
   try {
     return (await readdir(dir)).sort();
   } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
+    const code = errorCode(error);
     if (code === "ENOENT" || code === "ENOTDIR") return [];
     throw error;
   }
@@ -602,7 +586,8 @@ async function isLocallyModified(dir: string): Promise<boolean> {
   return marker == null || (await hashDir(dir)) !== marker.hash;
 }
 
-async function realOrSelf(path: string): Promise<string> {
+// The result is compared with fs.promises.realpath in managedLinkTarget.
+async function nativeRealOrSelf(path: string): Promise<string> {
   try {
     return await realpath(path);
   } catch {
@@ -653,7 +638,7 @@ async function planProjectUninstall(root: string, manifest: Manifest | undefined
   const restore = manifest?.project?.gitignoreRestore;
   if (restore !== undefined) {
     // The install appended to an existing file, which may be a symlink; the restore writes its target.
-    const text = (await isFile(gitignorePath)) ? await readFileIfExists(gitignorePath) : undefined;
+    const text = (await isFileOrLinkToFile(gitignorePath)) ? await readFileIfExists(gitignorePath) : undefined;
     if (text !== undefined && sha256(text) === restore.sha256) {
       steps.gitignore = { path: gitignorePath, before: text, after: restore.before, action: "update", reason: "removes the lines that the install added" };
     }
@@ -661,21 +646,32 @@ async function planProjectUninstall(root: string, manifest: Manifest | undefined
   return steps;
 }
 
+async function createdThatStays(plan: UninstallPlan, root: string, manifest: Manifest | undefined): Promise<{ config: boolean; settings: boolean }> {
+  const config = plan.config.action === "keep" && manifest?.config?.path === plan.config.path && manifest.config.created === true;
+  // A settings file that the install created stays when other keys are left in it, such as the
+  // permissions that Claude Code writes there.
+  const settingsPath = projectClaudeSettingsPath(root);
+  const settings =
+    manifest?.project?.settingsCreated === true &&
+    (await pathExists(settingsPath)) &&
+    !plan.hooks.some((hook) => hook.settingsPath === settingsPath && hook.removeFile === true);
+  return { config, settings };
+}
+
 // The record of the created files that stay after an uninstall, so a later install or uninstall still
 // counts them as created and keeps their block entries. Undefined when none stays.
-async function reducedManifest(plan: UninstallPlan, root: string, manifest: Manifest | undefined): Promise<Manifest | undefined> {
+function reducedManifest(
+  plan: UninstallPlan,
+  root: string,
+  manifest: Manifest | undefined,
+  stays: { config: boolean; settings: boolean },
+): Manifest | undefined {
   if (manifest === undefined || plan.project === undefined) return undefined;
   const project = plan.project;
   const files: ManifestFile[] = project.files.filter((file) => file.action === "keep").map(({ path, sha256 }) => ({ path, sha256 }));
-  const configStays = plan.config.action === "keep" && manifest.config?.path === plan.config.path && manifest.config.created;
   const configRecord = manifest.project?.files?.find((file) => file.path === plan.config.path);
-  if (configStays && configRecord !== undefined) files.push(configRecord);
-  const settingsPath = projectClaudeSettingsPath(root);
-  const settingsStays =
-    manifest.project?.settingsCreated === true &&
-    (await pathExists(settingsPath)) &&
-    !plan.hooks.some((hook) => hook.settingsPath === settingsPath && hook.removeFile === true);
-  if (files.length === 0 && !configStays && !settingsStays) return undefined;
+  if (stays.config && configRecord !== undefined) files.push(configRecord);
+  if (files.length === 0 && !stays.config && !stays.settings) return undefined;
   const excludeFile = manifest.project?.excludeFile;
   const gitExclude = manifest.project?.gitExclude;
   const existing = manifest.project?.existing;
@@ -688,12 +684,12 @@ async function reducedManifest(plan: UninstallPlan, root: string, manifest: Mani
     skillsRoot: manifest.skillsRoot,
     skills: [],
     links: [],
-    ...(configStays && manifest.config !== undefined ? { config: manifest.config } : {}),
+    ...(stays.config && manifest.config !== undefined ? { config: manifest.config } : {}),
     hooks: [],
     backups: [],
     project: {
       omtDirCreated: manifest.project?.omtDirCreated === true,
-      settingsCreated: settingsStays,
+      settingsCreated: stays.settings,
       ...(gitExclude === undefined ? {} : { gitExclude }),
       ...(excludeFile === undefined ? {} : { excludeFile }),
       ...(existing === undefined ? {} : { existing }),
@@ -721,6 +717,7 @@ async function planExcludeAfterUninstall(
   root: string,
   manifest: Manifest | undefined,
   from: string | undefined,
+  stays: { config: boolean; settings: boolean },
 ): Promise<FileStep | undefined> {
   const found = await findGitExclude(root);
   if (found.path === undefined) return undefined;
@@ -735,16 +732,10 @@ async function planExcludeAfterUninstall(
     ...plan.links.filter((link) => link.action === "keep" && link.existed !== true).map((link) => excludePattern(top, link.path)),
     ...(plan.project?.files ?? []).filter((file) => file.action === "keep").map((file) => excludePattern(top, file.path)),
   ];
-  if (plan.config.action === "keep" && manifest?.config?.path === plan.config.path && manifest.config.created) {
+  if (stays.config) {
     entries.push(excludePattern(top, plan.config.path));
   }
-  // A settings file that the install created stays when other keys are left in it, such as the
-  // permissions that Claude Code writes there.
-  const settingsPath = projectClaudeSettingsPath(root);
-  if (manifest?.project?.settingsCreated === true && (await pathExists(settingsPath))) {
-    const removes = plan.hooks.some((hook) => hook.settingsPath === settingsPath && hook.removeFile === true);
-    if (!removes) entries.push(excludePattern(top, settingsPath));
-  }
+  if (stays.settings) entries.push(excludePattern(top, projectClaudeSettingsPath(root)));
   if (plan.manifest.action === "keep") entries.push(excludePattern(top, plan.manifest.path));
   if (entries.length === 0) {
     const step = excludeRemoval(path, before, [root, ...stale], manifest?.project?.excludeFile);
@@ -788,7 +779,7 @@ export async function buildUninstallPlan(
         } else {
           step.action = "keep";
           step.reason = "locally modified";
-          kept.add(await realOrSelf(path));
+          kept.add(await nativeRealOrSelf(path));
         }
       }
       skills.push(step);
@@ -855,7 +846,7 @@ export async function buildUninstallPlan(
   }
   const plan: UninstallPlan = {
     scope,
-    configDir: paths.stateDir,
+    stateDir: paths.stateDir,
     links,
     skills,
     hooks,
@@ -866,12 +857,13 @@ export async function buildUninstallPlan(
   };
   if (paths.root !== undefined) {
     plan.project = await planProjectUninstall(paths.root, manifest, paths);
+    const stays = await createdThatStays(plan, paths.root, manifest);
     // The manifest knows which directories the install created; keep it until the last skill goes.
     if (kept.size > 0 && plan.manifest.action === "remove") {
       plan.manifest = { ...plan.manifest, action: "keep", reason: "a locally modified skill is kept" };
     }
     if (plan.manifest.action === "remove" && (await blockWillHide(paths.root, from))) {
-      const rewrite = await reducedManifest(plan, paths.root, manifest);
+      const rewrite = reducedManifest(plan, paths.root, manifest, stays);
       if (rewrite !== undefined) {
         const text = manifestText(rewrite);
         plan.manifest = {
@@ -882,7 +874,7 @@ export async function buildUninstallPlan(
         };
       }
     }
-    const exclude = await planExcludeAfterUninstall(plan, paths.root, manifest, from);
+    const exclude = await planExcludeAfterUninstall(plan, paths.root, manifest, from, stays);
     if (exclude !== undefined) plan.project.exclude = exclude;
   }
   return plan;
@@ -980,6 +972,6 @@ export function renderUninstallPlan(plan: UninstallPlan): string {
   }
   for (const dir of plan.scratch) text += line("remove", dir, "left by an interrupted run");
   const kept = plan.skills.filter((skill) => skill.action === "keep" && skill.existed !== true).length;
-  if (kept > 0) text += `${kept} locally modified skill${kept === 1 ? "" : "s"} kept; add --force to back up and remove them\n`;
+  if (kept > 0) text += `${plural(kept, "locally modified skill")} kept; add --force to back up and remove them\n`;
   return text;
 }

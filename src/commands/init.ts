@@ -5,7 +5,6 @@ import { withGitignoreLines } from "../install/project.ts";
 import { findProjectRoot, omtDir, plansDir, projectConfigPath } from "../paths.ts";
 import type { CommandRun } from "../types.ts";
 import { parseArgs } from "../util/args.ts";
-import { usageError } from "../util/errors.ts";
 import { ensureDir, pathExists, readFileIfExists, writeFileAtomic } from "../util/fs.ts";
 
 export const summary = "Create .omt/ in the project root with a starter config.";
@@ -21,8 +20,7 @@ Options:
 `;
 
 export const run: CommandRun = async (ctx) => {
-  const { positionals } = parseArgs(ctx.argv, {});
-  if (positionals.length > 0) throw usageError(`unexpected argument "${positionals[0]}"`);
+  parseArgs(ctx.argv, {}, { maxPositionals: 0 });
   const root = findProjectRoot(ctx.cwd);
   const configPath = projectConfigPath(root);
   if (await pathExists(configPath)) {

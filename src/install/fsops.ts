@@ -1,10 +1,6 @@
 import { cp, lstat, readlink, realpath, rename, rm } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
-import { ensureDir, pathExists } from "../util/fs.ts";
-
-function errorCode(error: unknown): string | undefined {
-  return (error as NodeJS.ErrnoException | undefined)?.code;
-}
+import { ensureDir, errorCode, pathExists } from "../util/fs.ts";
 
 // Resolves the nearest existing ancestor with realpath and appends the rest, so a missing
 // path under a symlinked directory still compares equal to its real location.
@@ -69,9 +65,9 @@ export function backupStamp(date: Date): string {
   );
 }
 
-// Picks `<configDir>/backups/<stamp>`, with a numeric suffix when a run in the same second already used it.
-export async function newBackupDir(configDir: string, date: Date): Promise<string> {
-  const base = join(configDir, "backups", backupStamp(date));
+// Picks `<stateDir>/backups/<stamp>`, with a numeric suffix when a run in the same second already used it.
+export async function newBackupDir(stateDir: string, date: Date): Promise<string> {
+  const base = join(stateDir, "backups", backupStamp(date));
   let candidate = base;
   for (let n = 1; await pathExists(candidate); n += 1) candidate = `${base}-${n}`;
   return candidate;

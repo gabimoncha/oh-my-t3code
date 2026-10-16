@@ -1,16 +1,17 @@
 import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { limitArg } from "../config/validate.ts";
 import { writeTargetFor } from "../install/fsops.ts";
-import { findProjectRoot, plansDir } from "../paths.ts";
-import { findPlanHeader, parseMaxParallel, parseMaxTasks, parsePlan } from "../plan/parse.ts";
+import { findProjectRoot, planPath, plansDir } from "../paths.ts";
+import { findPlanHeader, parsePlan } from "../plan/parse.ts";
 import type { PlanStatus } from "../plan/parse.ts";
 import { planTemplate } from "../plan/template.ts";
 import type { CliContext, CommandRun } from "../types.ts";
 import { OmtError, usageError } from "../util/errors.ts";
-import { parseArgs } from "../util/args.ts";
+import { checkPositionals, parseArgs } from "../util/args.ts";
 import { PLAN_SLUG_RE, checkPlanSlug } from "../util/ids.ts";
-import { pathExists, readFileIfExists, writeFileAtomic } from "../util/fs.ts";
-import { printJson } from "../util/output.ts";
+import { errorCode, pathExists, readFileIfExists, writeFileAtomic } from "../util/fs.ts";
+import { formatJson } from "../util/output.ts";
 
 export const summary = "Create plan files and show their progress.";
 
@@ -50,17 +51,12 @@ export interface PlanSummary extends PlanStatus {
   path: string;
 }
 
-function extraPositional(positionals: string[], max: number): void {
-  const extra = positionals[max];
-  if (extra !== undefined) throw usageError(`unexpected argument "${extra}"`);
-}
-
 async function listPlanFiles(dir: string): Promise<{ slug: string; path: string; mtimeMs: number }[]> {
   let names: string[];
   try {
     names = await readdir(dir);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    if (errorCode(error) === "ENOENT") return [];
     throw error;
   }
   const plans = [];
@@ -73,7 +69,7 @@ async function listPlanFiles(dir: string): Promise<{ slug: string; path: string;
     try {
       info = await stat(path);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") continue; // a dangling symlink
+      if (errorCode(error) === "ENOENT") continue; // a dangling symlink
       throw error;
     }
     if (info.isFile()) plans.push({ slug, path, mtimeMs: info.mtimeMs });
@@ -81,21 +77,10 @@ async function listPlanFiles(dir: string): Promise<{ slug: string; path: string;
   return plans;
 }
 
-async function loadPlan(path: string, slug: string): Promise<PlanSummary> {
-  const status = parsePlan(await readPlan(path, slug));
+async function loadPlan(root: string, slug: string): Promise<PlanSummary> {
+  const { path, markdown } = await readPlan(root, slug);
+  const status = parsePlan(markdown);
   return { ...status, slug: status.slug ?? slug, path };
-}
-
-function maxParallelArg(value: string, flag: string): number {
-  const number = parseMaxParallel(value);
-  if (number === undefined) throw usageError(`${flag} must be an integer from 1 to 32, got "${value}"`);
-  return number;
-}
-
-function maxTasksArg(value: string, flag: string): number {
-  const number = parseMaxTasks(value);
-  if (number === undefined) throw usageError(`${flag} must be an integer from 1 to 500, got "${value}"`);
-  return number;
 }
 
 function setHeaderKey(header: string, key: string, value: number | undefined): string {
@@ -103,14 +88,15 @@ function setHeaderKey(header: string, key: string, value: number | undefined): s
   return value === undefined ? `${kept} -->` : `${kept} ${key}=${value} -->`;
 }
 
-async function readPlan(path: string, slug: string): Promise<string> {
+async function readPlan(root: string, slug: string): Promise<{ path: string; markdown: string }> {
+  const path = planPath(root, slug);
   const markdown = await readFileIfExists(path);
   if (markdown === undefined) {
     throw new OmtError("plan_not_found", `plan "${slug}" not found at ${path}`, {
       hint: `run "omt plan new ${slug}" to create it`,
     });
   }
-  return markdown;
+  return { path, markdown };
 }
 
 function nextText(status: PlanStatus): string {
@@ -130,11 +116,11 @@ async function planNew(
 ) {
   const slug = positionals[1];
   if (slug === undefined) throw usageError("plan new needs a <slug>");
-  extraPositional(positionals, 2);
+  checkPositionals(positionals, 2);
   checkPlanSlug(slug);
-  const maxParallel = options.maxParallel === undefined ? undefined : maxParallelArg(options.maxParallel, "--max-parallel");
-  const maxTasks = options.maxTasks === undefined ? undefined : maxTasksArg(options.maxTasks, "--max-tasks");
-  const path = join(plansDir(root), `${slug}.md`);
+  const maxParallel = options.maxParallel === undefined ? undefined : limitArg("--max-parallel", options.maxParallel, "maxParallel");
+  const maxTasks = options.maxTasks === undefined ? undefined : limitArg("--max-tasks", options.maxTasks, "maxTasksPerRun");
+  const path = planPath(root, slug);
   if (!options.force && (await pathExists(path))) {
     throw new OmtError("plan_exists", `plan already exists: ${path}`, { hint: "pass --force to overwrite it" });
   }
@@ -149,12 +135,11 @@ async function planMark(ctx: CliContext, root: string, positionals: string[]) {
   if (slug === undefined || id === undefined || state === undefined) {
     throw usageError("plan mark needs <slug> <id> <done|open|blocked>");
   }
-  extraPositional(positionals, 4);
+  checkPositionals(positionals, 4);
   checkPlanSlug(slug);
   if (!Object.hasOwn(MARKS, state)) throw usageError(`invalid state "${state}"`, "use done, open, or blocked");
   const mark = MARKS[state as MarkState];
-  const path = join(plansDir(root), `${slug}.md`);
-  const markdown = await readPlan(path, slug);
+  const { path, markdown } = await readPlan(root, slug);
   const item = /^(U|D|F)(\d+)$/.test(id) ? parsePlan(markdown).items.find((candidate) => candidate.id === id) : undefined;
   if (item === undefined) throw new OmtError("plan_item_not_found", `no item ${id} in plan "${slug}"`);
   const lines = markdown.split("\n");
@@ -173,13 +158,12 @@ async function planLimit(ctx: CliContext, root: string, positionals: string[], t
   if (slug === undefined || (value === undefined && tasks === undefined)) {
     throw usageError("plan limit needs <slug> <n|none> or --tasks <n|none>");
   }
-  extraPositional(positionals, 3);
+  checkPositionals(positionals, 3);
   checkPlanSlug(slug);
   const changes: { key: string; limit: number | undefined }[] = [];
-  if (value !== undefined) changes.push({ key: "max-parallel", limit: value === "none" ? undefined : maxParallelArg(value, "the limit") });
-  if (tasks !== undefined) changes.push({ key: "max-tasks", limit: tasks === "none" ? undefined : maxTasksArg(tasks, "--tasks") });
-  const path = join(plansDir(root), `${slug}.md`);
-  const markdown = await readPlan(path, slug);
+  if (value !== undefined) changes.push({ key: "max-parallel", limit: value === "none" ? undefined : limitArg("the limit", value, "maxParallel") });
+  if (tasks !== undefined) changes.push({ key: "max-tasks", limit: tasks === "none" ? undefined : limitArg("--tasks", tasks, "maxTasksPerRun") });
+  const { path, markdown } = await readPlan(root, slug);
   const header = findPlanHeader(markdown);
   if (header === undefined) throw new OmtError("plan_header_not_found", `plan "${slug}" has no omt-plan header comment`);
   const updated = changes.reduce((text, change) => setHeaderKey(text, change.key, change.limit), header.text);
@@ -190,11 +174,30 @@ async function planLimit(ctx: CliContext, root: string, positionals: string[], t
   return 0;
 }
 
+function formatPlanStatus(status: PlanSummary): string {
+  return [
+    `plan: ${status.slug} (${status.path})`,
+    `units: ${unitsText(status)}`,
+    `done-when: ${status.counts.D.done}/${status.counts.D.total}`,
+    `final: ${status.counts.F.done}/${status.counts.F.total}`,
+    ...(status.maxParallel === undefined ? [] : [`max parallel: ${status.maxParallel}`]),
+    ...(status.maxTasks === undefined ? [] : [`max tasks: ${status.maxTasks}`]),
+    `next: ${nextText(status)}`,
+    "",
+  ].join("\n");
+}
+
+function formatPlanList(summaries: PlanSummary[]): string {
+  const width = Math.max(0, ...summaries.map((plan) => (plan.slug ?? "").length));
+  return summaries.map((plan) =>
+    `${(plan.slug ?? "").padEnd(width)}  units ${unitsText(plan)}  next: ${nextText(plan)}\n`,
+  ).join("");
+}
+
 async function planStatus(ctx: CliContext, root: string, positionals: string[], json: boolean) {
-  extraPositional(positionals, 2);
+  checkPositionals(positionals, 2);
   const dir = plansDir(root);
   let slug = positionals[1];
-  let path: string;
   if (slug === undefined) {
     const plans = await listPlanFiles(dir);
     const newest = plans.reduce<(typeof plans)[number] | undefined>(
@@ -205,44 +208,20 @@ async function planStatus(ctx: CliContext, root: string, positionals: string[], 
       throw new OmtError("no_plans", `no plans in ${dir}`, { hint: `run "omt plan new <slug>" to create one` });
     }
     slug = newest.slug;
-    path = newest.path;
   } else {
     checkPlanSlug(slug);
-    path = join(dir, `${slug}.md`);
   }
-  const status = await loadPlan(path, slug);
-  if (json) {
-    printJson(ctx.stdout, status);
-    return 0;
-  }
-  ctx.stdout(
-    [
-      `plan: ${status.slug} (${path})`,
-      `units: ${unitsText(status)}`,
-      `done-when: ${status.counts.D.done}/${status.counts.D.total}`,
-      `final: ${status.counts.F.done}/${status.counts.F.total}`,
-      ...(status.maxParallel === undefined ? [] : [`max parallel: ${status.maxParallel}`]),
-      ...(status.maxTasks === undefined ? [] : [`max tasks: ${status.maxTasks}`]),
-      `next: ${nextText(status)}`,
-      "",
-    ].join("\n"),
-  );
+  const status = await loadPlan(root, slug);
+  ctx.stdout(json ? formatJson(status) : formatPlanStatus(status));
   return 0;
 }
 
 async function planList(ctx: CliContext, root: string, positionals: string[], json: boolean) {
-  extraPositional(positionals, 1);
+  checkPositionals(positionals, 1);
   const plans = await listPlanFiles(plansDir(root));
   const summaries: PlanSummary[] = [];
-  for (const plan of plans) summaries.push(await loadPlan(plan.path, plan.slug));
-  if (json) {
-    printJson(ctx.stdout, summaries);
-    return 0;
-  }
-  const width = Math.max(0, ...summaries.map((plan) => (plan.slug ?? "").length));
-  for (const plan of summaries) {
-    ctx.stdout(`${(plan.slug ?? "").padEnd(width)}  units ${unitsText(plan)}  next: ${nextText(plan)}\n`);
-  }
+  for (const plan of plans) summaries.push(await loadPlan(root, plan.slug));
+  ctx.stdout(json ? formatJson(summaries) : formatPlanList(summaries));
   return 0;
 }
 

@@ -1,10 +1,11 @@
 import { OmtError } from "../util/errors.ts";
+import { isRecord } from "../util/json.ts";
 
-export const TONES = ["info", "ok", "warn", "bad", "muted"] as const;
-export const NODE_KINDS = ["step", "task", "decision", "start", "end", "stop"] as const;
-export const NODE_TONES = ["done", "open", "blocked"] as const;
-export const ITEM_STATES = ["done", "open", "blocked"] as const;
-export const BLOCK_TYPES = ["text", "cards", "table", "checklist", "callout", "code", "flow"] as const;
+const TONES = ["info", "ok", "warn", "bad", "muted"] as const;
+const NODE_KINDS = ["step", "task", "decision", "start", "end", "stop"] as const;
+const NODE_TONES = ["done", "open", "blocked"] as const;
+const ITEM_STATES = ["done", "open", "blocked"] as const;
+const BLOCK_TYPES = ["text", "cards", "table", "checklist", "callout", "code", "flow"] as const;
 
 export type Tone = (typeof TONES)[number];
 export type NodeKind = (typeof NODE_KINDS)[number];
@@ -110,7 +111,7 @@ class Checker {
   }
 
   object(value: unknown, path: string, keys: readonly string[]): Obj | undefined {
-    if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    if (!isRecord(value)) {
       this.problem(path, "must be an object");
       return undefined;
     }
@@ -192,8 +193,8 @@ function assign<T extends object, K extends keyof T>(target: T, key: K, value: T
   if (value !== undefined) target[key] = value;
 }
 
-function checkText(c: Checker, obj: Obj, path: string): TextBlock {
-  return { type: "text", text: c.string(obj, "text", path, 1, 8000, true) ?? "" };
+function textLike(type: "text" | "code"): (c: Checker, obj: Obj, path: string) => TextBlock | CodeBlock {
+  return (c, obj, path) => ({ type, text: c.string(obj, "text", path, 1, 8000, true) ?? "" });
 }
 
 function checkCards(c: Checker, obj: Obj, path: string): CardsBlock {
@@ -314,18 +315,18 @@ function checkFlow(c: Checker, obj: Obj, path: string): FlowBlock {
   return out;
 }
 
-const BLOCK_KEYS: Readonly<Record<Block["type"], readonly string[]>> = {
-  text: ["text"],
-  cards: ["cards"],
-  table: ["title", "columns", "rows", "nowrap"],
-  checklist: ["title", "items"],
-  callout: ["tone", "title", "text"],
-  code: ["text"],
-  flow: ["title", "description", "nodes", "edges"],
+const BLOCKS: Record<Block["type"], { keys: readonly string[]; check: (c: Checker, obj: Obj, path: string) => Block }> = {
+  text: { keys: ["text"], check: textLike("text") },
+  cards: { keys: ["cards"], check: checkCards },
+  table: { keys: ["title", "columns", "rows", "nowrap"], check: checkTable },
+  checklist: { keys: ["title", "items"], check: checkChecklist },
+  callout: { keys: ["tone", "title", "text"], check: checkCallout },
+  code: { keys: ["text"], check: textLike("code") },
+  flow: { keys: ["title", "description", "nodes", "edges"], check: checkFlow },
 };
 
 function checkBlock(c: Checker, value: unknown, path: string): Block | undefined {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     c.problem(path, "must be an object");
     return undefined;
   }
@@ -339,23 +340,8 @@ function checkBlock(c: Checker, value: unknown, path: string): Block | undefined
     return undefined;
   }
   const kind = type as Block["type"];
-  const obj = c.object(value, path, ["type", ...BLOCK_KEYS[kind]]) as Obj;
-  switch (kind) {
-    case "text":
-      return checkText(c, obj, path);
-    case "cards":
-      return checkCards(c, obj, path);
-    case "table":
-      return checkTable(c, obj, path);
-    case "checklist":
-      return checkChecklist(c, obj, path);
-    case "callout":
-      return checkCallout(c, obj, path);
-    case "code":
-      return { type: "code", text: c.string(obj, "text", path, 1, 8000, true) ?? "" };
-    case "flow":
-      return checkFlow(c, obj, path);
-  }
+  const obj = c.object(value, path, ["type", ...BLOCKS[kind].keys]) as Obj;
+  return BLOCKS[kind].check(c, obj, path);
 }
 
 export function validateSpec(value: unknown): { spec: PageSpec; warnings: string[] } {

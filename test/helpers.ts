@@ -1,17 +1,18 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { accessSync, constants, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { TestContext } from "node:test";
 import type { CliContext } from "../src/types.ts";
+import { OmtError } from "../src/util/errors.ts";
 
 export const PACKAGE_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 export const CLI_PATH = join(PACKAGE_ROOT, "src", "cli.ts");
 
 // The absolute path of a tool on the real PATH, skipping version-manager shims, which can loop
 // when HOME is a temp directory. Tests that set a temp HOME call tools by this path.
-export function findTool(name: string, fallback: string): string {
+function findTool(name: string, fallback: string): string {
   for (const dir of (process.env.PATH ?? "").split(delimiter)) {
     if (dir === "" || /[/\\]shims$/.test(dir)) continue;
     const path = join(dir, name);
@@ -28,16 +29,22 @@ export function findTool(name: string, fallback: string): string {
 
 export const GIT = findTool("git", "/usr/bin/git");
 
-export function makeTempDir(prefix = "omt-test-"): { path: string; remove: () => void } {
+// Creates a temp directory that the test runner removes after the test, even when it fails.
+export function tempDir(t: TestContext, prefix = "omt-test-"): string {
   const path = mkdtempSync(join(tmpdir(), prefix));
-  return { path, remove: () => rmSync(path, { recursive: true, force: true }) };
+  t.after(() => rmSync(path, { recursive: true, force: true }));
+  return path;
 }
 
-// Creates a temp directory that the test runner removes after the test, even when it fails.
-export function tempDir(t: TestContext, prefix?: string): string {
-  const dir = makeTempDir(prefix);
-  t.after(dir.remove);
-  return dir.path;
+export const OMT_GITIGNORE = "ledger.jsonl\nevidence/\nbin/\ninstall.json\nbackups/\nplans/\n";
+
+export function omtExit(code: number): (error: unknown) => error is OmtError {
+  return (error: unknown): error is OmtError => error instanceof OmtError && error.exitCode === code;
+}
+
+export function writeFile(path: string, text: string): void {
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, text);
 }
 
 // A child-process environment where every variable that affects omt paths points into `root`.
@@ -52,6 +59,21 @@ export function childEnv(root: string): NodeJS.ProcessEnv {
     CLAUDE_CONFIG_DIR: join(home, ".claude"),
     T3CODE_HOME: join(home, ".t3"),
   };
+}
+
+export function spawnOmt(args: string[], { root, cwd = root, env = {}, input = "" }: {
+  root: string;
+  cwd?: string;
+  env?: NodeJS.ProcessEnv;
+  input?: string;
+}) {
+  const result = spawnSync(process.execPath, [CLI_PATH, ...args], {
+    cwd,
+    env: { ...childEnv(root), ...env },
+    encoding: "utf8",
+    input,
+  });
+  return { code: result.status, stdout: result.stdout, stderr: result.stderr };
 }
 
 // A child environment for git: no system or global config, and a fixed author.
@@ -75,8 +97,7 @@ export function gitRepo(root: string, dir: string, files: Record<string, string>
   mkdirSync(dir, { recursive: true });
   git(["init", "-q", "-b", "main"]);
   for (const [path, content] of Object.entries({ "README.md": "# demo\n", ...files })) {
-    mkdirSync(dirname(join(dir, path)), { recursive: true });
-    writeFileSync(join(dir, path), content);
+    writeFile(join(dir, path), content);
   }
   git(["add", "-A"]);
   git(["commit", "-q", "-m", "init"]);
@@ -133,4 +154,18 @@ export function fakeContext(overrides: FakeContextOptions = {}): FakeContext {
     ...rest,
   };
   return { ...ctx, out: () => stdout, err: () => stderr, prompts };
+}
+
+export interface ProjectContext extends FakeContext {
+  at: (argv: string[]) => ProjectContext;
+}
+
+export function projectContext(t: TestContext, argv: string[] = []): ProjectContext {
+  const ctx = fakeContext({ root: tempDir(t), argv });
+  mkdirSync(join(ctx.cwd, ".git"));
+  const at = (argv: string[]): ProjectContext => ({
+    ...fakeContext({ homedir: ctx.homedir, cwd: ctx.cwd, env: ctx.env, argv }),
+    at,
+  });
+  return { ...ctx, at };
 }

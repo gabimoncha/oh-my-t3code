@@ -1,17 +1,18 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { TestContext } from "node:test";
-import { main } from "../../src/main.ts";
-import { PACKAGE_ROOT, fakeContext, tempDir } from "../helpers.ts";
-import type { FakeContext, FakeContextOptions } from "../helpers.ts";
+import { tempDir, writeFile } from "../helpers.ts";
+import { runMain, runOk } from "../run.ts";
 
-export const CAPS_FILE = join(PACKAGE_ROOT, "test", "fixtures", "capabilities.json");
+export { CAPS_FILE } from "../routing/shared.ts";
 
 export interface Project {
   root: string;
   home: string;
   cwd: string;
-  run: (argv: string[], options?: FakeContextOptions) => Promise<{ code: number; ctx: FakeContext }>;
+  run: typeof runMain;
+  runOk: typeof runOk;
+  writeOmt: (name: string, text: string) => void;
   projectConfig: (text: string) => void;
 }
 
@@ -22,18 +23,14 @@ export function makeProject(t: TestContext): Project {
   const cwd = join(root, "project");
   mkdirSync(join(cwd, ".git"), { recursive: true });
   mkdirSync(home, { recursive: true });
+  const writeOmt = (name: string, text: string) => writeFile(join(cwd, ".omt", name), text);
   return {
     root,
     home,
     cwd,
-    run: async (argv, options = {}) => {
-      const ctx = fakeContext({ root, ...options });
-      const code = await main(argv, ctx);
-      return { code, ctx };
-    },
-    projectConfig: (text) => {
-      mkdirSync(join(cwd, ".omt"), { recursive: true });
-      writeFileSync(join(cwd, ".omt", "config.jsonc"), text);
-    },
+    run: (argv, options = {}) => runMain(argv, { root, ...options }),
+    runOk: (argv, options = {}, message) => runOk(argv, { root, ...options }, message),
+    writeOmt,
+    projectConfig: (text) => writeOmt("config.jsonc", text),
   };
 }
