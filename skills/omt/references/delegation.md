@@ -51,7 +51,7 @@ Step 0 checks whether the current branch is behind the default branch. A worktre
 
 | Field | Value |
 | --- | --- |
-| `task` | the rendered brief, at most 120,000 characters |
+| `task` | the short file pointer from `omt brief --save --json`, or the rendered brief, at most 120,000 characters |
 | `target` | `providerInstanceId` or `driverKind`, plus `model` and `options` |
 | `title` | thread title |
 | `role` | `implementation`, `research`, `review`, `design`, `test`, or `general` (adds only the first line of text) |
@@ -66,14 +66,20 @@ T3 checks `target.options` strictly. An unknown option id, a wrong type, or a va
 
 ### Getting the arguments
 
-1. With the CLI: `omt brief <role> --task-file - --title "<role> <unit>: <short unit title>" --scope <p> --done <c> --verify <cmd> --plan <slug> --unit <id> --round <n> --attempt <n> --json`. It prints `{ delegateTask, fallbacks }`. Pass `delegateTask` to `delegate_task` unchanged. Keep `fallbacks` for [the fallback rule](roles.md#fall-back-to-the-next-rung).
+1. With the CLI: `omt brief <role> --task-file - --title "<role> <unit>: <short unit title>" --scope <p> --done <c> --verify <cmd> --plan <slug> --unit <id> --round <n> --attempt <n> --save --json`. It prints `{ delegateTask, fallbacks, ledger }`. Pass `delegateTask` to `delegate_task` unchanged. Keep `fallbacks` for [the fallback rule](roles.md#fall-back-to-the-next-rung).
    - Always pass `--title`. The default title is the task text cut at 72 characters, which says nothing when the task starts with a long path.
    - `--max-depth <n>` overrides the configured `maxDepth` for this brief. A `--depth` above the effective maximum is an error.
    - `--plan` must match the plan slug pattern, and `--unit` must match `^[A-Za-z0-9._-]{1,64}$`.
 2. For the target alone: `omt route <role>`.
 3. Without the CLI: write the brief by hand ([brief.md](brief.md)) and pick the target from the role table ([roles.md](roles.md)).
 
+In `plan` interaction mode, omit `--save` and keep the brief in `delegateTask.task` without writing files or ledger entries. With `--save`, the full brief is in `<evidence>/briefs/<clientRequestId>.md`. `delegateTask.task` names that absolute file path. After dispatch, run the printed `ledger.dispatched` line with only `<taskId>` replaced by the returned id. After a target change, update its provider and model to the target that returned the task. When you build a `plan` or `plan-review` brief, name the effective `workflow.plan.testLayers` value in the task text. Read it from `omt profile show --plan <slug> --json`, or `omt profile show <name> --json` before the plan exists, or `omt profile show --json` without a selected profile.
+
 A brief over 120,000 characters fails. Cut the context, or point the child at files to read.
+
+### Fast mode
+
+Keep the fast options in `delegateTask.target.options` and in each fallback target. The CLI resolves `rung.fast`, then `roles.<role>.fast`, then `models.<id>.fast`, then `false`. The default sets `models.gpt-6.1-sol.fast` to `true`. A `true` value maps to `serviceTier: "priority"` or `fastMode: true` when the model offers that option. An explicit key in `rung.options` wins over the fast mapping. With `fast: false`, the CLI adds no fast option. If fast mode is unavailable, keep the target and report the CLI note. See [roles.md](roles.md#fast-mode) for capability and manual routing rules.
 
 ### Request ids
 
@@ -87,11 +93,11 @@ After a lost response, call `t3_thread_list` with `includeSubagents` and look fo
 
 ## Limits
 
-T3 sets no limit on concurrent tasks or nesting depth, and children can delegate again. The omt config sets the limits (defaults in parentheses): `maxParallel` (4), `maxTasksPerRun` (24), `maxDepth` (1), `maxReviewRounds` (3). `omt config show` prints the effective values.
+T3 sets no limit on concurrent tasks or nesting depth, and children can delegate again. The omt config sets the limits (defaults in parentheses): `maxParallel` (6), `maxTasksPerRun` (24), `maxDepth` (1), `maxReviewRounds` (3). Read the profile's limits with `omt profile show --plan <slug> --json`. A plan header's `max-parallel` can only lower the profile's `maxParallel`.
 
 Before each dispatch, run `omt ledger stats --plan <slug>`. Dispatch only while it reports `can dispatch: yes`. The command compares `active` with `maxParallel` and `dispatched` with `maxTasksPerRun` for you. With `--plan`, a `max-tasks` key in the plan header replaces `maxTasksPerRun` for that plan. `active` counts dispatched entries that no terminal entry has closed yet, so record every result ([results.md](results.md#recording)). Without the CLI, count the open task ids in the plan's log and compare the counts with the limits yourself. Every brief states the child's depth; at `maxDepth` the child does the work itself.
 
-When `omt ledger stats --plan <slug>` reports `can dispatch: no` and `active: 0`, no wake will come and the run is stalled. Stop and tell the user which limit was hit (`dispatched` reached `max tasks per run`, or `max parallel` is 0) and the `dispatched` count. To raise the task budget, recommend `omt plan limit <slug> --tasks <n>` first, or `limits.maxTasksPerRun` in `.omt/config.jsonc`. To raise `max parallel`, name `limits.maxParallel` in `.omt/config.jsonc`. `omt config show` prints the current values.
+When `omt ledger stats --plan <slug>` reports `can dispatch: no` and `active: 0`, no wake will come and the run is stalled. Stop and tell the user which limit was hit (`dispatched` reached `max tasks per run`, or `max parallel` is 0) and the `dispatched` count. To raise the task budget, recommend `omt plan limit <slug> --tasks <n>` first, or `limits.maxTasksPerRun` in `.omt/config.jsonc`. To raise `max parallel`, name `limits.maxParallel` in `.omt/config.jsonc`. Read the selected profile's values as above.
 
 ## Waiting
 
@@ -106,15 +112,35 @@ When your turn cannot end (a goal or a stop hook keeps it running):
 - For one blocking task, call `delegate_task` with `mode: "wait"` and `timeoutMs` at most 3,600,000. On `waitTimedOut: true`, the task still runs; read it later with `task_status`.
 - For parallel tasks, call `t3_thread_wait` with `threadId: childThreadId` and `runId: childRunId` for each task (default 10 minutes, max 60), then `task_status` for each. Without `runId`, `t3_thread_wait` returns at once on a thread that is idle between runs. It does not cancel on timeout and does not acknowledge the result.
 
+## Verification and devices
+
+Only `verify` drives a device, a Simulator UI, a browser, or a computer. Use `omt brief verify` with the steps and expected results. Keep its routed target. The default chain is Claude Haiku 5.5, then Claude Sonnet 5.5, then Codex Sol. The Claude rungs come first because a Codex child could not reach the local device daemon.
+
+An edit role can delegate a device check to `verify` at any depth. A read-only role lists the check for the conductor to dispatch. When a `verify` task returns `INCONCLUSIVE` because it cannot reach a local tool, send the same task once to the next rung of another provider. Use the next attempt number and record that target's provider and model. If no such rung exists, report the blocker. After that one retry, send an unresolved result to the fix or stop step of the current workflow.
+
+Run one device pass per unit without duplicate checks. A `ui` worker's `verify` child takes only the screenshots for the worker's design comparison. The unit's step 8 `verify` task runs the behavior flows. Neither repeats the other's part. Give `qa` only the planned test lines after verification. `qa` writes tests and makes failure proofs when requested, while `verify` writes no tests.
+
+## Shared builds
+
+Keep parallel edit scopes disjoint in the same checkout. Run each shared build or test command as `omt lock run <name> [--wait <seconds>] -- <command>`. Run a command that the task wraps in `omt lock run` exactly as written. Use one lock name per shared resource. Use the lock for a command whose subprocesses end before the command ends. A command that leaves processes running after it exits, such as a dev server, watcher, or daemon, stays outside `omt lock run`. Make the units that use those processes serial with `omt plan limit <slug> 1`. If neither `flock` nor `lockf` is on `PATH`, the CLI warns and runs without a lock. Keep units with shared build state serial on that system.
+
+Retry a failed build or test only when the file is outside your scope and outside the task's named code under test. The file is the one where the error occurs, such as a file with a compile or load error, also when a test in your scope loads it. Wait 60 seconds and run the command once more. When it fails there again, report the command, the outside-scope file, and the message as another unit's state. For a failure in your scope or the named code under test, follow your result block. For `test` results, return `VERDICT: NOT VERIFIED` for that failure. When `omt lock run` exits 75, report the command, the lock name, and its message. Leave the lock to the conductor. For both reports: in `work` results, keep the `STATUS` that your own work earns and put the report under `OPEN`. For `test` results, including `verify` and `qa`, return `VERDICT: INCONCLUSIVE` and put the report under `FAILURES`. For other results, put the report under `NOTES`, or before the result block when it has no `NOTES`.
+
+A busy lock or a failure in another unit's file is not a defect of the unit under test. Keep the unit in step 8 while you handle it. Apply these rules to a `verify` or `qa` result and to a verify command that you run yourself. When a busy lock or a failure in another unit's file makes `verify` or `qa` return `INCONCLUSIVE`, skip the retry on another provider.
+
+For a busy lock, run `omt lock list`. When `omt lock list` shows the lock as free, dispatch the next attempt with the same target, or run your own command again. Count that attempt toward the second busy lock. Treat the holder as a task of this run only when an active task of this run gave that command. For that holder, wait for the task to end. Then dispatch the next attempt with the same target, or run your own command again. For any other holder, stop it only when you own it or have permission. Otherwise ask the owner. Never take over or clear a held lock. After a second busy lock for the same unit and step, ask the owner.
+
+For a failure in another unit's file, or for a `NOT VERIFIED` result or a failed verify command of your own while a work or qa task of another unit was active, read `omt ledger list --plan <slug> --json`. Another unit's file is any file outside the failed task's scope and named code under test, also a file that no unit's scope contains. For your own command, use the unit's scope. Find the work and qa tasks of other units that were active while the failed attempt ran: dispatched before that attempt ended, with no terminal entry before it started. Wait until each of them has a terminal entry and every reopened unit that the unit under test depends on is done again. While a check-in awaits the owner's reply, also wait for the reply. Then dispatch the next attempt with the same target, or run your own command once more. Do this at most once per round for each of `verify`, `qa`, and your own command. Ask the owner instead when that retry is already used, or when a failure in another unit's file has no such task. Do not apply the step 9 relevance check or Reopen rule to a failure in another unit's file; the owner decides. Name the unit under test, the file, the command, and the message.
+
 ## Stalled tasks
 
 A child can go silent: its run hangs, or T3 stops it and no wake comes. Nothing wakes you then, so check active tasks on a timer.
 
-1. Before you first end a turn with an active task, call `schedule_task` once with `schedule: {"type":"interval","everyMs":600000}`, bound to your thread. The prompt names the plan slug and says: "Stall check for plan <slug>. Follow delegation.md#stalled-tasks." Keep the returned id.
-2. On each tick, read `omt ledger list --plan <slug>`. For each dispatched task without a terminal entry, call `t3_thread_read` on its child thread with `limit: 1`. The task is stalled when the thread's `updatedAt` is more than 30 minutes old.
-3. For a stalled task, call `task_status`. When it has a result block, record it and continue at step 6 of your skill. Otherwise read the child's last items with view `activity`. A result block in the thread counts as the result; check its claims as for any result. Otherwise call `task_cancel`, record `--status interrupted --note "stalled"`, check the scope files for half-done edits, and dispatch the next attempt with the same round. Tell that attempt what the stalled attempt left in the files.
+1. Before you end a turn with an active task and no heartbeat exists, call `schedule_task` with `schedule: {"type":"interval","everyMs":600000}`, bound to your thread. The prompt names the plan slug and says: "Stall check for plan <slug>. Follow delegation.md#stalled-tasks." Keep the returned id.
+2. On each tick, read the effective profile and `omt ledger list --plan <slug>`. Use `omt profile show --plan <slug> --json` when the plan file exists. Otherwise use `omt profile show <name> --json` with the run's selected profile, or `omt profile show --json` without one. For each dispatched task without a terminal entry, call `t3_thread_read` on its child thread with `limit: 1`. Use `workflow.build.stallMinutes` for the stall threshold, from 10 to 120 minutes. The task is stalled when the thread's `updatedAt` is older than `build.stallMinutes` minutes.
+3. For a stalled task, call `task_status`. When it has a result block, record it and continue at step 6 of your skill. Otherwise read the child's last items with view `activity`. A result block in the thread counts as the result; check its claims as for any result. Otherwise call `task_cancel`, record `--status interrupted --note "stalled"`, and check the scope files for half-done edits. If a check-in waits, dispatch the next attempt with the same round only after the owner replies. Otherwise dispatch the next attempt with the same round. Tell that attempt what the stalled attempt left in the files.
 4. A tick with no stalled task ends at once, with no message to the user.
-5. When the run ends or stops for the owner, call `delete_scheduled_task` with the id.
+5. When the run ends, call `delete_scheduled_task` with the id. At a check-in or another stop for the owner, delete the heartbeat only when no task is active. Keep it while a task is active. Delete it on any turn, including a wake or a tick, when no task is active and the check-in still waits.
 
 ## `task_status` and `task_cancel`
 
