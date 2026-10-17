@@ -17,7 +17,7 @@ import { parseArgs, positiveInt } from "../util/args.ts";
 import { checkPlanSlug, checkUnitId } from "../util/ids.ts";
 import { readFileIfExists } from "../util/fs.ts";
 import { formatJson, renderTable } from "../util/output.ts";
-import { loadConfigReporting } from "./shared.ts";
+import { loadEffectiveConfigReporting } from "./shared.ts";
 
 export const summary = "Record and list delegation events in .omt/ledger.jsonl.";
 
@@ -155,9 +155,10 @@ function effectiveLimits(limits: Limits, plan: PlanStatus | undefined) {
   };
 }
 
-function formatLedgerStats(result: LedgerStats, limits: Limits): string {
+function formatLedgerStats(result: LedgerStats, limits: Limits, profile: string): string {
   const lines = [
     ...(result.plan === undefined ? [] : [`plan: ${result.plan}`]),
+    `profile: ${profile}`,
     `dispatched: ${result.dispatched}`,
     `active: ${result.active}`,
     `terminal: ${result.terminal}`,
@@ -181,14 +182,14 @@ async function list(ctx: CliContext, root: string, values: Values) {
 
 async function stats(ctx: CliContext, root: string, values: Values) {
   onlyFlags("stats", values, ["plan", "json"]);
-  const { config } = await loadConfigReporting(ctx);
   const markdown = values.plan === undefined ? undefined : await readFileIfExists(planPath(root, values.plan));
   const plan = markdown === undefined ? undefined : parsePlan(markdown);
+  const { config, profile } = await loadEffectiveConfigReporting(ctx, { planProfile: plan?.profile });
   const { limits, planMaxParallel, planMaxTasks } = effectiveLimits(config.limits, plan);
   const result = ledgerStats(await load(ctx, root, undefined), limits, values.plan);
   if (planMaxParallel !== undefined) result.planMaxParallel = planMaxParallel;
   if (planMaxTasks !== undefined) result.planMaxTasks = planMaxTasks;
-  ctx.stdout(values.json ? formatJson(result) : formatLedgerStats(result, config.limits));
+  ctx.stdout(values.json ? formatJson(result) : formatLedgerStats(result, config.limits, profile.name));
   return 0;
 }
 

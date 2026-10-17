@@ -2,7 +2,7 @@
 
 # oh-my-t3code
 
-oh-my-t3code (`omt`) adds roles, task briefs, plans, and review loops to the agents that you run in [T3 Code](https://t3.codes). You write one sentence, such as `ulw add OAuth to the API`. The agent then plans the work in units and sends each unit to the right model as a T3 child task. A reviewer checks each unit, and tests that actually ran prove it. Before the run counts as done, a reviewer from another model family attacks the result.
+oh-my-t3code (`omt`) adds roles, task briefs, plans, and review loops to the agents that you run in [T3 Code](https://t3.codes). You write one sentence, such as `ulw add OAuth to the API`. The agent then plans the work in units and sends each unit to the right model as a T3 child task. The selected profile controls review and verification. The normal profile reviews each unit and requires a final cross-family oracle for HEAVY work.
 
 oh-my-t3code has two parts:
 
@@ -20,7 +20,7 @@ T3 does not give you roles, model routing, briefs, review loops, or limits. oh-m
 - A role, such as `execute` or `review`, maps to an ordered chain of provider, model, and effort. When the first choice is not available, the agent falls back to the next one.
 - Every child gets a complete brief. The brief has the task, the scope, the done conditions, the verify commands, and a fixed result block.
 - The plan and the ledger live in `.omt/` in your project, so a long run survives context compaction.
-- The config sets limits for parallel tasks, tasks per run, nesting depth, and review rounds.
+- Profiles select workflow steps and can override roles, models, and limits. The default permits 6 parallel tasks in one checkout.
 
 ## Install
 
@@ -114,7 +114,7 @@ With the Claude Code hook installed, the keyword is enough:
 ulw add rate limiting to the public API
 ```
 
-The agent frames the goal, explores the code, writes a plan in `.omt/plans/`, dispatches each unit, reviews and tests it, and runs a final cross-family check. Run `omt init` in the project first if you want a project config and a `.gitignore` for the plans and the ledger.
+The agent frames the goal, explores the code, writes a plan in `.omt/plans/`, and dispatches each unit. The profile selects reviews, verification, planned tests, and the final oracle. Run `omt init` in the project first if you want a project config and a `.gitignore` for the plans and the ledger.
 
 ## Default roles
 
@@ -129,16 +129,18 @@ The agent frames the goal, explores the code, writes a plan in `.omt/plans/`, di
 | `deep` | Solve a hard or cross-cutting problem | Claude Opus 5.5, max | GPT-6-Astra, xhigh |
 | `review` | Review a diff against its brief | GPT-6-Astra, high | Claude Opus 5.5, high |
 | `oracle` | Attack the finished change before it counts as done | GPT-6-Astra, high | Claude Opus 5.5, high |
-| `test` | Write and run tests, then report a verdict | GPT-6.1-Sol, low | Claude Sonnet 5.5, low |
+| `verify` | Run the artifact, existing checks, and device flows | Claude Haiku 5.5, medium | Claude Sonnet 5.5, low; then GPT-6.1-Sol, low |
+| `qa` | Write only the approved test lines after verification | GPT-6.1-Sol, medium | Claude Sonnet 5.5, medium |
+| `guardrail` | Propose checks and rule fixes for review findings | Claude Opus 5.5, high | GPT-6-Astra, high |
 | `writing` | Write or edit documentation | Claude Opus 5.5, high | GPT-6-Astra, medium |
 | `design` | Design screens and flows, and write a design spec | Claude Opus 5.5, high | none |
 | `ui` | Implement one UI unit from its design spec | Claude Opus 5.5, medium | none |
 
 The fallback runs only when T3 refuses the first choice. For the cross-family roles below, the first choice depends on the worker. `design` and `ui` have no fallback: designs come only from Claude Opus 5.5, and you are the design review.
 
-`plan-review`, `review`, and `oracle` are cross-family roles. A reviewer comes from the other model family than the worker whose change it reviews. GPT-6-Astra reviews Claude work, and Claude Opus 5.5 reviews GPT work. The skills pass the worker to `omt brief --against`, and the CLI puts the rungs of the other family first. When the other family is not available, the same family reviews. The oracle runs on the family other than the main implementer's.
+`plan-review`, `review`, and `oracle` are cross-family roles. A reviewer comes from the other model family than the worker whose change it reviews. GPT-6-Astra reviews Claude work, and Claude Opus 5.5 reviews GPT work. The skills pass the worker to `omt brief --against`, and the CLI puts the rungs of the other family first. When the other family is not available, the same family reviews. The build oracle runs on the family other than the main implementer's. A review oracle uses the family other than most reviewers.
 
-Claude models run on the `claudeAgent` driver. GPT models run on the `codex` driver. Each default rung also names the T3 built-in provider instance of its driver, whose id is `claudeAgent` or `codex`. T3 checks a named instance again before it refuses it, but it can refuse a driver-only target because of a stale provider snapshot. The read-only roles (`explore`, `research`, `plan-review`, `review`, `oracle`) run in T3 plan mode. On Claude, Codex, Cursor, and OpenCode, plan mode keeps the child from editing files. T3 has no plan-mode handling for Pi, so a Pi child in a read-only role is held back only by its brief. No default role uses Pi.
+Claude models run on the `claudeAgent` driver. GPT models run on the `codex` driver. Each default rung also names the T3 built-in provider instance of its driver, whose id is `claudeAgent` or `codex`. T3 checks a named instance again before it refuses it, but it can refuse a driver-only target because of a stale provider snapshot. The read-only roles (`explore`, `research`, `plan-review`, `review`, `oracle`, `guardrail`) run in T3 plan mode. On Claude, Codex, Cursor, and OpenCode, plan mode keeps the child from editing files. T3 has no plan-mode handling for Pi, so a Pi child in a read-only role is held back only by its brief. No default role uses Pi.
 
 Run `omt roles` to see how each role resolves with your config.
 
@@ -162,6 +164,94 @@ This example turns off cross-family review. Then `review` always starts on GPT-6
 
 A `chain` replaces the old chain as a whole. Other fields of the role keep their values. In a rung, `provider` names one T3 provider instance and `driver` names its driver. Set a role to `null` to remove it.
 
+## Choose a workflow
+
+Run `omt profile list` to see the presets and your custom profiles. Run `omt profile show prototype --json` to see a resolved workflow, its limits, roles, and models.
+
+- `normal` reviews every build round. It verifies each HEAVY unit and runs its final oracle. LIGHT runs use the conductor's verify commands.
+- `prototype` reviews the first implementation round and verifies every unit. It skips the oracle and failure proofs, limits review cycles to 2 rounds, and waits for you after each dependency layer.
+- `pr-review` adds CI fixes, changed-flow verification, CRAP reports, test offers, and guardrail proposals to the normal review workflow.
+
+In a T3 thread, select the prototype profile for one build:
+
+```text
+ulw --profile prototype build a demo of the search screen
+```
+
+At a check-in, reply with continue, steering, or an instruction to stop check-ins for that run. Continue authorizes one more layer or unit. To switch a running plan, use `omt plan profile <slug> normal`. `none` removes the plan override. The next wake reads the new profile.
+
+Selection uses the explicit `--profile`, then the plan header, project config, user config, and finally `normal`. Root config layers merge first. The selected profile then applies its inheritance chain.
+
+Add a custom profile to your user or project config:
+
+```jsonc
+{
+  "profile": "hackathon",
+  "profiles": {
+    "hackathon": {
+      "description": "Use the prototype workflow with fast workers and no check-ins.",
+      "extends": "prototype",
+      "workflow": { "build": { "checkpoint": "none" } },
+      "roles": { "execute": { "fast": true }, "ui": { "fast": true } }
+    }
+  }
+}
+```
+
+A custom profile without `extends` inherits `normal`. `omt config show` prints the merged config before profile application. Use `omt profile show hackathon --json` for the resolved values.
+
+Set fast mode per role in either config layer:
+
+```jsonc
+{
+  "roles": {
+    "execute": { "fast": true },
+    "verify": { "fast": false }
+  }
+}
+```
+
+The first set value wins: rung `fast`, role `fast`, model `fast`, then `false`. GPT-6.1-Sol has model fast mode on by default. Supported models map `true` to `serviceTier: "priority"` or `fastMode: true`. An unsupported model keeps its target and reports a note. Explicit `rung.options` wins over the mapping. `false` adds no fast option.
+
+On upgrade, move each `roles.test` override to `verify` for checks or `qa` for test writing. The old key now warns and has only custom-role behavior. A partial `roles.test` override fails validation when it lacks `description`, `access`, and `chain`.
+
+## Review a pull request
+
+In a T3 thread, run the skill:
+
+```text
+omt-review --profile pr-review <number>
+```
+
+The skill runs these steps in order:
+
+1. Read and link the PR. Save the original branch and check out the PR when a step needs it. A checkout requires a clean working tree.
+2. Read the project rules. Each finding that breaks a written rule cites its file and line.
+3. Read CI checks and save failure logs. Pending checks use T3's PR watch. With no CI checks, run the project's check command.
+4. Run the project's coverage command once when one exists and save lcov for the reviewers.
+5. Review file groups on the PR head. A verify task runs changed screens, CLI commands, and API routes and lists their covering tests.
+6. Merge findings. An oracle from the other reviewer family checks them. Failed verified flows become P1 findings.
+7. Send each failing CI check to an execute task and review its fix. Changes stay uncommitted.
+8. Propose deterministic checks, rule corrections, or new rules. Save new proposals in ignored `.omt/guardrails.md` for separate work.
+9. Report CRAP for changed functions. CRAP combines complexity and coverage. Values above 30 become P2 findings. Without coverage data, the calculation uses zero coverage.
+10. Report findings, CI fixes, screenshots, uncovered flows, proposals, and the command to return to your original branch.
+11. Offer a fix loop, exact e2e test lines for uncovered verified flows, and commit and push. Each needs your approval. Qa reports `INCONCLUSIVE` if no e2e framework exists.
+
+Round-1 reviewers and the oracle read the saved PR commits. Reviews and oracles after fixes read the working tree. The skill posts no GitHub comment or review. Other profiles can skip steps through `workflow.review`; [the spec](docs/spec.md#154-pull-request-review) lists the switches and rules.
+
+## Checks and shared builds
+
+Workers add no new tests. The plan lists each proposed test under `## Tests`, with its flow, file, and reason. You approve those lines with the plan. Verify runs the artifact and existing checks first. Qa then writes only the approved tests. The normal profile also requires qa to prove each new test can fail in a private working-tree copy. An empty test list means no new tests.
+
+Parallel workers share one checkout and have disjoint file scopes. Commands that share build state use one lock name per resource:
+
+```sh
+omt lock run build -- pnpm build
+omt lock list
+```
+
+A busy command waits up to 900 seconds by default. `--wait <seconds>` changes that wait. A timeout exits 75. The lock uses `flock` or `lockf` and is never taken over. Without either tool, the command runs with a warning and the planner keeps shared builds serial. Commands that leave servers or watchers running also need a serial plan and run outside the lock.
+
 ## Plan pages
 
 When a plan is final, `omt-plan` shows it as a page in the T3 thread. The page has the plan summary, status cards, the units as a flowchart by dependency layer, a unit table, the checks, and flowcharts and tables that explain the design. T3 draws no flowcharts in chat, so `omt visual` builds the page and the T3 `html_render` tool shows it. A copy stays in the evidence directory (`omt paths --evidence`), under `visuals/<slug>.html`, so you can also open it in a browser.
@@ -178,8 +268,8 @@ You can also ask for a page at any time, for example "show me the plan as a flow
 
 Useful commands:
 
-- `omt config show --defaults` prints the built-in roles, limits, and visuals.
-- `omt config show` prints the effective config.
+- `omt config show --defaults` prints the built-in profiles, roles, models, limits, and visuals.
+- `omt config show` prints the merged config before profile application.
 - `omt config validate` reports problems in your files.
 
 ## Skills
@@ -188,7 +278,7 @@ Useful commands:
 | --- | --- |
 | `omt-ulw` | You want a task built, fixed, or shipped end to end with subagents. The `ulw` and `ultrawork` keywords start it. |
 | `omt-plan` | You want a reviewed plan before any code changes. |
-| `omt-design` | You want designs, mockups, or screens before UI work. You pick one of 3 variants for each screen and steer them. |
+| `omt-design` | You want designs, mockups, or screens before UI work. You pick and steer screen variants. The profile sets the count, normally 3. |
 | `omt-review` | You want a review of uncommitted changes, a branch, a commit, or a pull request. |
 | `omt-research` | You need a cited answer from the repository, library docs, or the web. |
 | `omt-show` | You want to see a plan, a flow, or a status as a page with flowcharts and tables. `omt-plan` runs it when it hands off a plan. |
@@ -209,8 +299,10 @@ The agent can pick the first six on its own. You start the last three by name.
 | `omt config` | Shows, locates, validates, or creates the config. |
 | `omt roles` | Prints how every role resolves. |
 | `omt route <role>` | Prints the `delegate_task` arguments for one role as JSON. `--against <provider>` names the worker that a cross-family role reviews. |
-| `omt brief <role> --task <text>` | Renders a child brief, or a full `delegate_task` payload with `--json`. |
-| `omt plan` | Creates plan files and shows their progress. `plan new <slug> --light` leaves out the oracle item. `plan mark <slug> <id> <done\|open\|blocked>` ticks one item. |
+| `omt brief <role> --task <text>` | Renders a brief. `--save --json` saves it and returns a short dispatch task plus a ledger command. |
+| `omt profile` | Lists profiles or shows resolved workflow settings with `show [<name>] [--plan <slug>] --json`. |
+| `omt lock` | Runs a command under a shared build lock or lists held and free locks. |
+| `omt plan` | Creates plan files and shows their progress. `new --profile <name>` selects a profile. `profile <slug> <name\|none>` switches it. `plan new <slug> --light` leaves out the oracle item. `plan mark <slug> <id> <done\|open\|blocked>` ticks one item. |
 | `omt ledger` | Records and counts delegated tasks in `.omt/ledger.jsonl`. A result entry (`completed`, `failed`, and the other terminal statuses) closes the dispatch with the same `--task-id`, or with the same plan, unit, role, round, and attempt. |
 | `omt visual` | Builds a self-contained HTML page with flowcharts, tables, and status cards. `--plan <slug>` adds the plan's summary, unit flowchart, and checks; `--spec` adds tabs from a JSON page spec. |
 | `omt hook user-prompt-submit` | Runs the Claude Code hook. The hook calls it, not you. |
@@ -228,7 +320,7 @@ Every command accepts `--help`. [`docs/spec.md`](docs/spec.md) describes each co
 | `~/.config/oh-my-t3code/install.json` | The manifest of what the install added. |
 | `~/.config/oh-my-t3code/backups/` | Backups of anything that the install replaced or edited. |
 | `~/.claude/settings.json` | One `UserPromptSubmit` hook entry, only with `--hooks`. Other settings stay unchanged. |
-| `.omt/` in a project | The project config, the plans, the ledger, and evidence files, including the plan pages under `evidence/visuals/`. |
+| `.omt/` in a project | The project config, plans, ledger, locks, local guardrail proposals, and evidence files, including the plan pages under `evidence/visuals/`. |
 
 Each installed skill directory holds a `.omt-managed.json` marker. The install never overwrites a path that it does not manage, unless you pass `--force`. With `--force`, it moves the old path to the backups directory first.
 

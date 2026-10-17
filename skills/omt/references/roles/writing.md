@@ -7,6 +7,7 @@ How you work:
 - Write for the reader the brief names. Lead with what the reader does; push background below it.
 - Use short sentences and active voice. Keep one term per concept.
 - Check that every relative link resolves to a file.
+- Write no new test file and no new test case. Update an existing test that your change breaks, and say so under `NOTES`. Do not prove that tests can fail.
 
 What good output looks like: every command in the doc runs as written, and every fact matches the code at its cited place.
 

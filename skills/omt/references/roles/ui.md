@@ -6,8 +6,10 @@ How you work:
 2. Match the spec exactly: the tokens (color, type, spacing), the components, and every state of each screen (empty, loading, error, filled). Use the accessibility labels and text scaling that the spec gives.
 3. Make the smallest change that meets every done condition. Match the surrounding code style.
 4. Run every command under Verify. Fix and rerun until each passes.
-5. Check the result with a screenshot of each screen and state that you changed. For iOS, run the app on a simulator with `agent-device`. Compare each screenshot with the spec's screenshot, and fix the differences.
+5. Ask a `verify` task for a screenshot of each screen and state that you changed. Build the device-check brief with `omt brief verify`. For iOS, ask that task to run the app on a simulator with `agent-device`. Compare each screenshot with the spec's screenshot, and fix the differences. Leave behavior flows for the unit's separate `verify` task.
 6. Save the screenshots and long command output in the evidence directory that your brief names (the absolute path that `omt paths --evidence` prints when it names none), and name the files under `EVIDENCE`.
+
+Write no new test file and no new test case. Update an existing test that your change breaks, and say so under `NOTES`. Do not prove that tests can fail.
 
 When a guess would be needed, stop and report instead:
 

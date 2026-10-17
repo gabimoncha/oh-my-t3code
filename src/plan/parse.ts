@@ -21,6 +21,7 @@ export interface PlanCounts {
 export interface PlanStatus {
   title: string;
   slug?: string;
+  profile?: string;
   maxParallel?: number;
   maxTasks?: number;
   items: PlanItem[];
@@ -169,6 +170,7 @@ export function parsePlan(markdown: string): PlanStatus {
   });
   const header = findPlanHeader(markdown)?.text ?? "";
   const slug = headerValue(header, "slug");
+  const profile = headerValue(header, "profile");
   const maxParallelText = headerValue(header, "max-parallel");
   const maxParallel = maxParallelText === undefined ? undefined : parseLimit(maxParallelText, "maxParallel");
   const maxTasksText = headerValue(header, "max-tasks");
@@ -181,6 +183,7 @@ export function parsePlan(markdown: string): PlanStatus {
     complete: items.length > 0 && items.every((item) => item.state === "done"),
   };
   if (slug !== undefined) status.slug = slug;
+  if (profile !== undefined) status.profile = profile;
   if (maxParallel !== undefined) status.maxParallel = maxParallel;
   if (maxTasks !== undefined) status.maxTasks = maxTasks;
   if (next !== undefined) status.next = next;

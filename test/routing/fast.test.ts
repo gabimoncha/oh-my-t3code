@@ -1,0 +1,113 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { DEFAULT_CONFIG } from "../../src/config/defaults.ts";
+import { resolveAll, resolveRole, toRouteOutput } from "../../src/routing/resolve.ts";
+import type { ModelConfig, OptionValue, Rung } from "../../src/types.ts";
+import { liveCaps, role } from "./shared.ts";
+
+test("fast mode uses the live model descriptors and reports models without a fast option", () => {
+  const capabilities = liveCaps();
+  for (const provider of capabilities.providers) {
+    for (const model of provider.models) {
+      const resolution = resolveRole("r", role([{ provider: provider.providerInstanceId, model: model.id, fast: true }]), capabilities);
+      const options = resolution.delegateTask?.target.options;
+      if (provider.driverKind === "codex") {
+        assert.deepEqual(options, { serviceTier: "priority" }, model.id);
+      } else if (model.id === "claude-opus-5-5") {
+        assert.deepEqual(options, { fastMode: true });
+      } else {
+        assert.equal(options, undefined, model.id);
+        assert.deepEqual(toRouteOutput(resolution).notes, [`rung 1: fast mode is not offered by claudeAgent/${model.id}`]);
+      }
+      assert.equal(resolution.status, "resolved", model.id);
+    }
+  }
+});
+
+test("fast mode without capabilities uses Codex and Opus defaults only", () => {
+  const cases: [Rung, Record<string, OptionValue> | undefined][] = [
+    [{ driver: "codex", model: "gpt-6.1-sol" }, { serviceTier: "priority" }],
+    [{ provider: "codex", model: "gpt-6-astra" }, { serviceTier: "priority" }],
+    [{ provider: "claude-work", driver: "claudeAgent", model: "claude-opus-5-5" }, { fastMode: true }],
+    [{ driver: "claudeAgent", model: "claude-sonnet-5-5" }, undefined],
+    [{ driver: "claudeAgent", model: "claude-haiku-5-5" }, undefined],
+    [{ driver: "unknown", model: "m" }, undefined],
+  ];
+  for (const [rung, expected] of cases) {
+    const resolution = resolveRole("r", role([{ ...rung, fast: true }]));
+    assert.deepEqual(resolution.delegateTask?.target.options, expected, rung.model);
+    assert.deepEqual(resolution.attempts[0]?.notes, expected === undefined
+      ? [`fast mode is not offered by ${rung.provider ?? rung.driver}/${rung.model}`] : []);
+  }
+});
+
+test("fast mode resolves rung, role, and model values in order, including false", () => {
+  const cases: [boolean | undefined, boolean | undefined, boolean | undefined, boolean][] = [
+    [true, false, false, true],
+    [false, true, true, false],
+    [undefined, true, false, true],
+    [undefined, false, true, false],
+    [undefined, undefined, true, true],
+    [undefined, undefined, false, false],
+    [undefined, undefined, undefined, false],
+  ];
+  for (const capabilities of [undefined, liveCaps()]) {
+    for (const [rungFast, roleFast, modelFast, expected] of cases) {
+      const rung: Rung = { driver: "codex", model: "gpt-6.1-sol" };
+      const config = role([rung]);
+      const model: ModelConfig = {};
+      if (rungFast !== undefined) rung.fast = rungFast;
+      if (roleFast !== undefined) config.fast = roleFast;
+      if (modelFast !== undefined) model.fast = modelFast;
+      const resolution = resolveRole("r", config, capabilities, { models: { [rung.model]: model } });
+      assert.deepEqual(resolution.delegateTask?.target.options, expected ? { serviceTier: "priority" } : undefined);
+    }
+  }
+});
+
+test("raw rung options override fast mappings with and without capabilities", () => {
+  const rungs: Rung[] = [
+    { driver: "codex", model: "gpt-6.1-sol", effort: "high", options: { serviceTier: "default" } },
+    { driver: "claudeAgent", model: "claude-opus-5-5", effort: "high", options: { fastMode: false } },
+  ];
+  for (const capabilities of [undefined, liveCaps()]) {
+    for (const rung of rungs) {
+      const resolution = resolveRole("r", role([{ ...rung, fast: true }]), capabilities);
+      assert.equal(resolution.status, capabilities === undefined ? "unverified" : "resolved");
+      assert.deepEqual(resolution.delegateTask?.target.options, {
+        [rung.driver === "codex" ? "reasoningEffort" : "effort"]: "high",
+        ...rung.options,
+      });
+    }
+  }
+});
+
+test("known capabilities never infer a fast option when descriptors are absent or do not offer priority", () => {
+  for (const models of [[], [{ id: "gpt-6.1-sol", options: [] }], [{ id: "gpt-6.1-sol", options: [
+    { id: "serviceTier", type: "select", options: [{ id: "default" }] },
+  ] }]]) {
+    const capabilities = liveCaps();
+    capabilities.providers[0]!.models = models;
+    const resolution = resolveRole("r", role([{ driver: "codex", model: "gpt-6.1-sol", fast: true }]), capabilities);
+    assert.equal(resolution.delegateTask?.target.options, undefined);
+    assert.ok(toRouteOutput(resolution).notes.includes("rung 1: fast mode is not offered by codex/gpt-6.1-sol"));
+  }
+});
+
+test("model fast settings use own keys, including model ids that name Object properties", () => {
+  const models: Record<string, ModelConfig> = Object.create({ "gpt-6.1-sol": { fast: true } });
+  assert.equal(resolveRole("r", role([{ driver: "codex", model: "gpt-6.1-sol" }]), undefined, { models })
+    .delegateTask?.target.options, undefined);
+  for (const model of ["toString", "__proto__"]) {
+    const own = JSON.parse(`{"${model}":{"fast":true}}`) as Record<string, ModelConfig>;
+    assert.deepEqual(resolveRole("r", role([{ driver: "codex", model }]), undefined, { models: own })
+      .delegateTask?.target.options, { serviceTier: "priority" });
+  }
+});
+
+test("resolveAll applies the default Sol fast setting to the chosen target and fallbacks", () => {
+  const report = resolveAll(DEFAULT_CONFIG, liveCaps());
+  assert.equal(report.roles.research?.delegateTask?.target.options?.serviceTier, "priority");
+  assert.equal(report.roles.execute?.fallbacks[0]?.options?.serviceTier, "priority");
+  assert.equal(report.roles.qa?.delegateTask?.target.options?.serviceTier, "priority");
+});

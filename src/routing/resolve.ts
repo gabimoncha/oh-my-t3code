@@ -1,6 +1,7 @@
 import type {
   Capabilities,
   ModelCapability,
+  ModelConfig,
   OmtConfig,
   OptionDescriptor,
   OptionValue,
@@ -18,6 +19,7 @@ import { mapEffort } from "./effort.ts";
 import { crossFamilyOrder, rungFamily, workerFamily } from "./family.ts";
 
 export interface ResolveOptions {
+  models?: Record<string, ModelConfig>;
   against?: string; // provider instance id or driver kind of the worker whose change the task reviews
   notes?: string[]; // role-level notes to put before the notes that resolveRole adds
   drivers?: Map<string, string>; // provider instance id to driver kind (configuredDrivers), for the worker and for every rung
@@ -103,17 +105,44 @@ function makeTarget(
 
 function rungOptions(
   rung: Rung,
+  fast: boolean,
   descriptors: OptionDescriptor[] | undefined,
   driver: string | undefined,
+  provider: string,
   notes: string[],
+  verified = false,
 ): Record<string, OptionValue> {
-  if (rung.effort === undefined) return { ...rung.options };
-  const mapped = mapEffort(rung.effort, descriptors, driver);
-  if (mapped.note !== undefined) notes.push(mapped.note);
-  return { ...mapped.options, ...rung.options };
+  const options: Record<string, OptionValue> = {};
+  if (rung.effort !== undefined) {
+    const mapped = mapEffort(rung.effort, descriptors, driver);
+    Object.assign(options, mapped.options);
+    if (mapped.note !== undefined) notes.push(mapped.note);
+  }
+  if (fast) Object.assign(options, fastOptions(rung.model, descriptors ?? (verified ? [] : undefined), driver, provider, notes));
+  return { ...options, ...rung.options };
 }
 
-function resolveVerified(rung: Rung, caps: Capabilities, notes: string[]): ResolvedTarget {
+function fastOptions(
+  model: string,
+  descriptors: OptionDescriptor[] | undefined,
+  driver: string | undefined,
+  provider: string,
+  notes: string[],
+): Record<string, OptionValue> {
+  if (descriptors !== undefined) {
+    if (descriptors.some((d) => d.id === "serviceTier" && d.type === "select" && d.options?.some((c) => c.id === "priority"))) {
+      return { serviceTier: "priority" };
+    }
+    if (descriptors.some((d) => d.id === "fastMode" && d.type === "boolean")) return { fastMode: true };
+  } else {
+    if (driver === "codex") return { serviceTier: "priority" };
+    if (driver === "claudeAgent" && model.startsWith("claude-opus")) return { fastMode: true };
+  }
+  notes.push(`fast mode is not offered by ${provider}/${model}`);
+  return {};
+}
+
+function resolveVerified(rung: Rung, fast: boolean, caps: Capabilities, notes: string[]): ResolvedTarget {
   const provider = findProvider(rung, caps, notes);
   const id = provider.providerInstanceId;
   if (!provider.canRunChildTask) {
@@ -127,7 +156,7 @@ function resolveVerified(rung: Rung, caps: Capabilities, notes: string[]): Resol
   } else {
     notes.push(`provider ${id} lists no models; T3 will check the model and its options`);
   }
-  const options = rungOptions(rung, model?.options, provider.driverKind, notes);
+  const options = rungOptions(rung, fast, model?.options, provider.driverKind, id, notes, true);
   if (model !== undefined && model.options.length > 0) {
     const problems = optionProblems(options, model.options, model.id);
     if (problems.length > 0) throw new RungFailure(`invalid options: ${problems.join("; ")}`);
@@ -137,20 +166,20 @@ function resolveVerified(rung: Rung, caps: Capabilities, notes: string[]): Resol
   return makeTarget({ providerInstanceId: id }, rung.model, options);
 }
 
-function resolveUnverified(rung: Rung, notes: string[]): ResolvedTarget {
+function resolveUnverified(rung: Rung, fast: boolean, notes: string[]): ResolvedTarget {
   if (rung.provider === undefined && rung.driver === undefined) {
     throw new RungFailure("the rung names no provider or driver");
   }
-  const options = rungOptions(rung, undefined, rung.driver ?? rung.provider, notes);
+  const options = rungOptions(rung, fast, undefined, rung.driver ?? rung.provider, rung.provider ?? rung.driver as string, notes);
   const ref = rung.provider !== undefined ? { providerInstanceId: rung.provider } : { driverKind: rung.driver as string };
   return makeTarget(ref, rung.model, options);
 }
 
-function attempt(index: number, rung: Rung, caps: Capabilities | undefined, ceiling: string | undefined): RungAttempt {
+function attempt(index: number, rung: Rung, fast: boolean, caps: Capabilities | undefined, ceiling: string | undefined): RungAttempt {
   const notes: string[] = [];
   if (ceiling !== undefined) return { index, rung, ok: false, reason: ceiling, notes };
   try {
-    const target = caps === undefined ? resolveUnverified(rung, notes) : resolveVerified(rung, caps, notes);
+    const target = caps === undefined ? resolveUnverified(rung, fast, notes) : resolveVerified(rung, fast, caps, notes);
     return { index, rung, ok: true, notes, target };
   } catch (error) {
     if (!(error instanceof RungFailure)) throw error;
@@ -190,7 +219,11 @@ export function resolveRole(
     }
   }
   const ceiling = caps === undefined ? undefined : modeCeiling(role, caps);
-  const attempts = order.map((index) => attempt(index, role.chain[index] as Rung, caps, ceiling));
+  const attempts = order.map((index) => {
+    const rung = role.chain[index] as Rung;
+    const model = options.models !== undefined && Object.hasOwn(options.models, rung.model) ? options.models[rung.model] : undefined;
+    return attempt(index, rung, rung.fast ?? role.fast ?? model?.fast ?? false, caps, ceiling);
+  });
   const chosen = attempts.find((a) => a.ok);
   if (family !== undefined && chosen !== undefined && rungFamily(chosen.rung, caps, drivers) === family) {
     notes.push(`cross-family: no rung outside family ${family} is available; the same family reviews`);
@@ -237,7 +270,7 @@ export function resolveAll(config: OmtConfig, caps?: Capabilities, only?: string
   const roles: Record<string, RoleResolution> = {};
   for (const name of names) {
     const role = findRole(config, name);
-    roles[name] = resolveRole(name, role, caps);
+    roles[name] = resolveRole(name, role, caps, { models: config.models });
   }
   return { version: 1, verified: caps !== undefined, roles, limits: config.limits };
 }

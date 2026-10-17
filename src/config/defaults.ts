@@ -43,6 +43,7 @@ function editRole(
 }
 
 const SONNET = "claude-sonnet-5-5";
+const HAIKU = "claude-haiku-5-5";
 const OPUS = "claude-opus-5-5";
 const LUNA = "gpt-6-luna";
 const SOL = "gpt-6.1-sol";
@@ -50,6 +51,61 @@ const ASTRA = "gpt-6-astra";
 
 export const DEFAULT_CONFIG: OmtConfig = {
   version: 1,
+  profile: "normal",
+  profiles: {
+    normal: {
+      description: "Plan, build, and review with the standard workflow.",
+      workflow: {
+        plan: { review: "two-families", testLayers: ["e2e"] },
+        design: { variants: 3 },
+        build: {
+          review: "every-round",
+          verify: "heavy",
+          qa: "planned",
+          failureProofs: "on",
+          oracle: "heavy",
+          checkpoint: "none",
+          stallMinutes: 30,
+        },
+        review: {
+          reviewers: "auto",
+          families: "one",
+          oracle: "on",
+          fixLoop: "offer",
+          ci: "check",
+          verify: "off",
+          tests: "off",
+          guardrails: "off",
+          crap: "off",
+        },
+      },
+    },
+    prototype: {
+      description: "Build a prototype with fewer reviews and a check-in after each layer.",
+      extends: "normal",
+      workflow: {
+        plan: { review: "one" },
+        design: { variants: 1 },
+        build: {
+          review: "first-round",
+          verify: "every-unit",
+          failureProofs: "off",
+          oracle: "off",
+          checkpoint: "layer",
+        },
+        review: { reviewers: 1, oracle: "off", ci: "off" },
+      },
+      limits: { maxReviewRounds: 2 },
+    },
+    "pr-review": {
+      description: "Review a pull request, check CI and changed flows, and propose guardrails.",
+      extends: "normal",
+      workflow: {
+        review: { ci: "fix", verify: "changed-flows", tests: "offer", guardrails: "propose", crap: "report" },
+      },
+    },
+  },
+  models: { [SOL]: { fast: true } },
   roles: {
     explore: readOnlyRole(
       "Search this repository and answer one narrow question with file and line citations.",
@@ -103,12 +159,26 @@ export const DEFAULT_CONFIG: OmtConfig = {
       [rung("codex", ASTRA, "high"), rung("claudeAgent", OPUS, "high")],
       true,
     ),
-    test: editRole(
-      "Write and run tests and real checks, then return a verdict with evidence.",
+    verify: editRole(
+      "Drive the Simulator, a device, a browser, or a computer, and run the unit's checks; return a verdict with logs and screenshots.",
       "test",
       "test",
-      [rung("codex", SOL, "low"), rung("claudeAgent", SONNET, "low")],
+      [rung("claudeAgent", HAIKU, "medium"), rung("claudeAgent", SONNET, "low"), rung("codex", SOL, "low")],
     ),
+    qa: editRole(
+      "Write the tests that the plan lists for the unit, e2e first, and make them pass.",
+      "test",
+      "test",
+      [rung("codex", SOL, "medium"), rung("claudeAgent", SONNET, "medium")],
+    ),
+    guardrail: {
+      ...readOnlyRole(
+        "Turn review findings into deterministic checks and rule fixes, so that the next change cannot repeat them.",
+        "review",
+        [rung("claudeAgent", OPUS, "high"), rung("codex", ASTRA, "high")],
+      ),
+      result: "guardrail",
+    },
     writing: editRole(
       "Write or edit documentation and other prose.",
       "work",
@@ -129,7 +199,7 @@ export const DEFAULT_CONFIG: OmtConfig = {
     ),
   },
   limits: {
-    maxParallel: 4,
+    maxParallel: 6,
     maxTasksPerRun: 24,
     maxDepth: 1,
     maxReviewRounds: 3,

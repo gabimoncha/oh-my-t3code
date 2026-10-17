@@ -373,8 +373,8 @@ test("a directory at the shim path is a conflict", async (t) => {
 
 test("withGitignoreLines appends the missing lines and keeps the others", () => {
   assert.equal(withGitignoreLines(undefined), OMT_GITIGNORE);
-  assert.equal(withGitignoreLines("ledger.jsonl\nevidence/\nmine"), "ledger.jsonl\nevidence/\nmine\nbin/\ninstall.json\nbackups/\nplans/\n");
-  const full = "x\nbackups/\nbin/\ninstall.json\nevidence/\nledger.jsonl\nplans/\n";
+  assert.equal(withGitignoreLines("ledger.jsonl\nevidence/\nmine"), "ledger.jsonl\nevidence/\nmine\nbin/\ninstall.json\nbackups/\nplans/\nlocks/\nguardrails.md\n");
+  const full = "x\nbackups/\nbin/\ninstall.json\nevidence/\nledger.jsonl\nplans/\nlocks/\nguardrails.md\n";
   assert.equal(withGitignoreLines(full), full);
 });
 
@@ -392,7 +392,7 @@ test("install --project leaves an existing .omt/.gitignore alone; --no-git-exclu
   await g.runOk(["install", "--project", "--no-git-exclude", "--yes"]);
   assert.equal(
     readFileSync(join(g.project, ".omt", ".gitignore"), "utf8"),
-    "ledger.jsonl\nevidence/\nnotes/\nbin/\ninstall.json\nbackups/\nplans/\n",
+    "ledger.jsonl\nevidence/\nnotes/\nbin/\ninstall.json\nbackups/\nplans/\nlocks/\nguardrails.md\n",
   );
 });
 
@@ -418,16 +418,16 @@ function downgradeGitignore(f: ProjectFixture, text: string, recorded: string): 
   writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 }
 
-test("a reinstall appends plans/ to an unedited .omt/.gitignore that an earlier install created", async (t) => {
+test("a reinstall appends plans/, locks/, and guardrails.md to an unedited .omt/.gitignore that an earlier install created", async (t) => {
   const f = projectFixture(t);
   await f.runOk(["install", "--project", "--yes"]);
   downgradeGitignore(f, OLD_GITIGNORE, OLD_GITIGNORE);
   const { ctx } = await f.runOk(["install", "--project", "--yes"]);
   assert.match(ctx.out(), /update {3}.*\.gitignore/);
   const gitignore = join(f.project, ".omt", ".gitignore");
-  assert.equal(readFileSync(gitignore, "utf8"), `${OLD_GITIGNORE}plans/\n`);
+  assert.equal(readFileSync(gitignore, "utf8"), `${OLD_GITIGNORE}plans/\nlocks/\nguardrails.md\n`);
   const record = gitignoreRecord(readJson(join(f.project, ".omt", "install.json")), gitignore);
-  assert.equal(record?.sha256, sha256(`${OLD_GITIGNORE}plans/\n`));
+  assert.equal(record?.sha256, sha256(`${OLD_GITIGNORE}plans/\nlocks/\nguardrails.md\n`));
 });
 
 test("a reinstall leaves an edited .omt/.gitignore alone", async (t) => {

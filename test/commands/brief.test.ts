@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { requestId } from "../../src/ledger/ledger.ts";
@@ -71,6 +71,18 @@ test("brief --json adds clientRequestId only with both --plan and --unit", async
   assert.equal("clientRequestId" in planOnly.delegateTask, false);
   const unitOnly = parse((await project.runOk(["brief", "review", "--task", "x", "--unit", "U3", "--json"])).ctx.out());
   assert.equal("clientRequestId" in unitOnly.delegateTask, false);
+});
+
+test("brief --json accepts a plan id without a plan file and keeps it in the request id and header", async (t) => {
+  const project = makeProject(t);
+  const plan = join(project.cwd, ".omt", "plans", "review-x.md");
+  assert.equal(existsSync(plan), false);
+  const { code, ctx } = await project.run(["brief", "review", "--task", "t", "--plan", "review-x", "--unit", "G1", "--json"]);
+  assert.equal(code, 0, ctx.err());
+  const output = parse(ctx.out());
+  assert.equal(output.delegateTask.clientRequestId, "omt:review-x:G1:review:r1:a1");
+  assert.match(output.delegateTask.task, /^<!-- omt-brief v1 role=review round=1 depth=1\/1 plan=review-x unit=G1 -->\n/);
+  assert.equal(existsSync(plan), false);
 });
 
 test("brief --json follows the title rule", async (t) => {
@@ -155,9 +167,9 @@ test("brief --max-depth overrides the config max depth, and a deeper --depth is 
   assert.equal(tooDeep.code, 2);
   assert.match(tooDeep.ctx.err(), /^hint: .*--max-depth/m);
 
-  const deviceChild = await project.runOk(["brief", "test", "--task", "x", "--depth", "2"]);
+  const deviceChild = await project.runOk(["brief", "verify", "--task", "x", "--depth", "2"]);
   assert.match(deviceChild.ctx.out(), /depth=2\/2/);
-  assert.equal((await project.run(["brief", "test", "--task", "x", "--depth", "3"])).code, 2);
+  assert.equal((await project.run(["brief", "verify", "--task", "x", "--depth", "3"])).code, 2);
 
   for (const bad of ["4", "-1", "x"]) {
     assert.equal((await project.run(["brief", "execute", "--task", "x", "--max-depth", bad])).code, 2, bad);

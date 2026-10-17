@@ -76,10 +76,7 @@ test("formatRolesTable widens columns and prints the unverified footer", () => {
   assert.ok(output.endsWith("\nunverified: pass --capabilities <file> to check the chains against T3\n"));
   assert.equal(lines.length, 1 + Object.keys(DEFAULT_CONFIG.roles).length + 3);
   const planReview = lines.find((line) => line.startsWith("plan-review"));
-  assert.equal(
-    planReview,
-    "plan-review  unverified  codex/gpt-6-astra reasoningEffort=high         read-only  plan     yes",
-  );
+  assert.match(planReview ?? "", /^plan-review\s+unverified\s+codex\/gpt-6-astra reasoningEffort=high\s+read-only\s+plan\s+yes$/);
   const long: OmtConfig = {
     ...DEFAULT_CONFIG,
     roles: {

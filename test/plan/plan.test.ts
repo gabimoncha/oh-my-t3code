@@ -43,10 +43,11 @@ const SAMPLE = `# Auth refactor
 test("planTemplate fills the title, slug, and timestamp", () => {
   const text = planTemplate("auth", "Auth work", "2026-01-02T03:04:05.000Z");
   assert.match(text, /^# Auth work\n\n<!-- omt-plan v1 slug=auth created=2026-01-02T03:04:05\.000Z -->\n/);
-  for (const heading of ["Summary", "Objective", "Done when", "Research", "Roles", "Units", "Final verification", "Log"]) {
+  for (const heading of ["Summary", "Objective", "Done when", "Research", "Roles", "Tests", "Units", "Final verification", "Log"]) {
     assert.match(text, new RegExp(`^## ${heading}$`, "m"));
   }
   assert.match(text, /^- 2026-01-02T03:04:05\.000Z plan created$/m);
+  assert.match(text, /## Roles\n[\s\S]*\n## Tests\n\nAn empty section means no new tests\.\n\n- <layer> <unit>: <flow or case>\. File: <path>\. Reason: <why>\.\n\n## Units\n/);
   const status = parsePlan(text);
   assert.equal(status.title, "Auth work");
   assert.equal(status.slug, "auth");
@@ -129,6 +130,7 @@ test("plan status prints counts and the next unit, defaulting to the newest plan
     ctx.out(),
     [
       `plan: auth-refactor (${join(dir, "auth-refactor.md")})`,
+      "profile: normal",
       "units: 2/5 done, 1 blocked, 2 open",
       "done-when: 1/2",
       "final: 1/2",
@@ -293,6 +295,8 @@ test("parsePlan reads slug and max-parallel only from the first header comment, 
   assert.equal(parsePlan(plan("")).slug, "p");
   assert.equal(parsePlan(plan(" max-parallel=3")).maxParallel, 3);
   assert.equal(parsePlan(plan(" max-parallel=3")).slug, "p");
+  assert.equal(parsePlan(plan(" profile=prototype")).profile, "prototype");
+  assert.equal(parsePlan(plan("") + "\nprofile=prototype\n").profile, undefined);
 });
 
 test("the template has a Summary section between the header and Objective, also with --light", () => {

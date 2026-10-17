@@ -12,6 +12,49 @@
     "version": {
       "const": 1
     },
+    "profile": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{0,31}$",
+      "description": "Default workflow profile. Default normal."
+    },
+    "profiles": {
+      "type": "object",
+      "description": "Profile overrides and new profiles. A new profile needs a description. Null removes a custom profile.",
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9-]{0,31}$"
+      },
+      "properties": {
+        "normal": {
+          "$ref": "#/$defs/profile"
+        },
+        "prototype": {
+          "$ref": "#/$defs/profile"
+        },
+        "pr-review": {
+          "$ref": "#/$defs/profile"
+        }
+      },
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "null"
+          },
+          {
+            "$ref": "#/$defs/profile"
+          }
+        ]
+      }
+    },
+    "models": {
+      "type": "object",
+      "propertyNames": {
+        "minLength": 1,
+        "maxLength": 200
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/model"
+      }
+    },
     "roles": {
       "type": "object",
       "description": "Role overrides and new roles. Set a role to null to remove it.",
@@ -93,7 +136,8 @@
             "review",
             "test",
             "research",
-            "plan"
+            "plan",
+            "guardrail"
           ]
         },
         "t3Role": {
@@ -125,6 +169,9 @@
         "crossFamily": {
           "type": "boolean",
           "description": "With --against, try the rungs outside the worker's family first."
+        },
+        "fast": {
+          "type": "boolean"
         },
         "chain": {
           "type": "array",
@@ -181,6 +228,9 @@
             "max"
           ]
         },
+        "fast": {
+          "type": "boolean"
+        },
         "options": {
           "type": "object",
           "additionalProperties": {
@@ -188,6 +238,199 @@
               "string",
               "boolean"
             ]
+          }
+        }
+      }
+    },
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "fast": {
+          "type": "boolean"
+        }
+      }
+    },
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "extends": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,31}$"
+        },
+        "workflow": {
+          "$ref": "#/$defs/workflow"
+        },
+        "limits": {
+          "$ref": "#/properties/limits"
+        },
+        "roles": {
+          "$ref": "#/properties/roles"
+        },
+        "models": {
+          "$ref": "#/properties/models"
+        }
+      }
+    },
+    "workflow": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "plan": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "review": {
+              "enum": [
+                "two-families",
+                "one",
+                "owner"
+              ]
+            },
+            "testLayers": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "e2e",
+                  "integration",
+                  "unit"
+                ]
+              }
+            }
+          }
+        },
+        "design": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "variants": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 5
+            }
+          }
+        },
+        "build": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "review": {
+              "enum": [
+                "every-round",
+                "first-round",
+                "off"
+              ]
+            },
+            "verify": {
+              "enum": [
+                "heavy",
+                "every-unit"
+              ]
+            },
+            "qa": {
+              "enum": [
+                "planned",
+                "off"
+              ]
+            },
+            "failureProofs": {
+              "enum": [
+                "on",
+                "off"
+              ]
+            },
+            "oracle": {
+              "enum": [
+                "heavy",
+                "always",
+                "off"
+              ]
+            },
+            "checkpoint": {
+              "enum": [
+                "none",
+                "layer",
+                "unit"
+              ]
+            },
+            "stallMinutes": {
+              "type": "integer",
+              "minimum": 10,
+              "maximum": 120
+            }
+          }
+        },
+        "review": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "reviewers": {
+              "oneOf": [
+                {
+                  "const": "auto"
+                },
+                {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 4
+                }
+              ]
+            },
+            "families": {
+              "enum": [
+                "one",
+                "both"
+              ]
+            },
+            "oracle": {
+              "enum": [
+                "on",
+                "off"
+              ]
+            },
+            "fixLoop": {
+              "enum": [
+                "offer",
+                "off"
+              ]
+            },
+            "ci": {
+              "enum": [
+                "off",
+                "check",
+                "fix"
+              ]
+            },
+            "verify": {
+              "enum": [
+                "off",
+                "changed-flows"
+              ]
+            },
+            "tests": {
+              "enum": [
+                "off",
+                "offer"
+              ]
+            },
+            "guardrails": {
+              "enum": [
+                "off",
+                "propose"
+              ]
+            },
+            "crap": {
+              "enum": [
+                "off",
+                "report"
+              ]
+            }
           }
         }
       }

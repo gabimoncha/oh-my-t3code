@@ -36,7 +36,7 @@ export function tempDir(t: TestContext, prefix = "omt-test-"): string {
   return path;
 }
 
-export const OMT_GITIGNORE = "ledger.jsonl\nevidence/\nbin/\ninstall.json\nbackups/\nplans/\n";
+export const OMT_GITIGNORE = "ledger.jsonl\nevidence/\nbin/\ninstall.json\nbackups/\nplans/\nlocks/\nguardrails.md\n";
 
 export function omtExit(code: number): (error: unknown) => error is OmtError {
   return (error: unknown): error is OmtError => error instanceof OmtError && error.exitCode === code;
@@ -72,6 +72,7 @@ export function spawnOmt(args: string[], { root, cwd = root, env = {}, input = "
     env: { ...childEnv(root), ...env },
     encoding: "utf8",
     input,
+    timeout: 30_000,
   });
   return { code: result.status, stdout: result.stdout, stderr: result.stderr };
 }

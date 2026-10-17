@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { join } from "node:path";
 import { renderBrief, briefTitle, TITLE_MAX } from "../brief/render.ts";
 import type { BriefInput } from "../brief/render.ts";
 import { findRoleTemplate, loadResultContract } from "../brief/templates.ts";
@@ -8,8 +10,9 @@ import { findRole, resolveRole, toRouteOutput } from "../routing/resolve.ts";
 import type { BriefJsonOutput, CliContext, CommandRun } from "../types.ts";
 import { parseArgs, positiveInt } from "../util/args.ts";
 import { OmtError, usageError } from "../util/errors.ts";
+import { pathExists, writeFileAtomic } from "../util/fs.ts";
 import { formatJson } from "../util/output.ts";
-import { againstOptions, checkAgainst, loadConfigReporting, readCapabilities, readInput } from "./shared.ts";
+import { againstOptions, checkAgainst, loadEffectiveConfigReporting, readCapabilities, readInput } from "./shared.ts";
 
 export const summary = "Render a task brief for a role, or a delegate_task payload.";
 
@@ -29,7 +32,8 @@ Options:
   --round <n>              review or fix round (default 1)
   --depth <n>              the child's depth (default 1)
   --max-depth <n>          override limits.maxDepth from the config (0 to 3)
-  --plan <slug>            plan id for the header and the request id
+  --plan <slug>            use the plan's profile; id for the header and request id
+  --profile <name>         override the selected profile
   --unit <id>              unit id for the header and the request id
   --attempt <n>            attempt number for the request id (default 1)
   --title <text>           thread title for --json output
@@ -37,6 +41,7 @@ Options:
   --against <value>        the provider or driver of the worker whose change the task
                            reviews, used with --json; auto reads it from the ledger and needs --plan
   --json                   print a ready delegate_task payload
+  --save                   save the full brief; use a short task with --json
   -h, --help               print this help
 `;
 
@@ -57,6 +62,10 @@ async function readText(
   return readInput(ctx, flag, file);
 }
 
+function shellWord(value: string): string {
+  return /^[A-Za-z0-9_./:@=-]+$/.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`;
+}
+
 export const run: CommandRun = async (ctx) => {
   const { values, positionals } = parseArgs(ctx.argv, {
     task: { type: "string" },
@@ -71,12 +80,14 @@ export const run: CommandRun = async (ctx) => {
     depth: { type: "string" },
     "max-depth": { type: "string" },
     plan: { type: "string" },
+    profile: { type: "string" },
     unit: { type: "string" },
     attempt: { type: "string" },
     title: { type: "string" },
     capabilities: { type: "string" },
     against: { type: "string" },
     json: { type: "boolean" },
+    save: { type: "boolean" },
   }, { maxPositionals: 1 });
   const [name] = positionals;
   if (name === undefined) throw usageError("brief needs a <role>");
@@ -96,12 +107,12 @@ export const run: CommandRun = async (ctx) => {
   const maxDepthFlag = values["max-depth"];
   const maxDepthOverride = maxDepthFlag === undefined ? undefined : limitArg("--max-depth", maxDepthFlag, "maxDepth");
 
-  const { config } = await loadConfigReporting(ctx);
+  const { config, profile } = await loadEffectiveConfigReporting(ctx, { plan: values.plan, profile: values.profile, allowMissingPlan: true });
   const role = findRole(config, name);
 
   const limit = maxDepthOverride ?? config.limits.maxDepth;
-  // A worker at max depth may still hand a device check to one test child, one level deeper.
-  const maxDepth = name === "test" && depth === limit + 1 ? depth : limit;
+  // A worker at max depth can still send a device check to a verify child.
+  const maxDepth = name === "verify" && depth === limit + 1 ? depth : limit;
   if (depth > maxDepth) {
     throw usageError(`--depth ${depth} is greater than the max depth ${limit}`, "pass --max-depth <n> to raise the limit (0 to 3)");
   }
@@ -123,13 +134,18 @@ export const run: CommandRun = async (ctx) => {
     configuredMaxDepth: config.limits.maxDepth,
     access: role.access,
     interactionMode: role.interactionMode,
+    failureProofs: profile.workflow.build.failureProofs,
   };
   if (context !== undefined) input.context = context;
   if (prior !== undefined) input.prior = prior;
   if (values.plan !== undefined) input.plan = values.plan;
+  if (values.profile !== undefined) input.profile = values.profile;
   if (values.unit !== undefined) input.unit = values.unit;
 
   const projectRoot = findProjectRoot(ctx.cwd);
+  const localCli = join(projectRoot, ".omt", "bin", "omt");
+  const cliCommand = await pathExists(localCli) ? shellWord(localCli) : "omt";
+  input.cliCommand = cliCommand;
   if (role.access === "edit") input.evidenceDir = `${evidenceDir(projectRoot)}/`;
 
   const roots = { packageRoot: ctx.packageRoot, projectRoot, env: ctx.env, homedir: ctx.homedir };
@@ -141,15 +157,21 @@ export const run: CommandRun = async (ctx) => {
       hint: "shorten --context or --prior-file, or point the child at files instead",
     });
   }
+  const clientRequestId = values.plan !== undefined && values.unit !== undefined
+    ? requestId(values.plan, values.unit, name, round, attempt) : undefined;
+  const savedPath = values.save
+    ? join(evidenceDir(projectRoot), "briefs", `${clientRequestId ?? `${name}-${createHash("sha256").update(brief).digest("hex").slice(0, 12)}`}.md`)
+    : undefined;
 
   if (!json) {
+    if (savedPath !== undefined) await writeFileAtomic(savedPath, brief);
     ctx.stdout(brief);
     return 0;
   }
 
   const caps = await readCapabilities(ctx, values.capabilities);
-  const resolution = resolveRole(name, role, caps, await againstOptions(ctx, config, role, values));
-  for (const note of resolution.notes ?? []) ctx.stderr(`note: ${note}\n`);
+  const resolution = resolveRole(name, role, caps, { ...await againstOptions(ctx, config, role, values), models: config.models });
+  for (const note of toRouteOutput(resolution).notes) ctx.stderr(`note: ${note}\n`);
   const args = resolution.delegateTask;
   if (args === undefined) {
     throw new OmtError("role_unavailable", `role ${name} is unavailable: no rung in its chain can run`, {
@@ -168,8 +190,22 @@ export const run: CommandRun = async (ctx) => {
     },
     fallbacks: resolution.fallbacks,
   };
-  if (values.plan !== undefined && values.unit !== undefined) {
-    output.delegateTask.clientRequestId = requestId(values.plan, values.unit, name, round, attempt);
+  if (clientRequestId !== undefined) {
+    output.delegateTask.clientRequestId = clientRequestId;
+  }
+  if (savedPath !== undefined) {
+    await writeFileAtomic(savedPath, brief);
+    output.delegateTask.task = `Act as the ${name} sub-agent for this task. Your full brief is in the file ${savedPath}. Read it in full first, then follow it exactly. End with the result block that the brief defines.`;
+    const fields = [
+      ...(values.plan === undefined ? [] : ["--plan", values.plan]),
+      ...(values.unit === undefined ? [] : ["--unit", values.unit]),
+      "--role", name, "--round", String(round), "--attempt", String(attempt),
+      "--status", "dispatched", "--task-id", "<taskId>",
+      ...(clientRequestId === undefined ? [] : ["--client-request-id", clientRequestId]),
+      "--provider", args.target.providerInstanceId ?? args.target.driverKind as string,
+      "--model", args.target.model,
+    ];
+    output.ledger = { dispatched: `${cliCommand} ledger add ${fields.map((value) => value === "<taskId>" ? value : shellWord(value)).join(" ")}` };
   }
   ctx.stdout(formatJson(output));
   return 0;

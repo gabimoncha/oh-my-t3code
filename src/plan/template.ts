@@ -1,10 +1,11 @@
-export function planTemplate(slug: string, title: string, createdAt: string, options: { light?: boolean; maxParallel?: number; maxTasks?: number } = {}): string {
+export function planTemplate(slug: string, title: string, createdAt: string, options: { light?: boolean; maxParallel?: number; maxTasks?: number; profile?: string } = {}): string {
   const oracle = options.light === true ? "" : "- [ ] F2. The oracle role approves the whole change.\n";
   const parallel = options.maxParallel === undefined ? "" : ` max-parallel=${options.maxParallel}`;
   const tasks = options.maxTasks === undefined ? "" : ` max-tasks=${options.maxTasks}`;
+  const profile = options.profile === undefined ? "" : ` profile=${options.profile}`;
   return `# ${title}
 
-<!-- omt-plan v1 slug=${slug} created=${createdAt}${parallel}${tasks} -->
+<!-- omt-plan v1 slug=${slug} created=${createdAt}${parallel}${tasks}${profile} -->
 
 ## Summary
 
@@ -25,6 +26,12 @@ export function planTemplate(slug: string, title: string, createdAt: string, opt
 ## Roles
 
 <paste the output of \`omt roles\` here>
+
+## Tests
+
+An empty section means no new tests.
+
+- <layer> <unit>: <flow or case>. File: <path>. Reason: <why>.
 
 ## Units
 

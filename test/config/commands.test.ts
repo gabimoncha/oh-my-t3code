@@ -29,13 +29,13 @@ function setup(t: TestContext) {
   return { root, project, configDir, userPath, projectPath, ctx, write: writeFile };
 }
 
-test("config show --defaults prints the 13 default roles as JSON", async (t) => {
+test("config show --defaults prints the 15 default roles as JSON", async (t) => {
   const { ctx } = setup(t);
   const c = ctx(["show", "--defaults"]);
   assert.equal(await config(c), 0);
   const printed = JSON.parse(c.out());
   assert.deepEqual(printed, DEFAULT_CONFIG);
-  assert.equal(Object.keys(printed.roles).length, 13);
+  assert.equal(Object.keys(printed.roles).length, 15);
   assert.deepEqual(printed.visuals, { plan: true });
 });
 
@@ -225,7 +225,7 @@ test("init adds the missing lines to an existing .gitignore and keeps the user's
   );
   assert.equal(
     readFileSync(ignore, "utf8"),
-    "ledger.jsonl\nevidence/\nbin/\ninstall.json\nbackups/\n# mine\nscratch/\nplans/\n",
+    "ledger.jsonl\nevidence/\nbin/\ninstall.json\nbackups/\n# mine\nscratch/\nplans/\nlocks/\nguardrails.md\n",
   );
   const again = ctx([]);
   assert.equal(await init(again), 0);

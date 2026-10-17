@@ -2,11 +2,11 @@
 
 oh-my-t3code is an orchestration layer for [T3 Code](https://t3.codes). It gives any agent inside a T3 thread a disciplined way to plan, delegate, review, and verify work through T3's own orchestrator. The ideas come from oh-my-openagent (OmO) and oh-my-pi (omp). The mechanism is T3 orchestrator v2.
 
-The research behind every decision on this page is in [`docs/research/`](research/). The exact contracts for the code are in [`spec.md`](spec.md).
+The [T3 orchestration report](research/t3-orchestrator-v2.md), [OmO report](research/oh-my-openagent.md), and [omp report](research/oh-my-pi.md) record the research behind the original design. The exact contracts for the code are in [`spec.md`](spec.md).
 
 ## Who this is for
 
-The user is a developer who runs Claude Code, Codex, Cursor, Pi, or OpenCode agents from T3 Code. That developer wants one sentence ("ulw: add OAuth to the API") to turn into a planned run. Each unit then goes to the right model, gets a review, and ends with tests that ran. Before the run counts as done, a reviewer from another model family attacks the result.
+The user is a developer who runs Claude Code, Codex, Cursor, Pi, or OpenCode agents from T3 Code. That developer wants one sentence ("ulw: add OAuth to the API") to turn into a planned run. Each unit goes to a role-routed model and gets the checks that its profile requires. The normal profile reviews each unit and requires a final cross-family oracle for HEAVY work.
 
 The maintainer inherits a small TypeScript CLI with no runtime dependencies, a set of portable skills, and one config file. Every subagent runs as a T3 child thread, so the T3 UI already shows progress, cancellation, and results. oh-my-t3code adds no server and no daemon.
 
@@ -26,7 +26,7 @@ T3 does not give us roles, model routing, briefs, review loops, or done criteria
 
 ### Roles, not model names
 
-Skills and plans name a role such as `execute`, `review`, or `test`. One config maps each role to an ordered chain of rungs. A rung is a provider, a model, and an effort level. The first rung that T3 can run wins.
+Skills and plans name a role such as `execute`, `review`, or `verify`. One config maps each role to an ordered chain of rungs. A rung is a provider, a model, and an effort level. The first rung that T3 can run wins.
 
 This comes from omp model roles and OmO categories. It matters more in T3 than in either source, because T3 can reach several providers at once. A role chain such as "Opus 5.5 at medium effort, then GPT-6.1-Sol at xhigh effort" survives a missing subscription or a disabled provider.
 
@@ -40,7 +40,7 @@ The ledger records the provider of each dispatch. So `--against auto` finds the 
 
 ### Designs come from Opus, and the owner steers
 
-The `design` role makes design variants and the design spec, and the `ui` role implements a UI unit from that spec. Both run only on Claude Opus 5.5: `design` at high effort, `ui` at medium. Neither has a fallback to another family. The owner chose this rule, because Opus is far better at design, and a human steers taste. No model reviews a design: `review`, `oracle`, and `plan-review` tasks leave `docs/design/` out. The designer makes a new Paper file for each project and 3 variants of each screen, so the owner compares real options side by side. The owner picks one variant per screen, may mix variants across screens, steers them in their own words, and approves the spec. Code review of `ui` units still runs as for any other unit.
+The `design` role makes design variants and the design spec, and the `ui` role implements a UI unit from that spec. Both run only on Claude Opus 5.5: `design` at high effort, `ui` at medium. Neither has a fallback to another family. The owner chose this rule, because Opus is far better at design, and a human steers taste. No model reviews a design: `review`, `oracle`, and `plan-review` tasks leave `docs/design/` out. The designer makes a new Paper file for each project and uses `design.variants` for each screen, 3 in the normal profile, so the owner compares real options side by side. The owner picks one variant per screen, may mix variants across screens, steers them in their own words, and approves the spec. Code review of `ui` units still runs as for any other unit.
 
 ### A CLI for the deterministic parts, skills for the judgment
 
@@ -60,17 +60,37 @@ The split follows the rule of the section above. The `omt-show` skill decides wh
 
 A child sees nothing of the parent conversation. Every task therefore carries a brief with a fixed shape: role persona, task, context, scope, constraints, done condition, verify commands, and the required final message format. OmO's worker contract (task, deliverable, scope, verify, stop condition) is the model for this.
 
-`task_status.summary` is the child's last assistant message. Each role therefore ends with a fixed result block: `STATUS` for workers, `VERDICT` for reviewers and testers, `ANSWER` for researchers. The parent reads the block and checks the evidence itself. A worker's "done" is a claim until the parent or a tester confirms it.
+`task_status.summary` is the child's last assistant message. Each role therefore ends with a fixed result block: `STATUS` for workers, `VERDICT` for reviewers, verify, qa, and guardrail tasks, and `ANSWER` for researchers. The parent reads the block and checks the evidence itself. A worker's "done" is a claim until the parent or a `verify` task confirms it.
 
 ### Read-only roles run in plan mode
 
-A live experiment showed that a Claude child in T3 `plan` interaction mode runs read-only commands, stays in plan mode, and returns its final message intact. Explore, research, review, oracle, and plan-review roles therefore default to `interactionMode: "plan"`. On Claude, Codex, Cursor, and OpenCode, T3 enforces read-only access for those children, and the brief does not have to rely on the child's restraint. T3 has no plan-mode handling for Pi, so a Pi child in a read-only role relies on its brief alone. No default rung uses Pi; a custom chain that adds Pi to a read-only role accepts that risk.
+A live experiment showed that a Claude child in T3 `plan` interaction mode runs read-only commands, stays in plan mode, and returns its final message intact. Explore, research, review, oracle, plan-review, and guardrail roles therefore default to `interactionMode: "plan"`. On Claude, Codex, Cursor, and OpenCode, T3 enforces read-only access for those children, and the brief does not have to rely on the child's restraint. T3 has no plan-mode handling for Pi, so a Pi child in a read-only role relies on its brief alone. No default rung uses Pi; a custom chain that adds Pi to a read-only role accepts that risk.
 
 Plan mode has one trap. T3 stores a proposed plan as its own item type, and `task_status.summary` reads only assistant messages. A child that answers with a proposed plan (Claude's ExitPlanMode, or Codex plan output) can hide its result block from the summary. Every plan-mode brief therefore tells the child to stay in plan mode and put the block in its final assistant message. When a summary still comes back empty, the conductor reads the child thread, which includes proposed plans.
 
 ### Children share the checkout
 
-A delegated child works in the parent's project, branch, and worktree. Two editing children on overlapping files corrupt each other's work. The plan therefore gives every unit an explicit scope, and the conductor runs editing units in parallel only when their scopes do not overlap. Truly independent tracks go to separate worktree threads through `t3_thread_launch`, and only when the user asks for that, as T3's own rules require. The `omt-swarm` skill is that explicit ask.
+Delegated units stay in one checkout so their changes are integrated throughout the run. A worktree per unit would need repeated setup, integration, and checks after merge. Each unit has an explicit file scope. Only disjoint edit scopes run in parallel, up to the default `maxParallel` of 6. Shared build state uses a lock. Independent tracks can use `omt-swarm` when the owner asks for separate worktree threads.
+
+### Profiles select the workflow
+
+A role selects a model. A profile selects the plan, build, and review steps. Keeping those choices separate lets a project use the same roles for normal work, prototypes, and PR reviews. Sparse profile overrides inherit `normal`, so a custom workflow states only its differences. A plan header keeps the selected profile across context resets. The conductor reloads it on wake so an owner can switch the remaining work.
+
+### Verification and test writing are separate
+
+`verify` runs the artifact and existing checks. `qa` writes the approved tests after verification passes. The split avoids new tests on every worker attempt and keeps device checks on a role that can reach local tools. Only qa makes required failure proofs. A ui worker requests design screenshots, while unit verification checks behavior without a second design comparison.
+
+### New tests need a plan line
+
+Each new test maps to an owner-approved `## Tests` line. This makes the test's flow, file, and reason reviewable before qa writes it. The default proposal is one e2e test per main flow. Other layers need a reason and owner approval. An empty list means no new tests, while verification still checks the artifact.
+
+### Build locks follow open files
+
+A kernel lock on an inherited fd 3 survives a wrapper crash while another holder remains. Nothing guesses that a lock is stale or takes it over. The lock file keeps its inode, and the kernel releases the lock when the last holder closes it. Commands that leave processes behind run outside the lock with a serial plan. Without `flock` or `lockf`, the CLI still runs the command and the plan keeps shared builds serial.
+
+### Guardrails prefer checks that can fail
+
+A lint rule, type rule, test, or CI check can catch a repeated defect without another model judgment. The guardrail role therefore proposes a deterministic check before a rule correction or a new rule. Each check proposal names a command that fails before the fix and passes after it. Judgment-only findings get no proposal. Local `.omt/guardrails.md` records proposals for separate work without adding them to the PR branch.
 
 ### Limits that T3 does not set
 

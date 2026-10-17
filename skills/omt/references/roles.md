@@ -15,12 +15,16 @@ A role names a kind of work. The config maps each role to a chain of rungs (prov
 | `deep` | edit | work | A hard or cross-cutting problem that needs investigation first, also a fix whose cause is unknown, whose previous fix failed for the same reason, or that changes the design. |
 | `review` | read-only | review | One review round of a diff against its brief. Cross-family. Pass the worker with `--against`. |
 | `oracle` | read-only | review | The final gate. Attack the finished change from the family other than the main implementer's. Cross-family. |
-| `test` | edit | test | Writing and running tests and real checks for a verdict with evidence. The only role that drives a device, a Simulator UI, a browser, or a computer; every other role in `default` mode delegates that to a `test` task, and a read-only role lists the checks for the conductor. |
+| `verify` | edit | test | Running the unit's checks and main flows for a verdict with logs and screenshots. Writes no tests and edits no product files. |
+| `qa` | edit | test | Writing only the task's test lines, top-down, and running them until they pass. Leaves product code unchanged. |
+| `guardrail` | read-only | guardrail | Turning review findings into deterministic checks and rule fixes. Proposes changes and edits no files. |
 | `writing` | edit | work | Documentation and other prose. |
 | `design` | edit | work | Design variants of each screen and the design spec for screens and flows ([omt-design](../../omt-design/SKILL.md)). Opus only, no fallback. |
 | `ui` | edit | work | One UI unit built from its design spec, in every round of that unit. Opus only, no fallback. |
 
 Read-only roles run in `plan` interaction mode; edit roles run in `default`. Every default role inherits your runtime mode. The persona for each role is `roles/<role>.md`, for example [roles/execute.md](roles/execute.md). The result block for each kind is `results/<kind>.md`, for example [results/work.md](results/work.md).
+
+Only `verify` drives a device, a Simulator UI, a browser, or a computer. Every other role in `default` mode delegates device checks with `omt brief verify`. A read-only role lists the steps and expected results for the conductor.
 
 ## Resolve with the CLI
 
@@ -40,21 +44,23 @@ ELECTRON_RUN_AS_NODE=1 "$T3_ACP_MCP_NODE" ${T3_ACP_MCP_ENTRYPOINT:+"$T3_ACP_MCP_
 
 When neither `omt` nor `.omt/bin/omt` is found (see [The CLI](delegation.md#the-cli)), use the default chains below, or the chains in `.omt/config.jsonc` and `~/.config/oh-my-t3code/config.jsonc` when they exist (the project file wins).
 
-| Role | Rung 1 | Rung 2 |
-| --- | --- | --- |
-| `explore` | codex / gpt-6-luna / low | claudeAgent / claude-sonnet-5-5 / low |
-| `research` | codex / gpt-6.1-sol / low | claudeAgent / claude-opus-5-5 / low |
-| `plan` | claudeAgent / claude-opus-5-5 / xhigh | codex / gpt-6-astra / xhigh |
-| `plan-review` | codex / gpt-6-astra / high | claudeAgent / claude-opus-5-5 / high |
-| `execute` | claudeAgent / claude-opus-5-5 / medium | codex / gpt-6.1-sol / xhigh |
-| `quick` | codex / gpt-6-luna / high | claudeAgent / claude-sonnet-5-5 / low |
-| `deep` | claudeAgent / claude-opus-5-5 / max | codex / gpt-6-astra / xhigh |
-| `review` | codex / gpt-6-astra / high | claudeAgent / claude-opus-5-5 / high |
-| `oracle` | codex / gpt-6-astra / high | claudeAgent / claude-opus-5-5 / high |
-| `test` | codex / gpt-6.1-sol / low | claudeAgent / claude-sonnet-5-5 / low |
-| `writing` | claudeAgent / claude-opus-5-5 / high | codex / gpt-6-astra / medium |
-| `design` | claudeAgent / claude-opus-5-5 / high | none |
-| `ui` | claudeAgent / claude-opus-5-5 / medium | none |
+| Role | Rung 1 | Rung 2 | Rung 3 |
+| --- | --- | --- | --- |
+| `explore` | codex / gpt-6-luna / low | claudeAgent / claude-sonnet-5-5 / low | none |
+| `research` | codex / gpt-6.1-sol / low | claudeAgent / claude-opus-5-5 / low | none |
+| `plan` | claudeAgent / claude-opus-5-5 / xhigh | codex / gpt-6-astra / xhigh | none |
+| `plan-review` | codex / gpt-6-astra / high | claudeAgent / claude-opus-5-5 / high | none |
+| `execute` | claudeAgent / claude-opus-5-5 / medium | codex / gpt-6.1-sol / xhigh | none |
+| `quick` | codex / gpt-6-luna / high | claudeAgent / claude-sonnet-5-5 / low | none |
+| `deep` | claudeAgent / claude-opus-5-5 / max | codex / gpt-6-astra / xhigh | none |
+| `review` | codex / gpt-6-astra / high | claudeAgent / claude-opus-5-5 / high | none |
+| `oracle` | codex / gpt-6-astra / high | claudeAgent / claude-opus-5-5 / high | none |
+| `verify` | claudeAgent / claude-haiku-5-5 / medium | claudeAgent / claude-sonnet-5-5 / low | codex / gpt-6.1-sol / low |
+| `qa` | codex / gpt-6.1-sol / medium | claudeAgent / claude-sonnet-5-5 / medium | none |
+| `guardrail` | claudeAgent / claude-opus-5-5 / high | codex / gpt-6-astra / high | none |
+| `writing` | claudeAgent / claude-opus-5-5 / high | codex / gpt-6-astra / medium | none |
+| `design` | claudeAgent / claude-opus-5-5 / high | none | none |
+| `ui` | claudeAgent / claude-opus-5-5 / medium | none | none |
 
 The cross-family roles are `plan-review`, `review`, and `oracle`. For these roles, try the rungs outside the worker's family first, then the rungs in the worker's family, each in table order. When no rung outside the worker's family can run, the same family reviews.
 
@@ -76,7 +82,15 @@ The effort option id depends on the driver:
 | `pi` | `thinking` | unchanged |
 | `opencode` | `variant` | `off` and `minimal` become `low`; `max` becomes `xhigh` |
 
-For any other driver, send no `options`. Set `role` to the T3 role (`research` for explore and research, `design` for plan and design, `review` for plan-review, review, and oracle, `implementation` for execute, quick, deep, writing, and ui, `test` for test). Set `interactionMode` from the Access column (`plan` for read-only, `default` for edit) and `runtimeMode` to `inherit`.
+For any other driver, send no effort option. Set `role` to the T3 role (`research` for explore and research, `design` for plan and design, `review` for plan-review, review, oracle, and guardrail, `implementation` for execute, quick, deep, writing, and ui, `test` for verify and qa). Set `interactionMode` from the Access column (`plan` for read-only, `default` for edit) and `runtimeMode` to `inherit`.
+
+## Fast mode
+
+Set fast mode with `models.<id>.fast`, `roles.<role>.fast`, or `rung.fast`. The first set value wins in this order: rung, role, model, then `false`. The default sets `models.gpt-6.1-sol.fast` to `true`. No default role or rung sets `fast`.
+
+When `fast` is `true`, map it as follows. With capabilities, use the model's advertised options. A `serviceTier` select with `priority` maps to `serviceTier: "priority"`. A boolean `fastMode` maps to `fastMode: true`. Without capabilities, driver `codex` gets `serviceTier: "priority"`, and driver `claudeAgent` with a model id that starts with `claude-opus` gets `fastMode: true`. Otherwise, add no option and report `fast mode is not offered by <provider>/<model>`.
+
+A key in `rung.options` wins over the fast mapping. With `fast: false`, add no fast option and use the provider default.
 
 ## Cross-family roles
 
@@ -107,4 +121,4 @@ A mode escalation error is not a rung problem: stop and report it ([delegation.m
 
 - Add or override a role in `.omt/config.jsonc` (project) or `~/.config/oh-my-t3code/config.jsonc` (user). A new role needs `description`, `access`, and `chain`. `omt config show --defaults` prints the built-in config; `omt config validate` checks a file.
 - A persona file `<role>.md` overrides the bundled one. Lookup order: `.omt/roles/`, then `~/.config/oh-my-t3code/roles/`, then the bundled `roles/`, then [roles/_generic.md](roles/_generic.md).
-- A custom role gets its result block from its `result` field: `work`, `review`, `test`, `research`, or `plan`.
+- A custom role gets its result block from its `result` field: `work`, `review`, `test`, `research`, `plan`, or `guardrail`.

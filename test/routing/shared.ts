@@ -6,6 +6,11 @@ import { PACKAGE_ROOT } from "../helpers.ts";
 
 export const CAPS_FILE = join(PACKAGE_ROOT, "test", "fixtures", "capabilities.json");
 export const CAPS_TEXT = readFileSync(CAPS_FILE, "utf8");
+export const LIVE_CAPS_FILE = join(PACKAGE_ROOT, "test", "fixtures", "capabilities-live.json");
+
+export function liveCaps(overrides: Partial<Capabilities> = {}): Capabilities {
+  return { ...parseCapabilities(readFileSync(LIVE_CAPS_FILE, "utf8")), ...overrides };
+}
 
 export function caps(overrides: Partial<Capabilities> = {}): Capabilities {
   return { ...parseCapabilities(CAPS_TEXT), ...overrides };

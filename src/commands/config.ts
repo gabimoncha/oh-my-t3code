@@ -15,7 +15,7 @@ export const summary = "Show, locate, validate, or create the omt config.";
 export const usage = `Usage: omt config [show | path | validate | init] [--json] [--defaults] [--force]
 
 Subcommands:
-  show              print the effective config as JSON (default)
+  show              print the merged config as JSON before profile selection (default)
   path              print the user and project config paths
   validate          print config issues; exit 1 on any error
   init              write the starter user config

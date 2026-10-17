@@ -1,7 +1,10 @@
 import { loadConfig } from "../config/load.ts";
 import { PROVIDER_PATTERN } from "../config/validate.ts";
 import { readLedger } from "../ledger/ledger.ts";
-import { findProjectRoot, ledgerPath } from "../paths.ts";
+import { findProjectRoot, ledgerPath, planPath } from "../paths.ts";
+import { parsePlan } from "../plan/parse.ts";
+import { effectiveConfig } from "../profile/resolve.ts";
+import type { EffectiveConfigOptions } from "../profile/resolve.ts";
 import { parseCapabilities } from "../routing/capabilities.ts";
 import { configuredDrivers, pickWorker } from "../routing/family.ts";
 import type { ResolveOptions } from "../routing/resolve.ts";
@@ -19,6 +22,26 @@ export async function loadConfigReporting(ctx: CliContext) {
   const loaded = await loadConfig(ctx);
   for (const issue of loaded.issues) ctx.stderr(formatIssue(issue));
   return loaded;
+}
+
+export async function loadEffectiveConfigReporting(
+  ctx: CliContext,
+  options: EffectiveConfigOptions & { plan?: string | undefined; allowMissingPlan?: boolean } = {},
+) {
+  let planProfile = options.planProfile;
+  if (options.plan !== undefined) {
+    checkPlanSlug(options.plan, "--plan");
+    const path = planPath(findProjectRoot(ctx.cwd), options.plan);
+    const markdown = await readFileIfExists(path);
+    if (markdown === undefined && !options.allowMissingPlan) {
+      throw new OmtError("plan_not_found", `plan "${options.plan}" not found at ${path}`);
+    }
+    planProfile = markdown === undefined ? undefined : parsePlan(markdown).profile;
+  }
+  const loaded = await loadConfigReporting(ctx);
+  const effective = effectiveConfig(loaded, { profile: options.profile, planProfile });
+  for (const issue of effective.profile.issues) ctx.stderr(formatIssue(issue));
+  return effective;
 }
 
 const AGAINST_RE = new RegExp(PROVIDER_PATTERN);

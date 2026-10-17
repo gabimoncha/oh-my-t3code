@@ -53,6 +53,11 @@ test("end to end: install, use every command in a project, then uninstall", (t) 
   assert.match(ok(["init"]), /^create .*\.omt[/\\]config\.jsonc$/m);
   assert.match(ok(["plan", "new", "demo"]), /demo\.md$/m);
   assert.match(ok(["plan", "status", "demo"]), /^next: U1 /m);
+  assert.match(ok(["profile", "list"]), /^normal\s+/m);
+  const profile = JSON.parse(ok(["profile", "show", "--plan", "demo", "--json"]));
+  assert.equal(profile.profile, "normal");
+  assert.equal(profile.source, "default");
+  assert.equal(profile.workflow.build.verify, "heavy");
 
   const brief = JSON.parse(ok(["brief", "execute", "--task", "x", "--plan", "demo", "--unit", "U1", "--json"])) as BriefJsonOutput;
   assert.equal(brief.delegateTask.clientRequestId, "omt:demo:U1:execute:r1:a1");

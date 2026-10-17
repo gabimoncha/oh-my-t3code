@@ -358,7 +358,7 @@ test("driver-only rungs prefer the inherited provider instance", () => {
 test("every default role resolves against the fixture", () => {
   const expected: Record<string, [string, string, Record<string, string>]> = {
     explore: ["codex", "gpt-6-luna", { reasoningEffort: "low" }],
-    research: ["codex", "gpt-6.1-sol", { reasoningEffort: "low" }],
+    research: ["codex", "gpt-6.1-sol", { reasoningEffort: "low", serviceTier: "priority" }],
     plan: ["claudeAgent", "claude-opus-5-5", { effort: "xhigh" }],
     "plan-review": ["codex", "gpt-6-astra", { reasoningEffort: "high" }],
     execute: ["claudeAgent", "claude-opus-5-5", { effort: "medium" }],
@@ -366,7 +366,9 @@ test("every default role resolves against the fixture", () => {
     deep: ["claudeAgent", "claude-opus-5-5", { effort: "max" }],
     review: ["codex", "gpt-6-astra", { reasoningEffort: "high" }],
     oracle: ["codex", "gpt-6-astra", { reasoningEffort: "high" }],
-    test: ["codex", "gpt-6.1-sol", { reasoningEffort: "low" }],
+    verify: ["claudeAgent", "claude-sonnet-5-5", { effort: "low" }],
+    qa: ["codex", "gpt-6.1-sol", { reasoningEffort: "medium", serviceTier: "priority" }],
+    guardrail: ["claudeAgent", "claude-opus-5-5", { effort: "high" }],
     writing: ["claudeAgent", "claude-opus-5-5", { effort: "high" }],
     design: ["claudeAgent", "claude-opus-5-5", { effort: "high" }],
     ui: ["claudeAgent", "claude-opus-5-5", { effort: "medium" }],
@@ -385,9 +387,16 @@ test("every default role resolves against the fixture", () => {
     assert.deepEqual(resolution.delegateTask?.target, { providerInstanceId, model, options }, name);
     assert.equal(resolution.delegateTask?.role, config.t3Role, name);
     assert.equal(resolution.delegateTask?.interactionMode, config.interactionMode, name);
-    assert.equal(resolution.fallbacks.length, config.chain.length - 1, name);
-    assert.ok(resolution.attempts.every((a) => a.ok && a.notes.length === 0), name);
+    assert.equal(resolution.fallbacks.length, config.chain.length - (name === "verify" ? 2 : 1), name);
+    assert.equal(resolution.attempts.filter((a) => !a.ok).length, name === "verify" ? 1 : 0, name);
   }
+});
+
+test("verify routes to Sonnet with the old fixture, which has no Haiku", () => {
+  const resolution = resolveAll(DEFAULT_CONFIG, caps(), ["verify"]).roles.verify;
+  assert.equal(resolution?.delegateTask?.target.model, "claude-sonnet-5-5");
+  assert.equal(resolution?.attempts[0]?.reason, "model claude-haiku-5-5 is not advertised by claudeAgent");
+  assert.equal(resolution?.attempts[1]?.ok, true);
 });
 
 test("every default role is unverified with provider instance targets without capabilities", () => {
@@ -400,7 +409,10 @@ test("every default role is unverified with provider instance targets without ca
     const optionId = first.driver === "codex" ? "reasoningEffort" : "effort";
     assert.deepEqual(
       resolution.delegateTask?.target,
-      { providerInstanceId: first.driver, model: first.model, options: { [optionId]: first.effort } },
+      { providerInstanceId: first.driver, model: first.model, options: {
+        [optionId]: first.effort,
+        ...(first.model === "gpt-6.1-sol" ? { serviceTier: "priority" } : {}),
+      } },
       name,
     );
     assert.equal(resolution.fallbacks[0]?.providerInstanceId, DEFAULT_CONFIG.roles[name]?.chain[1]?.driver, name);

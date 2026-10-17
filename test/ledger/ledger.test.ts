@@ -175,7 +175,7 @@ test("ledger stats prints LedgerStats as text and JSON", async (t) => {
   assert.equal(await run(ctx), 0);
   assert.equal(
     ctx.out(),
-    "dispatched: 2\nactive: 1\nterminal: 1\nmax parallel: 4\nmax tasks per run: 24\ncan dispatch: yes\n",
+    "profile: normal\ndispatched: 2\nactive: 1\nterminal: 1\nmax parallel: 6\nmax tasks per run: 24\ncan dispatch: yes\n",
   );
 
   const json = ctx.at(["stats", "--plan", "auth", "--json"]);
@@ -185,7 +185,7 @@ test("ledger stats prints LedgerStats as text and JSON", async (t) => {
     dispatched: 2,
     active: 1,
     terminal: 1,
-    limits: { maxParallel: 4, maxTasksPerRun: 24 },
+    limits: { maxParallel: 6, maxTasksPerRun: 24 },
     canDispatch: true,
   });
 });

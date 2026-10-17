@@ -6,6 +6,7 @@ export const USER_STARTER_CONFIG = `// oh-my-t3code user config. It applies to e
 {
   "$schema": "${SCHEMA_URL}",
   "version": 1,
+  // "profile": "prototype",
   "roles": {
     // Example: run reviews on Codex first, then fall back to Claude.
     // "review": {
@@ -16,7 +17,7 @@ export const USER_STARTER_CONFIG = `// oh-my-t3code user config. It applies to e
     // },
   },
   "limits": {
-    // "maxParallel": 4,
+    // "maxParallel": 6,
   },
   // Example: write the plan summary as text instead of showing the plan as a page.
   // "visuals": { "plan": false },
@@ -25,10 +26,11 @@ export const USER_STARTER_CONFIG = `// oh-my-t3code user config. It applies to e
 
 export const PROJECT_STARTER_CONFIG = `// oh-my-t3code project config. It overrides the user config for this project.
 // Run \`omt config show --defaults\` to see the built-in roles and limits,
-// and \`omt config show\` to see the effective config.
+// and \`omt profile show\` to see the effective config.
 {
   "$schema": "${SCHEMA_URL}",
   "version": 1,
+  // "profile": "prototype",
   "roles": {
     // Example: use a stronger model for implementation work in this project.
     // "execute": {

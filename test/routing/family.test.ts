@@ -310,10 +310,11 @@ test("pickWorker breaks a tie with the provider whose last worker entry comes la
   assert.deepEqual(pickWorker(swapped, ROLES, "p"), { provider: "claudeAgent", from: "plan" });
 });
 
-test("pickWorker skips review, test, unknown roles, entries without a provider, and other plans", () => {
+test("pickWorker skips review, verify, qa, unknown roles, entries without a provider, and other plans", () => {
   const entries = [
     entry({ unit: "U1", provider: "codex", role: "review" }),
-    entry({ unit: "U1", provider: "codex", role: "test" }),
+    entry({ unit: "U1", provider: "codex", role: "verify" }),
+    entry({ unit: "U1", provider: "codex", role: "qa" }),
     entry({ unit: "U1", provider: "codex", role: "oracle" }),
     entry({ unit: "U1", provider: "codex", role: "swarm" }),
     entry({ unit: "U1", role: "execute" }),

@@ -8,16 +8,28 @@ import {
   INTERACTION_MODE_VALUES,
   LIMIT_RANGES,
   MODEL_MAX,
+  PRESET_PROFILE_NAMES,
   PROVIDER_PATTERN,
   RESULT_VALUES,
   ROLE_NAME_PATTERN,
   RUNTIME_MODE_VALUES,
   T3_ROLE_VALUES,
+  WORKFLOW_RULES,
 } from "./validate.ts";
 
 function limit(name: keyof typeof LIMIT_RANGES, description: string) {
   const [minimum, maximum] = LIMIT_RANGES[name];
   return { type: "integer", minimum, maximum, description };
+}
+
+function workflowGroup(rules: (typeof WORKFLOW_RULES)[keyof typeof WORKFLOW_RULES]) {
+  const properties = Object.fromEntries(Object.entries(rules).map(([key, rule]) => {
+    if ("values" in rule) return [key, { enum: [...rule.values] }];
+    if ("items" in rule) return [key, { type: "array", items: { enum: [...rule.items] } }];
+    const integer = { type: "integer", minimum: rule.minimum, maximum: rule.maximum };
+    return [key, "auto" in rule ? { oneOf: [{ const: "auto" }, integer] } : integer];
+  }));
+  return { type: "object", additionalProperties: false, properties };
 }
 
 export const CONFIG_SCHEMA = {
@@ -30,6 +42,19 @@ export const CONFIG_SCHEMA = {
   properties: {
     $schema: { type: "string" },
     version: { const: 1 },
+    profile: { type: "string", pattern: ROLE_NAME_PATTERN, description: "Default workflow profile. Default normal." },
+    profiles: {
+      type: "object",
+      description: "Profile overrides and new profiles. A new profile needs a description. Null removes a custom profile.",
+      propertyNames: { pattern: ROLE_NAME_PATTERN },
+      properties: Object.fromEntries(PRESET_PROFILE_NAMES.map((name) => [name, { $ref: "#/$defs/profile" }])),
+      additionalProperties: { oneOf: [{ type: "null" }, { $ref: "#/$defs/profile" }] },
+    },
+    models: {
+      type: "object",
+      propertyNames: { minLength: 1, maxLength: MODEL_MAX },
+      additionalProperties: { $ref: "#/$defs/model" },
+    },
     roles: {
       type: "object",
       description: "Role overrides and new roles. Set a role to null to remove it.",
@@ -75,6 +100,7 @@ export const CONFIG_SCHEMA = {
           type: "boolean",
           description: "With --against, try the rungs outside the worker's family first.",
         },
+        fast: { type: "boolean" },
         chain: {
           type: "array",
           minItems: CHAIN_MIN,
@@ -93,10 +119,38 @@ export const CONFIG_SCHEMA = {
         driver: { type: "string", pattern: PROVIDER_PATTERN, description: "T3 driver kind." },
         model: { type: "string", minLength: 1, maxLength: MODEL_MAX },
         effort: { enum: [...EFFORT_LADDER] },
+        fast: { type: "boolean" },
         options: {
           type: "object",
           additionalProperties: { type: ["string", "boolean"] },
         },
+      },
+    },
+    model: {
+      type: "object",
+      additionalProperties: false,
+      properties: { fast: { type: "boolean" } },
+    },
+    profile: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        description: { type: "string", minLength: 1, maxLength: DESCRIPTION_MAX },
+        extends: { type: "string", pattern: ROLE_NAME_PATTERN },
+        workflow: { $ref: "#/$defs/workflow" },
+        limits: { $ref: "#/properties/limits" },
+        roles: { $ref: "#/properties/roles" },
+        models: { $ref: "#/properties/models" },
+      },
+    },
+    workflow: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        plan: workflowGroup(WORKFLOW_RULES.plan),
+        design: workflowGroup(WORKFLOW_RULES.design),
+        build: workflowGroup(WORKFLOW_RULES.build),
+        review: workflowGroup(WORKFLOW_RULES.review),
       },
     },
   },

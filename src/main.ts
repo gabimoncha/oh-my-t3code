@@ -10,8 +10,10 @@ import * as hook from "./commands/hook.ts";
 import * as init from "./commands/init.ts";
 import * as install from "./commands/install.ts";
 import * as ledger from "./commands/ledger.ts";
+import * as lock from "./commands/lock.ts";
 import * as paths from "./commands/paths.ts";
 import * as plan from "./commands/plan.ts";
+import * as profile from "./commands/profile.ts";
 import * as roles from "./commands/roles.ts";
 import * as route from "./commands/route.ts";
 import * as uninstall from "./commands/uninstall.ts";
@@ -36,7 +38,9 @@ export const COMMANDS: Readonly<Record<string, CommandModule>> = {
   route,
   brief,
   plan,
+  profile,
   ledger,
+  lock,
   visual,
   paths,
   hook,
@@ -44,7 +48,7 @@ export const COMMANDS: Readonly<Record<string, CommandModule>> = {
 
 const STATE_COMMANDS = new Set(["plan", "ledger", "brief", "route", "init", "visual"]);
 // Run from a folder outside any project, these commands would write plans, ledger entries, or evidence paths there.
-const PROJECT_COMMANDS = new Set(["plan", "ledger", "brief", "visual"]);
+const PROJECT_COMMANDS = new Set(["plan", "profile", "ledger", "brief", "visual", "lock"]);
 
 const HERE = fileURLToPath(import.meta.url);
 

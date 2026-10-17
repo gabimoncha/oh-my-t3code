@@ -5,7 +5,7 @@ import { readFileIfExists } from "../util/fs.ts";
 import { DEFAULT_CONFIG } from "./defaults.ts";
 import { parseJsonc } from "./jsonc.ts";
 import { mergeLayer } from "./merge.ts";
-import { validateLayer } from "./validate.ts";
+import { validateLayer, validateMergedProfiles } from "./validate.ts";
 
 export async function loadConfig(opts: {
   cwd: string;
@@ -19,6 +19,8 @@ export async function loadConfig(opts: {
   let config: OmtConfig = structuredClone(DEFAULT_CONFIG);
   const sources: ConfigSource[] = [{ kind: "defaults", present: true }];
   const issues: ConfigIssue[] = [];
+  const profileSources = new Map<string, string>();
+  let selectionSource = "defaults";
   for (const file of files) {
     const text = await readFileIfExists(file.path);
     sources.push({ kind: file.kind, path: file.path, present: text !== undefined });
@@ -37,6 +39,12 @@ export async function loadConfig(opts: {
     const merged = mergeLayer(config, validated.layer, file.path);
     issues.push(...merged.issues);
     config = merged.config;
+    if (validated.layer.profile !== undefined) selectionSource = file.path;
+    for (const name of Object.keys(validated.layer.profiles ?? {})) {
+      if (Object.hasOwn(config.profiles, name)) profileSources.set(name, file.path);
+      else profileSources.delete(name);
+    }
   }
+  issues.push(...validateMergedProfiles(config, profileSources, selectionSource));
   return { config, sources, issues };
 }

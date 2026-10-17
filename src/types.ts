@@ -6,14 +6,15 @@ export type Access = "read-only" | "edit";
 export type InteractionMode = "inherit" | "default" | "plan";
 export type RuntimeMode = "inherit" | "approval-required" | "auto-accept-edits" | "auto" | "full-access";
 export type T3Role = "implementation" | "research" | "review" | "design" | "test" | "general";
-export type ResultKind = "work" | "review" | "test" | "research" | "plan";
-export const RESULT_KINDS: readonly ResultKind[] = ["work", "review", "test", "research", "plan"];
+export type ResultKind = "work" | "review" | "test" | "research" | "plan" | "guardrail";
+export const RESULT_KINDS: readonly ResultKind[] = ["work", "review", "test", "research", "plan", "guardrail"];
 
 export interface Rung {
   provider?: string; // T3 provider instance id, for example "claudeAgent"
   driver?: string; // T3 driver kind; used when provider is absent
   model: string; // model id as listed by orchestrator_capabilities
   effort?: Effort; // mapped onto the model's effort option
+  fast?: boolean;
   options?: Record<string, OptionValue>; // raw T3 option selections; override the effort mapping
 }
 
@@ -25,6 +26,7 @@ export interface RoleConfig {
   interactionMode: InteractionMode;
   runtimeMode: RuntimeMode;
   crossFamily?: boolean; // review from the family other than the worker's when --against names the worker
+  fast?: boolean;
   chain: Rung[];
 }
 
@@ -39,8 +41,56 @@ export interface Visuals {
   plan: boolean;
 }
 
+export interface Workflow {
+  plan: {
+    review: "two-families" | "one" | "owner";
+    testLayers: ("e2e" | "integration" | "unit")[];
+  };
+  design: {
+    variants: number;
+  };
+  build: {
+    review: "every-round" | "first-round" | "off";
+    verify: "heavy" | "every-unit";
+    qa: "planned" | "off";
+    failureProofs: "on" | "off";
+    oracle: "heavy" | "always" | "off";
+    checkpoint: "none" | "layer" | "unit";
+    stallMinutes: number;
+  };
+  review: {
+    reviewers: "auto" | number;
+    families: "one" | "both";
+    oracle: "on" | "off";
+    fixLoop: "offer" | "off";
+    ci: "off" | "check" | "fix";
+    verify: "off" | "changed-flows";
+    tests: "off" | "offer";
+    guardrails: "off" | "propose";
+    crap: "off" | "report";
+  };
+}
+
+export type WorkflowLayer = { [K in keyof Workflow]?: Partial<Workflow[K]> };
+
+export interface ModelConfig {
+  fast?: boolean;
+}
+
+export interface ProfileConfig {
+  description: string;
+  extends?: string;
+  workflow?: WorkflowLayer;
+  limits?: Partial<Limits>;
+  roles?: Record<string, Partial<RoleConfig> | null>;
+  models?: Record<string, ModelConfig>;
+}
+
 export interface OmtConfig {
   version: 1;
+  profile: string;
+  profiles: Record<string, ProfileConfig>;
+  models: Record<string, ModelConfig>;
   roles: Record<string, RoleConfig>;
   limits: Limits;
   visuals: Visuals;
@@ -48,6 +98,9 @@ export interface OmtConfig {
 
 export interface ConfigLayer {
   version?: 1;
+  profile?: string;
+  profiles?: Record<string, Partial<ProfileConfig> | null>;
+  models?: Record<string, ModelConfig>;
   roles?: Record<string, Partial<RoleConfig> | null>;
   limits?: Partial<Limits>;
   visuals?: Partial<Visuals>;
@@ -181,6 +234,7 @@ export interface BriefJsonOutput {
     clientRequestId?: string; // present when --plan and --unit are given
   };
   fallbacks: ResolvedTarget[]; // not a delegate_task field; use one of these when the call fails
+  ledger?: { dispatched: string };
 }
 
 export type LedgerStatus =

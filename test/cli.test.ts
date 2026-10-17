@@ -16,6 +16,7 @@ const COMMAND_NAMES = [
   "route",
   "brief",
   "plan",
+  "profile",
   "ledger",
   "visual",
   "hook",
