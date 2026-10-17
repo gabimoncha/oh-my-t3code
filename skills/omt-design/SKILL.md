@@ -1,6 +1,6 @@
 ---
 name: omt-design
-description: Design pass with an Opus designer in T3 Code. Use when the user asks for designs, mockups, screens, UX, or a design pass, or when omt-plan or omt-ulw needs designs before UI units. Dispatches a design task for 3 variants of each screen in a new Paper file, shows the screenshots by screen, lets the owner pick one variant per screen and steer, repeats until the owner approves, and writes a design spec that UI units cite.
+description: Design pass with an Opus designer in T3 Code. Use when the user asks for designs, mockups, screens, UX, or a design pass, or when omt-plan or omt-ulw needs designs before UI units. Dispatches a design task with the profile's variant count in a new Paper file, shows the screenshots by screen, lets the owner pick one variant per screen and steer, repeats until the owner approves, and writes a design spec that UI units cite.
 ---
 
 # Design
@@ -25,15 +25,26 @@ Write down the goal, the users, the platform, the screens and flows, the constra
 
 Pick a slug that matches `^[a-z0-9][a-z0-9-]{0,63}$`. The design files go under `docs/design/<slug>/`, and the spec is `docs/design/<slug>.md`. The ledger plan is the plan slug when `omt-plan` or `omt-ulw` called this skill, and `design-<slug>` otherwise. Each design pass is one unit `DS<k>`.
 
+When the ledger plan has a plan file, run `omt profile show --plan <ledger plan> --json`. When the ledger plan has no plan file, use `omt profile show <name> --json` for an explicit profile name. When neither a plan file nor a profile name exists, run `omt profile show --json`. Keep the returned `profile` as `<name>` for later commands. Read `limits.maxReviewRounds` as `maxReviewRounds`.
+
+With a selected profile and no plan file for the `--plan` id:
+
+- Pass `--profile <name>` to every `omt brief`, `omt roles`, and `omt route` command.
+- Before each dispatch, run `omt ledger stats --plan <ledger plan>` and `omt profile show <name> --json`.
+- Dispatch only when the ledger's `dispatched` is below the profile's `limits.maxTasksPerRun` and `active` is below `limits.maxParallel`.
+- Use this check in place of `can dispatch`.
+
 Done when: the frame and the slug are written in your reply.
 
 ### 2. Dispatch the variants
 
-Run `omt ledger stats --plan <ledger plan>` and dispatch only while it reports `can dispatch: yes`. Build the brief with `omt brief design --task-file - --title "design DS<k>: <slug> variants" --scope docs/design/<slug>/ --scope docs/design/<slug>.md --plan <ledger plan> --unit DS<k> --round 1 --attempt 1 --json`. The task carries the frame from step 1 and asks for 3 distinct variants of each screen, each with a screenshot. When the owner asked for another count, use that count. The task asks the designer to make a new Paper file named after the project, not to reuse an open file.
+Read the effective profile again with the step 1 command before each design pass. Read `workflow.design.variants` as `design.variants`. Use `design.variants` as the number of distinct variants of each screen in the task. Ask for a screenshot of every variant.
+
+Before each dispatch, run `omt ledger stats --plan <ledger plan>`. When a plan file exists, dispatch only while it reports `can dispatch: yes`. Otherwise, use the step 1 dispatch check. Build the brief with `omt brief design --task-file - --title "design DS<k>: <slug> variants" --scope docs/design/<slug>/ --scope docs/design/<slug>.md --plan <ledger plan> --unit DS<k> --round 1 --attempt 1 --json`. The task carries the frame from step 1. When the owner asked for another count, use that count. The task asks the designer to make a new Paper file named after the project, not to reuse an open file.
 
 Call `delegate_task`, record the dispatch with `--task-id`, `--provider`, and `--model` ([results.md](../omt/references/results.md#recording)), and end your turn.
 
-A `design` dispatch never falls back to another family. When T3 refuses its rung, or `omt roles` reports `design` as `unavailable`, stop and tell the owner which target failed and why.
+A `design` dispatch never falls back to another family. When T3 refuses its rung, or `omt roles --plan <ledger plan>` reports `design` as `unavailable`, stop and tell the owner which target failed and why.
 
 Done when: the design task has a ledger entry, or the owner knows why it cannot run.
 
@@ -63,6 +74,6 @@ Done when: `docs/design/<slug>.md` exists, its screenshot paths exist, and the o
 
 ### 6. Hand off
 
-Every unit that builds or changes this UI cites `docs/design/<slug>.md` in its task and scope, and uses the `ui` role in every round. The test task of such a unit gets no `docs/design/` paths and no visual-match conditions; the `ui` task and the owner compare the result with the design. When `omt-plan` or `omt-ulw` called this skill, return to it with the spec path. Otherwise give the owner the spec path and the screenshot folder.
+Every unit that builds or changes this UI cites `docs/design/<slug>.md` in its task and scope, and uses the `ui` role in every round. The `verify` task of such a unit gets no `docs/design/` paths and no visual-match conditions. The `ui` task and the owner compare the result with the design. When `omt-plan` or `omt-ulw` called this skill, return to it with the spec path. Otherwise give the owner the spec path and the screenshot folder.
 
 Done when: the caller, or the owner, has the spec path.
