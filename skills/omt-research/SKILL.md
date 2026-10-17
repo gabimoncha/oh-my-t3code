@@ -40,6 +40,8 @@ Done when: each sub-question has a cited answer or an UNKNOWN entry.
 
 ### 4. Synthesize
 
+Before you report, run the settle sweep ([delegation.md](../omt/references/delegation.md#releasing-children)).
+
 Answer the user:
 
 - The direct answer first, in one to three sentences.

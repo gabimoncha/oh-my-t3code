@@ -83,6 +83,8 @@ Done when: the oracle verdict is read and the merged list is updated.
 
 ### 6. Write and report
 
+Before you report, run the settle sweep ([delegation.md](../omt/references/delegation.md#releasing-children)).
+
 Write the merged findings to `review-<slug>-r<n>.md` in the evidence directory that `omt paths --evidence` prints, in the format of [results/review.md](../omt/references/results/review.md), with an overall verdict. Show the user the verdict, the findings by severity, and the file path. When the change holds design files, list them for the owner's review.
 
 With `review.fixLoop: off`, report without a fix offer. With `review.fixLoop: offer`, ask the owner before each fix loop and wait for yes. After yes, number the P0 to P2 findings `F1`, `F2`, and so on. Each goes to an `execute` task built with `--plan review-<slug> --unit F<k> --round <n> --attempt 1 --title "fix F<k>: <finding title>"`, recorded in the ledger under the same plan and unit, with `--provider` and `--model` on the dispatch. Then the next review round starts at step 3 with round `<n+1>`, with one review per fix. Stop at `maxReviewRounds`.
@@ -165,6 +167,8 @@ Done when: every added or changed function has its calculation and every CRAP fi
 
 ### PR 10. Report
 
+Before you report, run the settle sweep ([delegation.md](../omt/references/delegation.md#releasing-children)).
+
 Write `review-<slug>-r<n>.md` in the directory that `omt paths --evidence` prints, using the review result format from step 6 above. Include the verdict and findings by severity, with each applicable rule file and line. Include the CI state and each CI fix with its changed paths. Include verify results with screenshots and the CRAP findings. List each verified flow that no test covers and the guardrail proposals. Show the branch or detached HEAD commit left in the checkout. For an original branch, give `git switch <branch>` as the return command. For an original detached HEAD, give `git switch --detach <commit>` as the return command. List design files for the owner's review. This step always runs.
 
 If checks remain pending, list them in the report and apply the PR step 3 watch rule. When their results arrive, run PR step 7 for new failures, then update the report through PR steps 8 to 10.
@@ -181,6 +185,6 @@ Before finishing, call `list_thread_pull_requests` when available. Link this PR 
 
 Ask for the owner's yes before the conductor commits and pushes. After yes, make one commit per fix and per qa task using only its changed paths. Combine changes to the same file into one commit. Push to the PR branch. After the push, call `watch_pull_request` only when `review.ci` is not `off` and PR step 3 found checks. End the turn immediately after `watch_pull_request`. Otherwise, call `unwatch_pull_request` and end the review. With `review.ci: fix`, if a check fails again, use the next CI fix round up to `maxReviewRounds`.
 
-When no check is pending and you end a turn to wait for the owner, call `unwatch_pull_request` first. Apply the PR step 3 watch rule before handing back the work. Post nothing to GitHub except an owner-approved push.
+When no check is pending and you end a turn to wait for the owner, call `unwatch_pull_request` first. Apply the PR step 3 watch rule before handing back the work, and run the settle sweep ([delegation.md](../omt/references/delegation.md#releasing-children)). Post nothing to GitHub except an owner-approved push.
 
 Done when: each offer has an owner decision or awaits one, and the PR is unwatched when the review ends.

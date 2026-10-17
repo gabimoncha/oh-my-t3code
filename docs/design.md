@@ -72,6 +72,10 @@ Plan mode has one trap. T3 stores a proposed plan as its own item type, and `tas
 
 Delegated units stay in one checkout so their changes are integrated throughout the run. A worktree per unit would need repeated setup, integration, and checks after merge. Each unit has an explicit file scope. Only disjoint edit scopes run in parallel, up to the default `maxParallel` of 6. Shared build state uses a lock. Independent tracks can use `omt-swarm` when the owner asks for separate worktree threads.
 
+### Finished children are settled
+
+T3 keeps a finished child loaded for 30 idle minutes. Codex then keeps the thread for its unload delay, which is 1800 seconds from Codex 0.163.0. Each loaded Codex thread starts its own stdio MCP server processes. In one long run, a single Codex app-server had 1,042 child processes: up to 174 copies of each of its 6 MCP servers. Codex native subagents of an idle parent stay loaded until the app-server stops, because T3's idle release unsubscribes only the parent. A settle releases the child at once and unsubscribes its native subagents too. So the conductor settles each child after it records the result. Owners also set `-c thread_unload_delay_secs=60` in T3's Codex launch arguments, which makes Codex close a settled thread after one minute.
+
 ### Profiles select the workflow
 
 A role selects a model. A profile selects the plan, build, and review steps. Keeping those choices separate lets a project use the same roles for normal work, prototypes, and PR reviews. Sparse profile overrides inherit `normal`, so a custom workflow states only its differences. A plan header keeps the selected profile across context resets. The conductor reloads it on wake so an owner can switch the remaining work.

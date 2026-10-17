@@ -53,7 +53,7 @@ Pass `delegateTask` to `delegate_task` unchanged. Record the dispatch with the p
 
 ## Shared references
 
-- [delegation.md](references/delegation.md): the T3 rules. `delegate_task` fields, request ids, limits, waiting, `task_status`, failure codes, top-level threads.
+- [delegation.md](references/delegation.md): the T3 rules. `delegate_task` fields, request ids, limits, waiting, `task_status`, releasing children, failure codes, top-level threads.
 - [roles.md](references/roles.md): the default roles, when to pick each, manual resolution, effort options, fallback, custom roles.
 - [brief.md](references/brief.md): the brief layout, how to write the task text, and a full example.
 - [results.md](references/results.md): how to read each result block and verify a claim.

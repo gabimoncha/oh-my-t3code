@@ -58,6 +58,8 @@ omt doctor
 
 Restart your agent sessions in T3 Code after the install. A running session does not load new skills.
 
+If you use Codex children, open T3 Code Settings, Providers, Codex, and set Launch arguments to `-c thread_unload_delay_secs=60`, with no quotes. Codex 0.163.0 keeps a released thread and its MCP server processes for 30 minutes by default. With this setting, a child that omt settles closes after one minute. T3 applies the setting when it starts its next Codex app-server.
+
 ## Try it in one project
 
 You can try oh-my-t3code in one repository without a global link. This mode does not change `~/.agents/skills`, `~/.claude`, or your `PATH`. It refuses to run in your home directory, because there the project paths are the global paths. Clone the repository, then run the CLI from the clone in the target project. This needs only Node 22.18 or later. You do not need `pnpm install` to run `node <clone>/src/cli.ts`:

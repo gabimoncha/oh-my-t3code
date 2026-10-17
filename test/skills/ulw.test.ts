@@ -390,7 +390,7 @@ test("delegation pins saved dispatch, fast mode, device routing, locks, and stal
   assert.match(text, /Use `workflow\.build\.stallMinutes` for the stall threshold, from 10 to 120 minutes\./);
   assert.match(text, /The task is stalled when the thread's `updatedAt` is older than `build\.stallMinutes` minutes\./);
   const stalls = section(text, "## Stalled tasks");
-  assert.match(stalls, /Otherwise call `task_cancel`, record `--status interrupted --note "stalled"`, and check the scope files for half-done edits\./);
+  assert.match(stalls, /When the thread has no result block, or you reject it, call `task_cancel`, record `--status interrupted --note "stalled"`, settle the child \(\[Releasing children\]\(#releasing-children\)\), and check the scope files for half-done edits\./);
   assert.match(stalls, /If a check-in waits, dispatch the next attempt with the same round only after the owner replies\./);
   assert.match(stalls, /Otherwise dispatch the next attempt with the same round\./);
   assert.match(stalls, /When the run ends, call `delete_scheduled_task` with the id\./);
@@ -409,6 +409,7 @@ test("briefs pin the CLI, test policy, saved files, and device exception", () =>
     "- <delegation line>",
     "- <evidence line, edit roles only>",
     "- <plan-mode line, read-only roles only>",
+    "- <children line, when the child may start children>",
     "- CLI: Run omt as <command>.",
     "- Tests: <role's test policy; qa ends with failureProofs: on or failureProofs: off>",
     "- You do not see the parent conversation. This brief is your full context. If you need something that is missing, say so in your final message.",
@@ -507,4 +508,49 @@ test("omt-loop reloads profiles and waits at owner check-ins", () => {
     assert.match(part, /Otherwise record the tick: `omt ledger add --plan <slug> --role loop --status completed --note "tick <n>: exit <code>, <action>"`\./);
   }
   assert.match(text, /Done when: the tick has a ledger entry and its dispatches are recorded, or the loop waits at an owner check-in\./);
+});
+
+test("conductors and delegating children settle each finished child", () => {
+  const references = join(SKILLS_DIR, "omt", "references");
+  const delegation = readFileSync(join(references, "delegation.md"), "utf8");
+  const release = section(delegation, "## Releasing children");
+  assert.match(release, /The idle release never reaches the Codex native subagents of a child; only a settle releases them\./);
+  assert.match(release, /In `plan` interaction mode you record nothing, but you settle all the same\. After `task_cancel`, settle the child after its `cancelled` or `interrupted` entry\. After a `mode: "wait"` return, call `task_status` first/);
+  assert.match(release, /- Condition: `status` is `completed`, `failed`, `cancelled`, or `interrupted`, `hasPendingChildRuns` is `false`, and `hasPendingQuestion` is `false`\. You will not send that child a message with `t3_thread_send`\. A new task for the same unit is not a message to the child\./);
+  assert.match(release, /call `t3_thread_organize` with `action: "settle"` and `threadId` set to the child's `childThreadId`/);
+  assert.match(release, /Never pass the `taskId`\./);
+  assert.match(release, /- When the Condition is false, skip the settle\. A settle error never stops the run and never triggers an action from \[Failure codes\]\(#failure-codes\)\. Do not cancel a child to make the settle pass\. The sweep below tries again\./);
+  assert.match(release, /- First check: before the first settle of a run, run `git rev-parse --git-dir --git-common-dir`\. When it prints two different paths, you work in a git worktree: settle no child in this run\./);
+  assert.match(release, /but only when the provider closes the thread: Codex closes it after its unload delay\. A later task does not use processes that an earlier child left running, and does not count on them being gone; it starts its own\./);
+  assert.match(release, /- Settle only your children and their children\. Never settle your own thread, a top-level thread \(an `omt-swarm` track, or a thread from `t3_thread_launch` or `create_threads`\), or any other thread\. Do not use `action: "archive"`\./);
+  assert.match(release, /A child that starts children, such as a `verify` task for a device check, settles them itself; its brief says so\. A cancelled or failed child cannot, so the sweep settles its children\./);
+  assert.match(release, /- Sweep: run it at your next wake after a skipped or failed settle, after each `task_cancel`, before you stop the run to ask the owner, and at the end of the run before the report\. When another skill called your skill, skip the sweep; the caller runs it\./);
+  assert.match(release, /1\. Take your task ids from `omt ledger list --plan <slug> --json`, or the ids that you kept in `plan` mode\. Call `task_status` for each\. Skip an id that returns `task_not_found`: another thread started that task\. It is not a lost task, so do not dispatch it again\./);
+  assert.match(release, /2\. A child is done when the Condition above holds\. Skip a child that is not done, and everything below it\./);
+  assert.match(release, /3\. Call `t3_thread_list` with `includeSubagents: true`, and again with `cursor` set to the returned `nextCursor` until `nextCursor` is `null`\. Settle each done child whose thread shows `settled: false`\. Then settle each thread below a done child, linked by `relationshipToParent: "subagent"` and `parentThreadId`, that shows `settled: false` and `status` `completed`, `failed`, `cancelled`, or `interrupted`\./);
+  assert.match(section(delegation, "## Your interaction mode"), /Settle each child after you read its result \(\[Releasing children\]\(#releasing-children\)\)\./);
+  const stalls = section(delegation, "## Stalled tasks");
+  assert.match(stalls, /settle the child \(\[Releasing children\]\(#releasing-children\)\)/);
+  assert.match(stalls, /When the thread has a result block and you accept it, it counts as the result: check its claims as for any result, record it, and continue at step 6 of your skill\. When that thread still runs, call `task_cancel` for it after you record the result, and record nothing more; the sweep after that cancel settles it\./);
+  const recording = section(readFileSync(join(references, "results.md"), "utf8"), "## Recording");
+  assert.match(recording, /- Release: after the terminal entry, settle the child as \[delegation\.md\]\(delegation\.md#releasing-children\) says\. In `plan` interaction mode, settle it after you read the result\./);
+  const brief = readFileSync(join(references, "brief.md"), "utf8");
+  assert.match(brief, /- Children, except at maximum depth for `verify` and for plan-mode roles: ``Children: after you read a child's result, settle the child with the T3 `t3_thread_organize` tool/);
+  const ulw = readSkill("omt-ulw");
+  assert.match(section(ulw, "### 6. On wake"), /Then settle the child \(\[delegation\.md\]\(\.\.\/omt\/references\/delegation\.md#releasing-children\)\)\./);
+  assert.match(ulw, /the run is stalled: run the settle sweep \(\[delegation\.md\]\(\.\.\/omt\/references\/delegation\.md#releasing-children\)\), then stop/);
+  assert.match(ulw, /To stop: run `omt plan mark <slug> <unit> blocked`, run the settle sweep \(\[delegation\.md\]\(\.\.\/omt\/references\/delegation\.md#releasing-children\)\), and ask the user/);
+  const sweep = /Before you report, run the settle sweep \(\[delegation\.md\]\(\.\.\/omt\/references\/delegation\.md#releasing-children\)\)\./;
+  for (const [name, heading] of [["omt-ulw", "### 11. Report"], ["omt-review", "### 6. Write and report"], ["omt-review", "### PR 10. Report"], ["omt-research", "### 4. Synthesize"], ["omt-plan", "### 5. Hand off"], ["omt-design", "### 6. Hand off"]] as const) {
+    assert.match(section(readSkill(name), heading), sweep, `${name} ${heading}`);
+  }
+  assert.match(section(readSkill("omt-review"), "### PR 11. Offers"), /Apply the PR step 3 watch rule before handing back the work, and run the settle sweep \(\[delegation\.md\]\(\.\.\/omt\/references\/delegation\.md#releasing-children\)\)\./);
+  const plan = readSkill("omt-plan");
+  assert.match(plan, /one narrow question each, then end the turn\. On wake, read the results and record them \(\[results\.md\]\(\.\.\/omt\/references\/results\.md#recording\)\)\./);
+  assert.match(plan, /Tell the worker to edit that file and not to run `omt plan new`\. On wake, read its result and record it \(\[results\.md\]\(\.\.\/omt\/references\/results\.md#recording\)\)\./);
+  const loop = readSkill("omt-loop");
+  assert.match(loop, /3\. Read every finished task with task_status, record it, and settle its child thread as the Releasing children section of the omt skill's references\/delegation\.md says, then follow the omt-ulw steps/);
+  assert.match(loop, /5\. Stop: record the tick as in 4\. Run the settle sweep from the Releasing children section of the omt skill's references\/delegation\.md\. Call list_scheduled_tasks/);
+  assert.match(loop, /3\. Read finished tasks first, record them, and settle their children \(\[delegation\.md\]\(\.\.\/omt\/references\/delegation\.md#releasing-children\)\), then continue/);
+  assert.match(section(loop, "### 4. Stop"), /Run the settle sweep \(\[delegation\.md\]\(\.\.\/omt\/references\/delegation\.md#releasing-children\)\)\./);
 });

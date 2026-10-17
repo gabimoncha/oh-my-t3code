@@ -31,6 +31,7 @@ A brief is the whole world of a child task. The child sees nothing else. Write o
 - <delegation line>
 - <evidence line, edit roles only>
 - <plan-mode line, read-only roles only>
+- <children line, when the child may start children>
 - CLI: Run omt as <command>.
 - Tests: <role's test policy; qa ends with failureProofs: on or failureProofs: off>
 - You do not see the parent conversation. This brief is your full context. If you need something that is missing, say so in your final message.
@@ -73,6 +74,7 @@ Constraint lines, word for word:
 - Below maximum depth, with a plan or an explicit profile: `Delegation: you are at depth <d> of <max>. You may delegate with the T3 delegate_task tool. For each child, pass <selection> --depth <d+1>[ --max-depth <max>] to omt brief.` Here `<selection>` contains `--plan <slug>` when set and `--profile <name>` when explicit. Keep both flags when both were given. Include `--max-depth <max>` only when the max differs from the effective config.
 - Below maximum depth, without a plan or an explicit profile: `Delegation: you are at depth <d> of <max>. You may delegate with the T3 delegate_task tool. Give each child depth <d+1> in its brief.`
 - Plan mode: `Mode: you run in plan mode. Stay in it. Do not call ExitPlanMode and do not write a proposed plan. Put the result block in your final assistant message.`
+- Children, except at maximum depth for `verify` and for plan-mode roles: ``Children: after you read a child's result, settle the child with the T3 `t3_thread_organize` tool, with `action: "settle"` and the child's `childThreadId`, never the `taskId`. Skip a child that still runs or waits for an answer. Settle nothing when `git rev-parse --git-dir --git-common-dir` prints two different paths, because then you work in a git worktree. A settle error is not a failure of your task.``
 
 Every brief has `CLI:`, `Tests:`, and `Shared builds:` lines. The `CLI:` line names `<project root>/.omt/bin/omt` when it exists, else `omt`. The `Tests:` line gives the role's test policy. For `qa`, it ends with `failureProofs: on` or `failureProofs: off` from `build.failureProofs`. The `Shared builds:` line requires the task's exact lock command. Retry a failed build or test only when the file is outside your scope and outside the task's named code under test. The file is the one where the error occurs, such as a file with a compile or load error, also when a test in your scope loads it. Wait 60 seconds and run the command once more. When it fails there again, report the command, the outside-scope file, and the message as another unit's state. For a failure in your scope or the named code under test, follow your result block. For `test` results, return `VERDICT: NOT VERIFIED` for that failure. When `omt lock run` exits 75, report the command, the lock name, and its message. Leave the lock to the conductor. For both reports: in `work` results, keep the `STATUS` that your own work earns and put the report under `OPEN`. For `test` results, including `verify` and `qa`, return `VERDICT: INCONCLUSIVE` and put the report under `FAILURES`. For other results, put the report under `NOTES`, or before the result block when it has no `NOTES`.
 
@@ -138,6 +140,7 @@ Callers: src/sync/pull.ts:41 and src/sync/push.ts:58. Tests use node:test with a
 
 - Access: edit. Change only the files in Scope. If the task needs a change outside Scope, stop and report it under OPEN.
 - Delegation: you are at depth 1 of 1. Do all work yourself. Start no subagents and no delegated tasks, except `verify` tasks for device checks (see Devices). For device checks, pass --plan http-retry to omt brief.
+- Children: after you read a child's result, settle the child with the T3 `t3_thread_organize` tool, with `action: "settle"` and the child's `childThreadId`, never the `taskId`. Skip a child that still runs or waits for an answer. Settle nothing when `git rev-parse --git-dir --git-common-dir` prints two different paths, because then you work in a git worktree. A settle error is not a failure of your task.
 - CLI: Run omt as omt.
 - Tests: write no new test file and no new test case, and do not prove that tests can fail. Update an existing test only when your change breaks it, and say so under NOTES.
 - You do not see the parent conversation. ...

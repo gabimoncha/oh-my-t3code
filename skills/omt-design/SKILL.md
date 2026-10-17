@@ -74,6 +74,8 @@ Done when: `docs/design/<slug>.md` exists, its screenshot paths exist, and the o
 
 ### 6. Hand off
 
+Before you report, run the settle sweep ([delegation.md](../omt/references/delegation.md#releasing-children)).
+
 Every unit that builds or changes this UI cites `docs/design/<slug>.md` in its task and scope, and uses the `ui` role in every round. The `verify` task of such a unit gets no `docs/design/` paths and no visual-match conditions. The `ui` task and the owner compare the result with the design. When `omt-plan` or `omt-ulw` called this skill, return to it with the spec path. Otherwise give the owner the spec path and the screenshot folder.
 
 Done when: the caller, or the owner, has the spec path.

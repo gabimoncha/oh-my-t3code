@@ -45,6 +45,14 @@ function deviceLine(role: string, planMode: boolean, depth: number, maxDepth: nu
 }
 
 
+// A finished child stays loaded until it is settled or T3's 30-minute idle release, and Codex native subagents stay until a settle.
+function childrenLine(role: string, planMode: boolean, depth: number, maxDepth: number): string[] {
+  if (depth >= maxDepth && (role === "verify" || planMode)) return [];
+  return [
+    "Children: after you read a child's result, settle the child with the T3 `t3_thread_organize` tool, with `action: \"settle\"` and the child's `childThreadId`, never the `taskId`. Skip a child that still runs or waits for an answer. Settle nothing when `git rev-parse --git-dir --git-common-dir` prints two different paths, because then you work in a git worktree. A settle error is not a failure of your task.",
+  ];
+}
+
 function delegationLine(role: string, planMode: boolean, depth: number, maxDepth: number, configuredMaxDepth: number, selection: string): string {
   if (depth >= maxDepth) {
     const rest = role === "verify" || planMode ? "Do all work yourself. Start no subagents and no delegated tasks." : "Do all work yourself. Start no subagents and no delegated tasks, except `verify` tasks for device checks (see Devices).";
@@ -102,6 +110,7 @@ export function renderBrief(input: BriefInput, persona: string, contract: string
           "Mode: you run in plan mode. Stay in it. Do not call ExitPlanMode and do not write a proposed plan. Put the result block in your final assistant message.",
         ]
       : []),
+    ...childrenLine(input.role, input.interactionMode === "plan", input.depth, input.maxDepth),
     `CLI: Run omt as ${input.cliCommand ?? "omt"}.`,
     testsLine(input.role, input.failureProofs ?? "on"),
     "You do not see the parent conversation. This brief is your full context. If you need something that is missing, say so in your final message.",

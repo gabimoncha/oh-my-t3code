@@ -54,9 +54,9 @@ After the owner replies to a scheduled loop, create its schedule again with the 
 
 1. Count ticks: the entries with role "loop" in `omt ledger list --plan <slug> --json`. At <N> or more, go to 5.
 2. Run the condition: <condition command>. Exit 0: go to 5. Exit 2 or any other code: the check is broken; go to 5 and report it.
-3. Read every finished task with task_status and record it, then follow the omt-ulw steps for plan <slug>: dispatch what is ready, run the final gate when every unit is done. If no unit is open or active and the plan is not complete, go to 5 and report the blocked units. If `omt ledger stats --plan <slug>` reports `can dispatch: no` and `active: 0`, the budget is spent: go to 5 and report the limit it names.
+3. Read every finished task with task_status, record it, and settle its child thread as the Releasing children section of the omt skill's references/delegation.md says, then follow the omt-ulw steps for plan <slug>: dispatch what is ready, run the final gate when every unit is done. If no unit is open or active and the plan is not complete, go to 5 and report the blocked units. If `omt ledger stats --plan <slug>` reports `can dispatch: no` and `active: 0`, the budget is spent: go to 5 and report the limit it names.
 4. If a check-in now awaits an owner reply, apply the check-in rules above instead of recording a tick. Otherwise record the tick: `omt ledger add --plan <slug> --role loop --status completed --note "tick <n>: exit <code>, <action>"`. End the turn.
-5. Stop: record the tick as in 4. Call list_scheduled_tasks, delete the schedule whose prompt starts with "omt-loop tick for plan <slug>" with delete_scheduled_task, and report the ticks used, the condition result, what finished, and what remains.
+5. Stop: record the tick as in 4. Run the settle sweep from the Releasing children section of the omt skill's references/delegation.md. Call list_scheduled_tasks, delete the schedule whose prompt starts with "omt-loop tick for plan <slug>" with delete_scheduled_task, and report the ticks used, the condition result, what finished, and what remains.
 ```
 
 Record the schedule id, prompt, and cadence in the plan's log.
@@ -81,14 +81,14 @@ After the owner replies to a scheduled loop, create its schedule again with the 
 
 1. Count the ticks so far: the entries with role `loop` in `omt ledger list --plan <slug> --json`. At the cap, record the tick (item 4) and go to the Stop section.
 2. Run the condition command. Exit 0: record the tick (item 4) and go to the Stop section. Exit 1: continue. Exit 2 or any other code: the check is broken; record the tick (item 4), go to the Stop section, and report it.
-3. Read finished tasks first and record them, then continue with the `omt-ulw` steps: dispatch what is ready, and run its final gate when every unit is done. Run `omt plan status <slug>` and `omt ledger stats --plan <slug>`. When no `next` unit is shown, `active` is 0, and the plan is not complete because units are blocked, record the tick (item 4), go to the Stop section, and report the blocked units. When `omt ledger stats --plan <slug>` reports `can dispatch: no` and `active: 0`, the budget is spent and no task will finish to free it: record the tick (item 4), go to the Stop section, and report the limit it names.
+3. Read finished tasks first, record them, and settle their children ([delegation.md](../omt/references/delegation.md#releasing-children)), then continue with the `omt-ulw` steps: dispatch what is ready, and run its final gate when every unit is done. Run `omt plan status <slug>` and `omt ledger stats --plan <slug>`. When no `next` unit is shown, `active` is 0, and the plan is not complete because units are blocked, record the tick (item 4), go to the Stop section, and report the blocked units. When `omt ledger stats --plan <slug>` reports `can dispatch: no` and `active: 0`, the budget is spent and no task will finish to free it: record the tick (item 4), go to the Stop section, and report the limit it names.
 4. If a check-in now awaits an owner reply, apply the check-in rules above instead of recording a tick. Otherwise record the tick: `omt ledger add --plan <slug> --role loop --status completed --note "tick <n>: exit <code>, <action>"`. It closes no dispatch, so its warning is expected.
 
 Done when: the tick has a ledger entry and its dispatches are recorded, or the loop waits at an owner check-in.
 
 ### 4. Stop
 
-Delete the schedule with `delete_scheduled_task`, or ask the user to type `/goal clear`. Then report: the ticks used, the condition result, what finished, what remains, and each blocked unit with its reason. `list_scheduled_tasks` confirms the schedule is gone.
+Run the settle sweep ([delegation.md](../omt/references/delegation.md#releasing-children)). Delete the schedule with `delete_scheduled_task`, or ask the user to type `/goal clear`. Then report: the ticks used, the condition result, what finished, what remains, and each blocked unit with its reason. `list_scheduled_tasks` confirms the schedule is gone.
 
 Done when: no schedule for this loop remains, and the user has the report.
 

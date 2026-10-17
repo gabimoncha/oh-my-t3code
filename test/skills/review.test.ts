@@ -326,7 +326,7 @@ test("omt-review pins PR 11. Offers", () => {
   assert.match(text, /Otherwise, call `unwatch_pull_request` and end the review\./);
   assert.match(text, /With `review\.ci: fix`, if a check fails again, use the next CI fix round up to `maxReviewRounds`\./);
   assert.match(text, /When no check is pending and you end a turn to wait for the owner, call `unwatch_pull_request` first\./);
-  assert.match(text, /Apply the PR step 3 watch rule before handing back the work\./);
+  assert.match(text, /Apply the PR step 3 watch rule before handing back the work, and run the settle sweep/);
   assert.match(text, /Before finishing, call `list_thread_pull_requests` when available\./);
   assert.match(text, /Link this PR if it is missing from the list\./);
   assert.match(text, /Report a failed linking call as a failure\./);

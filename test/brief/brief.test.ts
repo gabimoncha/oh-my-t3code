@@ -79,6 +79,7 @@ The CLI lives in src/.
 
 ${EDIT_SCOPED}
 - Delegation: you are at depth 2 of 2. Do all work yourself. Start no subagents and no delegated tasks, except \`verify\` tasks for device checks (see Devices). For device checks, pass --plan auth to omt brief.
+- Children: after you read a child's result, settle the child with the T3 \`t3_thread_organize\` tool, with \`action: "settle"\` and the child's \`childThreadId\`, never the \`taskId\`. Skip a child that still runs or waits for an answer. Settle nothing when \`git rev-parse --git-dir --git-common-dir\` prints two different paths, because then you work in a git worktree. A settle error is not a failure of your task.
 - CLI: Run omt as omt.
 - Tests: write no new test file and no new test case, and do not prove that tests can fail. Update an existing test only when your change breaks it, and say so under NOTES.
 - You do not see the parent conversation. This brief is your full context. If you need something that is missing, say so in your final message.
@@ -199,6 +200,27 @@ test("renderBrief adds the plan-mode line after the delegation line only in plan
   assert.match(plan[index - 1] ?? "", /^- Delegation: /);
   for (const mode of ["default", "inherit"] as const) {
     assert.ok(!renderBrief(input({ interactionMode: mode }), PERSONA, CONTRACT).includes("Mode: you run in plan mode"));
+  }
+});
+
+test("renderBrief adds the children line only when the child may start children", () => {
+  const CHILDREN = "- Children: after you read a child's result, settle the child with the T3 `t3_thread_organize` tool, with `action: \"settle\"` and the child's `childThreadId`, never the `taskId`. Skip a child that still runs or waits for an answer. Settle nothing when `git rev-parse --git-dir --git-common-dir` prints two different paths, because then you work in a git worktree. A settle error is not a failure of your task.";
+  const lines = (fields: Parameters<typeof input>[0]) => renderBrief(input(fields), PERSONA, CONTRACT).split("\n");
+  for (const fields of [
+    { role: "execute", depth: 1, maxDepth: 2 },
+    { role: "execute", depth: 2, maxDepth: 2 },
+    { role: "verify", depth: 1, maxDepth: 2 },
+    { role: "explore", access: "read-only", interactionMode: "plan", depth: 1, maxDepth: 2 },
+  ] as const) {
+    const text = lines(fields);
+    assert.ok(text.includes(CHILDREN), JSON.stringify(fields));
+    assert.equal(text[text.indexOf(CHILDREN) + 1], "- CLI: Run omt as omt.", JSON.stringify(fields));
+  }
+  for (const fields of [
+    { role: "verify", depth: 2, maxDepth: 2 },
+    { role: "explore", access: "read-only", interactionMode: "plan", depth: 2, maxDepth: 2 },
+  ] as const) {
+    assert.ok(!lines(fields).includes(CHILDREN), JSON.stringify(fields));
   }
 });
 

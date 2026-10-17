@@ -93,7 +93,7 @@ Apply `build.checkpoint` in step 8 before every dispatch. While a check-in await
 
 For each unit whose dependencies are done, until a limit is reached:
 
-1. Run `omt ledger stats --plan <slug>`. Dispatch only while it reports `can dispatch: yes`. When it reports `can dispatch: no` and `active: 0`, the run is stalled: stop and follow [delegation.md](../omt/references/delegation.md#limits).
+1. Run `omt ledger stats --plan <slug>`. Dispatch only while it reports `can dispatch: yes`. When it reports `can dispatch: no` and `active: 0`, the run is stalled: run the settle sweep ([delegation.md](../omt/references/delegation.md#releasing-children)), then stop and follow [delegation.md](../omt/references/delegation.md#limits).
 2. Build the arguments: `omt brief <role> --task-file - --title "<role> <unit>: <short unit title>" --scope ... --done ... --verify ... --plan <slug> --unit <id> --round 1 --attempt 1 --save --json`.
 3. Call `delegate_task` with `delegateTask`. Keep `fallbacks`, `taskId`, `childThreadId`, and `childRunId`.
 4. Run the printed `ledger.dispatched` line after replacing only `<taskId>` with the returned task id. For a retry or fallback, follow [delegation.md](../omt/references/delegation.md#failure-codes) with a higher attempt. Record the provider and model of the target that returned the task.
@@ -109,7 +109,7 @@ Read the effective profile again as step 2 says before any new dispatch.
 For each task id in the wake message:
 
 1. Call `task_status` and read the result block ([results.md](../omt/references/results.md)).
-2. Record the result at once: `omt ledger add --plan <slug> --unit <id> --role <role> --round <n> --attempt <n> --status completed --verdict <VERDICT>`, or `--status failed` ([results.md](../omt/references/results.md#recording)).
+2. Record the result at once: `omt ledger add --plan <slug> --unit <id> --role <role> --round <n> --attempt <n> --status completed --verdict <VERDICT>`, or `--status failed` ([results.md](../omt/references/results.md#recording)). Then settle the child ([delegation.md](../omt/references/delegation.md#releasing-children)).
 3. Check each `DONE` claim as [results.md](../omt/references/results.md#a-claim-is-not-evidence) says: the scope paths changed, no path outside every active scope changed (`.omt/` is not a finding), new files read in full, and one verify command run yourself. Record `--status rejected` when the check disproves the claim. A verify command that fails on a busy lock, in another unit's file, or while a work or qa task of another unit is active does not disprove the claim. Send the unit on to step 7, and leave the failure to step 8.
 
 Check `build.checkpoint` as step 8 says before you dispatch every unit that became ready (step 5).
@@ -168,7 +168,7 @@ A fix is an `execute` fix, or a `deep` fix when an open finding needs investigat
 
 A `ui` unit uses `ui` in every round, never `execute` or `deep`. When `ui` cannot run, stop and tell the user; do not fall back to another role or family.
 
-To stop: run `omt plan mark <slug> <unit> blocked` and ask the user, with the open findings. Stop at the same point when the next round in the cycle would exceed `maxReviewRounds`.
+To stop: run `omt plan mark <slug> <unit> blocked`, run the settle sweep ([delegation.md](../omt/references/delegation.md#releasing-children)), and ask the user, with the open findings. Stop at the same point when the next round in the cycle would exceed `maxReviewRounds`.
 
 Reopen: when a task or a check finds a defect in code that a done unit owns, run the relevance check on the finding first. When you drop it, log the drop and leave the unit done. When you keep it, reopen the unit: run `omt plan mark <slug> <unit> open`, and write under `Log` in the plan the defect, the task or check that found it, and the first `--round` value of the new cycle. Take the finding out of the fix round of the unit whose task found it. When that unit has no other kept finding, it waits until the reopened unit is done again, then goes to step 8 for the same round. Dispatch no new task for a unit that depends on the reopened unit, directly or through other units, until the reopened unit is done again. Wait until no active task has a scope that overlaps the reopened unit's scope, then send a fix task for the reopened unit. It is round 1 of a new cycle, with the next `--round` value after the unit's last round. The task budget still applies. Before a third reopen of the same unit, stop and ask the user, because two fixes may be breaking each other. The step 11 report lists each reopen.
 
@@ -186,6 +186,8 @@ Keep an `F2` oracle item only when `build.oracle` requires it for the run's tier
 Done when: every `D` and command-based `F` item has passed, and each required oracle returned `APPROVE` or the user has the open findings.
 
 ### 11. Report
+
+Before you report, run the settle sweep ([delegation.md](../omt/references/delegation.md#releasing-children)).
 
 Tell the user:
 

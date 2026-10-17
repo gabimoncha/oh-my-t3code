@@ -30,7 +30,7 @@ With a selected profile and no plan file for the `--plan` id:
 - Dispatch only when the ledger's `dispatched` is below the profile's `limits.maxTasksPerRun` and `active` is below `limits.maxParallel`.
 - Use this check in place of `can dispatch`.
 
-Read the code the goal touches. For a large or unknown area, dispatch parallel read-only `explore` tasks (`--plan <slug> --unit E<k> --round 1 --attempt 1 --title "explore E<k>: <question>"`), one narrow question each, then end the turn and read the results on wake.
+Read the code the goal touches. For a large or unknown area, dispatch parallel read-only `explore` tasks (`--plan <slug> --unit E<k> --round 1 --attempt 1 --title "explore E<k>: <question>"`), one narrow question each, then end the turn. On wake, read the results and record them ([results.md](../omt/references/results.md#recording)).
 
 Done when: you can name each file and function the change touches, with a `path:line` citation.
 
@@ -48,7 +48,7 @@ Done when: every decision is settled from evidence or answered by the user.
 
 ### 3. Write the plan
 
-`omt plan status <slug>` prints the absolute plan path, also from a worktree. Steps 3 and 4 edit and hash the plan at that path. When the plan exists, edit it. Otherwise run `omt plan new <slug> --title "<title>" --profile <name>`, after `omt init` when `.omt/.gitignore` is missing. Keep an existing plan: pass no `--force`. Fill every section. The persona in [roles/plan.md](../omt/references/roles/plan.md) is the standard. For a large plan, you may dispatch a `plan` task to fill that file. Before you dispatch a `plan` task, create any missing plan file yourself with `omt plan new <slug> --title "<title>" --profile <name>`. In every `plan` task, name the plan path and state that the file already exists. Tell the worker to edit that file and not to run `omt plan new`.
+`omt plan status <slug>` prints the absolute plan path, also from a worktree. Steps 3 and 4 edit and hash the plan at that path. When the plan exists, edit it. Otherwise run `omt plan new <slug> --title "<title>" --profile <name>`, after `omt init` when `.omt/.gitignore` is missing. Keep an existing plan: pass no `--force`. Fill every section. The persona in [roles/plan.md](../omt/references/roles/plan.md) is the standard. For a large plan, you may dispatch a `plan` task to fill that file. Before you dispatch a `plan` task, create any missing plan file yourself with `omt plan new <slug> --title "<title>" --profile <name>`. In every `plan` task, name the plan path and state that the file already exists. Tell the worker to edit that file and not to run `omt plan new`. On wake, read its result and record it ([results.md](../omt/references/results.md#recording)).
 
 Read the effective profile again with the step 1 command before you fill `## Tests` or build a `plan` task. Read `workflow.plan.testLayers` as `plan.testLayers` and `workflow.build.qa` as `build.qa`. Name the effective `plan.testLayers` and `build.qa` values in every `plan` task.
 
@@ -101,6 +101,8 @@ After any edit to the plan, header edits included, compute the hash again before
 Done when: a round returned `APPROVE`, the owner approved under `plan.review=owner`, or the round count reached `maxReviewRounds` and the open blockers are in your report.
 
 ### 5. Hand off
+
+Before you report, run the settle sweep ([delegation.md](../omt/references/delegation.md#releasing-children)).
 
 Show the plan to the owner first, also when `omt-ulw` called this skill. Run `omt config show` and read `visuals.plan`. When it is `true` and you have the T3 `html_render` tool, run the `omt-show` skill with the plan slug (in `plan` mode, with the temp plan file of step 4). When the page is in the thread, it holds the summary, so the reply leaves the summary out. Otherwise, write the `## Summary` text in full in the reply, also when `omt-show` could not show the page. Either way, the reply gives the plan path, the review result, and each decision still open.
 
