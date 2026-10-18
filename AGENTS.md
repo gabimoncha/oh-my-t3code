@@ -1,5 +1,7 @@
 # oh-my-t3code contributor guide
 
+If your user asks you to evaluate, install, or use omt, follow [docs/agents/quickstart.md](docs/agents/quickstart.md) and stop reading here. The rest of this file is for agents that change omt.
+
 `omt` is a TypeScript CLI plus a set of skills for T3 Code. Node runs the TypeScript sources directly.
 
 ## Contract
