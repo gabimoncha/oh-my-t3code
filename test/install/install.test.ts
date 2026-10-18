@@ -358,7 +358,7 @@ test("--hooks is refused for a temp or npx cliPath", async (t) => {
     const { code, ctx } = await f.run(["install", "--yes", "--hooks"], { cliPath });
     assert.equal(code, 1);
     assert.match(ctx.err(), /temporary path/);
-    assert.match(ctx.err(), /hint: install the package globally/);
+    assert.match(ctx.err(), /hint: run it from a clone and add it to PATH with pnpm link --global/);
   }
   assert.deepEqual(snapshot(f.home), before);
 });
