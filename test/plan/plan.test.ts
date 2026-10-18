@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { run } from "../../src/commands/plan.ts";
 import { parsePlan } from "../../src/plan/parse.ts";
 import { planTemplate } from "../../src/plan/template.ts";
-import { omtExit, projectContext } from "../helpers.ts";
+import { omtExit, projectContext, spawnOmt, tempDir } from "../helpers.ts";
 
 const header = (extra: string) => `# P\n\n<!-- omt-plan v1 slug=p created=2026-01-01T00:00:00.000Z${extra} -->\n`;
 const DEMO_HEADER = "<!-- omt-plan v1 slug=demo created=2026-01-02T03:04:05.000Z";
@@ -135,6 +135,7 @@ test("plan status prints counts and the next unit, defaulting to the newest plan
       "done-when: 1/2",
       "final: 1/2",
       "next: U4 Add the token refresh endpoint",
+      "ready: U4, U5",
       "",
     ].join("\n"),
   );
@@ -146,6 +147,39 @@ test("plan status prints counts and the next unit, defaulting to the newest plan
   assert.equal(parsed.path, join(dir, "older.md"));
   assert.equal(parsed.next.id, "U1");
   assert.deepEqual(parsed.counts.U, { open: 1, done: 0, blocked: 0, total: 1 });
+});
+
+test("plan status CLI lists only dependency-ready units in text and JSON", (t) => {
+  const root = tempDir(t);
+  mkdirSync(join(root, ".git"));
+  const dir = join(root, ".omt", "plans");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, "dependencies.md"), `# Dependencies
+
+<!-- omt-plan v1 slug=dependencies created=2026-01-01T00:00:00.000Z -->
+
+## Units
+
+- [x] U1. Add the model
+  - Depends on: none
+- [ ] U2. Add the endpoint
+  - Depends on: U3
+- [ ] U3. Add the store
+  - Depends on: U1
+- [~] U4. Add the client
+  - Depends on: U1
+`);
+
+  const text = spawnOmt(["plan", "status", "dependencies"], { root });
+  assert.equal(text.code, 0, text.stderr);
+  assert.match(text.stdout, /^next: U2 Add the endpoint\nready: U3$/m);
+  const readyIds = text.stdout.match(/^ready: (.+)$/m)?.[1]?.split(", ");
+  assert.deepEqual(readyIds, ["U3"]);
+
+  const json = spawnOmt(["plan", "status", "dependencies", "--json"], { root });
+  assert.equal(json.code, 0, json.stderr);
+  const parsed = JSON.parse(json.stdout);
+  assert.deepEqual(parsed.ready.map((item: { id: string }) => item.id), readyIds);
 });
 
 test("plan status fails when there is no plan or the slug is missing", async (t) => {

@@ -91,7 +91,9 @@ A `ui` unit uses the `ui` role, also in a LIGHT run. When `ui` cannot run, stop 
 
 Apply `build.checkpoint` in step 8 before every dispatch. While a check-in awaits the owner's reply, dispatch nothing new. With `layer`, dispatch only units of the current approved dependency layer until that layer is finished and the owner approves the next layer. With `layer`, count layer 1 as approved when the run starts. Count a reopened unit's fix, review, verify, and qa tasks as part of the current layer. Keep later layers blocked. While a check-in awaits the owner's reply, keep the reopened unit's tasks waiting too. With `unit`, dispatch no new unit after a unit is verified until the owner replies.
 
-For each unit whose dependencies are done, until a limit is reached:
+Run `omt plan status <slug>`. Its `ready:` line lists the open units whose dependencies are done. Start only the units on that line that the run has not dispatched yet: units with no entry in `omt ledger list --plan <slug>`. A unit with ledger entries keeps its current path: review, test, and fix through steps 6 to 9, retries through the [failure codes](../omt/references/delegation.md#failure-codes), and a reopen through step 9. When `ready:` is `none`, open units remain, and no task is active, run `omt visual --plan <slug> --json` and report its dependency warnings to the user.
+
+For each unit on the `ready:` line that the run has not dispatched, until a limit is reached:
 
 1. Run `omt ledger stats --plan <slug>`. Dispatch only while it reports `can dispatch: yes`. When it reports `can dispatch: no` and `active: 0`, the run is stalled: run the settle sweep ([delegation.md](../omt/references/delegation.md#releasing-children)), then stop and follow [delegation.md](../omt/references/delegation.md#limits).
 2. Build the arguments: `omt brief <role> --task-file - --title "<role> <unit>: <short unit title>" --scope ... --done ... --verify ... --plan <slug> --unit <id> --round 1 --attempt 1 --save --json`.

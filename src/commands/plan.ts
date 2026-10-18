@@ -32,7 +32,8 @@ Subcommands:
                     remove it with none; --tasks sets or removes max-tasks
   profile <slug> <name|none>
                     set or remove the plan's selected workflow profile
-  status [<slug>]   print counts and the next open unit (default: newest plan)
+  status [<slug>]   print counts, the next open unit, and the ready units
+                    (default: newest plan)
   list              print one line per plan
 
 Options:
@@ -205,6 +206,7 @@ function formatPlanStatus(status: PlanSummary): string {
     ...(status.maxParallel === undefined ? [] : [`max parallel: ${status.maxParallel}`]),
     ...(status.maxTasks === undefined ? [] : [`max tasks: ${status.maxTasks}`]),
     `next: ${nextText(status)}`,
+    `ready: ${status.ready.length === 0 ? "none" : status.ready.map((item) => item.id).join(", ")}`,
     "",
   ].join("\n");
 }
