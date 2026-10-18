@@ -4,15 +4,15 @@ Snapshot: deepseek-harness clone at commit `5badb15` (`git -C deepseek-harness l
 
 ## Path conventions
 
-- `dsh:` is the clone root `/Users/macowl/development/flowcopilot-company/harness-inspiration/deepseek-harness`.
-- `omt:` is the oh-my-t3code root `/Users/macowl/.t3/projects/oh-my-t3code`.
+- `dsh:` is the root of a clone of https://github.com/deepseek-ai/deepseek-harness at commit `5badb15`.
+- `omt:` is the root of this repository, https://github.com/gabimoncha/oh-my-t3code.
 - Facts about T3 tools come from the T3 MCP tool list in this session, not from a clone. They are labeled "T3 session".
 - I read files only. I ran no script, build, or installer from the clone. I skipped `*.zh.md`, `*.i18n.yaml`, `vendor/`, and `website/`. I read `snapshots/` only for one sample case.
 - The clone is shallow. It has one commit (`git rev-list --count HEAD` returns 1). So I could not check the star, fork, contributor, or 30-day commit counts in the catalog note.
 
 ## Catalog note check
 
-The catalog note (`docs/harness-inspiration/repos/deepseek-harness.md`) is mostly accurate. I confirmed these claims in the clone:
+The catalog note is the owner's private note on deepseek-harness. It is not public. It is mostly accurate. I confirmed these claims in the clone:
 
 - 328 `package.json` files exist under `packages/` outside `node_modules` (count with `find`). "About 330" is correct.
 - Five profile templates ship: `web`, `headless`, `sdk`, `sdk-minimal`, and `acp` (`dsh:packages/boot/app-boot/src/profile.ts:178-195`).

@@ -4,15 +4,15 @@ Snapshot: oh-my-pi clone at commit `d0cc523` (`git -C oh-my-pi log --oneline -1`
 
 ## Path conventions
 
-- `oh-my-pi:` is the clone root `/Users/macowl/development/flowcopilot-company/harness-inspiration/oh-my-pi`.
-- `pi:` is the clone root `/Users/macowl/development/flowcopilot-company/harness-inspiration/pi`.
-- `t3code:` is the clone root `/Users/macowl/development/flowcopilot-company/harness-inspiration/t3code`.
+- `oh-my-pi:` is the root of a clone of https://github.com/can1357/oh-my-pi at commit `d0cc523`.
+- `pi:` is the root of a clone of https://github.com/earendil-works/pi at commit `1144973`.
+- `t3code:` is the root of a clone of https://github.com/pingdotgg/t3code. The report does not name its commit.
 - `CA` in a path means `packages/coding-agent/src` inside oh-my-pi. Example: `oh-my-pi:CA/task/agents.ts` is `oh-my-pi:packages/coding-agent/src/task/agents.ts`.
 - Facts about T3 tools come from the T3 MCP tool list and the T3 orchestration instructions in this session, not from a clone. They are labeled "T3 session".
 
 ## Catalog note check
 
-The catalog note (`docs/harness-inspiration/repos/oh-my-pi.md`) is accurate on the points this report uses. I confirmed these claims in the clone:
+The catalog note is the owner's private note on oh-my-pi. It is not public. It is accurate on the points this report uses. I confirmed these claims in the clone:
 
 - Fifteen model roles exist (`oh-my-pi:packages/tui/src/overlays/model-browser.ts:64-93`).
 - Fallback chains exist per role, per model, and per provider wildcard (`oh-my-pi:docs/settings.md:572`).

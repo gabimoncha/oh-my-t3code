@@ -4,8 +4,8 @@ Snapshot: prime-agent clone at commit `2ed8356` ("feed the tray context usage of
 
 ## Path conventions
 
-- `pa:` is the clone root `/Users/macowl/development/flowcopilot-company/harness-inspiration/prime-agent`.
-- `dsh:` is the clone root `/Users/macowl/development/flowcopilot-company/harness-inspiration/deepseek-harness`.
+- `pa:` is the root of a clone of https://github.com/PrimeIntellect-ai/prime-agent at commit `2ed8356`.
+- `dsh:` is the root of a clone of https://github.com/deepseek-ai/deepseek-harness at commit `5badb15`.
 - `RF` in a prime-agent path means `crates/pa-core/src/refinement`. `SE` means `crates/pa-core/src/session_engine`. Example: `pa:RF/planner.rs` is `pa:crates/pa-core/src/refinement/planner.rs`.
 - A path without a prefix is in this repository (oh-my-t3code).
 - I read only English docs in deepseek-harness. I skipped `*.zh.md` and `*.i18n.yaml`.

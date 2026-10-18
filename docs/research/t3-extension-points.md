@@ -1,5 +1,12 @@
 # T3 Code extension points for oh-my-t3code
 
+> Note, 2026-10-18: this report reads a T3 Code source snapshot from before T3 Code v0.1.0, which was released on 2026-10-15. Two facts changed in v0.1.0:
+>
+> - `delegate_task` accepts `isolation: "worktree"`. A child with that option runs in a separate checkout based on the parent's local commit ([tools.ts](https://github.com/pingdotgg/t3code/blob/v0.1.0/apps/server/src/mcp/toolkits/orchestrator/tools.ts#L66)).
+> - Agents outside T3 can connect to T3's `/mcp` endpoint with OAuth ([outside-agents.md](https://github.com/pingdotgg/t3code/blob/v0.1.0/docs/user/outside-agents.md)). Thread-only tools such as `delegate_task` and `task_status` still need a T3 thread as the caller ([handlers.ts](https://github.com/pingdotgg/t3code/blob/v0.1.0/apps/server/src/mcp/toolkits/orchestrator/handlers.ts#L19)).
+>
+> Release data: [GitHub API, latest release](https://api.github.com/repos/pingdotgg/t3code/releases/latest). Provider setup: [install.md, Providers](https://github.com/pingdotgg/t3code/blob/v0.1.0/docs/user/install.md#providers).
+
 Research date: 2026-10-06.
 
 Sources and versions read:
