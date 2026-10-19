@@ -6,7 +6,7 @@ Research date: 2026-10-10.
 
 ## Path conventions
 
-- `omt:` is the oh-my-t3code root `/Users/macowl/.t3/projects/oh-my-t3code`.
+- `omt:` is the root of this repository, https://github.com/gabimoncha/oh-my-t3code.
 - A source name in square brackets is a link. The link list is at the end of the file.
 
 ## Method

@@ -2,103 +2,71 @@
 
 # oh-my-t3code
 
-oh-my-t3code (`omt`) adds roles, task briefs, plans, and review loops to the agents that you run in [T3 Code](https://t3.codes). You write one sentence, such as `ulw add OAuth to the API`. The agent then plans the work in units and sends each unit to the right model as a T3 child task. The selected profile controls review and verification. The normal profile reviews each unit and requires a final cross-family oracle for HEAVY work.
+oh-my-t3code (`omt`) adds plans, roles, task briefs, and review loops to the agents that you run in [T3 Code](https://t3.codes). You write one sentence, such as `ulw add OAuth to the API`. The agent plans the work in units, sends each unit to the right model as a T3 child task, and reviews and verifies the result.
 
-oh-my-t3code has two parts:
+## Who it is for
 
-- A set of skills that tell the agent how to plan, delegate, review, and verify.
-- A small CLI, `omt`, that does the deterministic parts. It merges the config, picks a model for each role, renders briefs, and counts plan and ledger state.
+omt is for you if:
 
-The CLI has no runtime dependencies. It makes no network calls and sends no telemetry.
+- You use T3 Code and want an agent to plan and finish multi-step work with subagents.
+- You have Claude Code, Codex, or both, and want one model family to review the work of the other.
+- You want the plan, the task count, and the review verdicts in files that you can read.
 
-## How it builds on T3 orchestrator v2
+omt is not for you if:
 
-T3 orchestrator v2 gives every agent session the `t3-code` MCP server. With it, an agent can start child tasks on any provider and model (`delegate_task`), check and cancel them (`task_status`, `task_cancel`), and read the live model catalog (`orchestrator_capabilities`). Every child runs as a T3 thread, so the T3 UI already shows its progress and its result.
+- You do not use T3 Code. The skills start child tasks with T3's `delegate_task` tool, which works only from a T3 thread.
+- You want a quick edit with no plan and no review. omt runs its full loop even for a small task, and a unit costs about 5 child tasks.
+- You want a hosted service or a background scheduler. omt adds no server and no daemon.
 
-T3 does not give you roles, model routing, briefs, review loops, or limits. oh-my-t3code adds them on top of the T3 tools. It adds no server and no daemon. It does not change T3 itself.
+## Requirements
 
-- A role, such as `execute` or `review`, maps to an ordered chain of provider, model, and effort. When the first choice is not available, the agent falls back to the next one.
-- Every child gets a complete brief. The brief has the task, the scope, the done conditions, the verify commands, and a fixed result block.
-- The plan and the ledger live in `.omt/` in your project, so a long run survives context compaction.
-- Profiles select workflow steps and can override roles, models, and limits. The default permits 6 parallel tasks in one checkout.
+- [T3 Code](https://t3.codes) v0.1.0 or later. It is free, for macOS, Windows, and Linux.
+- Claude Code (`claude auth login`), Codex with a ChatGPT sign-in, or both, enabled in T3 Settings, Providers.
+  - With both, a model from the other family reviews each change. With one family, the same family reviews its own work.
+  - The `design` and `ui` roles run only on Claude. Without Claude Code, omt cannot do design or UI units.
+- Node.js 22.18 or later.
+- git.
+- pnpm, only for the global install.
 
-## Install
+## For agents
 
-You need Node.js 22.18 or later, pnpm, and T3 Code.
+To have your coding agent install omt, paste this prompt into Codex or Claude Code in your project:
 
-Install the CLI from a clone:
+```text
+Install oh-my-t3code (omt) for this project. Follow
+https://github.com/gabimoncha/oh-my-t3code/blob/main/docs/agents/quickstart.md
+step by step, run the check at the end of each step, and tell me what to restart.
+```
+
+The prompt points at the [agent quick start](docs/agents/quickstart.md). It checks the fit, installs omt for one project, and lists the first tasks to try.
+
+## Quick start
+
+Install omt into one project. This writes only inside the project and hides its files from git. It needs no `pnpm install`.
 
 ```sh
-git clone https://github.com/gabimoncha/oh-my-t3code.git
-cd oh-my-t3code
+git clone https://github.com/gabimoncha/oh-my-t3code.git ~/src/oh-my-t3code
+cd /path/to/your-project
+node ~/src/oh-my-t3code/src/cli.ts install --project --hooks
+node ~/src/oh-my-t3code/src/cli.ts doctor --project
+```
+
+The install shows its plan and asks before it writes. `--hooks` adds the `ulw` keyword for Claude Code. Leave it out if you use only Codex. Doctor prints one line per check. Expect `PASS` lines and no `FAIL` line. A `WARN t3` line means that doctor found no T3 Code settings file.
+
+Then restart the agent sessions of this project in T3 Code. A running session does not load new skills.
+
+To put `omt` on your `PATH` and install the skills for all projects, use the global install:
+
+```sh
+cd ~/src/oh-my-t3code
 pnpm install
 pnpm build
 pnpm link --global
-```
-
-Then install the skills:
-
-```sh
 omt install
-```
-
-`omt install` shows its plan first and asks before it writes. Add `--yes` to skip the question.
-
-To arm ultrawork with the `ulw` keyword in Claude Code, also install the hook:
-
-```sh
-omt install --hooks
-```
-
-Check the result:
-
-```sh
 omt doctor
 ```
 
-Restart your agent sessions in T3 Code after the install. A running session does not load new skills.
-
-If you use Codex children, open T3 Code Settings, Providers, Codex, and set Launch arguments to `-c thread_unload_delay_secs=60`, with no quotes. Codex 0.163.0 keeps a released thread and its MCP server processes for 30 minutes by default. With this setting, a child that omt settles closes after one minute. T3 applies the setting when it starts its next Codex app-server.
-
-## Try it in one project
-
-You can try oh-my-t3code in one repository without a global link. This mode does not change `~/.agents/skills`, `~/.claude`, or your `PATH`. It refuses to run in your home directory, because there the project paths are the global paths. Clone the repository, then run the CLI from the clone in the target project. This needs only Node 22.18 or later. You do not need `pnpm install` to run `node <clone>/src/cli.ts`:
-
-```sh
-cd /path/to/your-project
-node /path/to/oh-my-t3code/src/cli.ts install --project --hooks
-```
-
-The install writes these paths in the project root:
-
-| Path | What |
-| --- | --- |
-| `.agents/skills/<skill>` | A copy of each skill. Codex, Cursor, OpenCode, Pi, and Antigravity read this directory. |
-| `.claude/skills/<skill>` | A relative symlink to the copy, for Claude Code. |
-| `.omt/config.jsonc`, `.omt/plans/` | The project config and the plans directory, as `omt init` creates them. |
-| `.omt/bin/omt` | A shell script that runs the CLI from your clone. It tries the Node binary that ran the install, and falls back to `node` on `PATH` after a Node upgrade. |
-| `.claude/settings.local.json` | The `ulw` hook entry, only with `--hooks`. The hook calls `.omt/bin/omt`. |
-| `.omt/install.json`, `.omt/backups/` | The manifest and the backups. |
-
-Agents in the project call the CLI as `.omt/bin/omt` when `omt` is not on `PATH`.
-
-Git does not see these files. The install writes one managed block into the repository's `.git/info/exclude`, so `git status` shows nothing new. That file is local to your clone and is never committed. The block names only the files that the install writes. The plans in `.omt/plans/` are shared by all worktrees and do not show in git, because `.omt/.gitignore` holds `plans/`. To keep a finished plan, copy it outside `.omt/` and commit it there. Each project root has its own block. In a monorepo, the entries of a package start with the package path, so packages do not hide each other's files. A repository has one project install, in the main checkout, and `install`, `uninstall`, or `doctor` with `--project` in a worktree acts on the main checkout and its `.omt`, which all worktrees share. The skill folders stay in the main checkout, so an agent in a worktree finds them only if its harness reads the skill folders of the main checkout. A `.gitignore` with `*` in `.omt/backups/` hides the backups from git.
-
-One file can still show in git. When the repository tracks `.claude/settings.local.json`, `git status` shows it as modified while the hook is installed. The install edits the file in its own style. It keeps the indentation, and a final newline only when the file had one. It writes the whole file in that indentation, so inline arrays in an indented file become multi-line. When an install changes the layout of the file this way, it first saves the original bytes in `.omt/backups/`. The install creates `.omt/.gitignore` only when it is missing, and never edits a file that the repository already has. When an earlier install created the file and nobody edited it, the install adds the new lines to it. Add `--no-git-exclude` to skip the block, for a setup that you want to commit. It also removes a block that an earlier install wrote. Then the install adds the missing lines to an existing `.omt/.gitignore`, and the uninstall removes them again. A teammate who clones a committed setup runs `install --project` to get the shim, because `.omt/.gitignore` keeps `.omt/bin/` out of git. That install records the committed skills and links as existing. The block does not hide them, and the uninstall keeps them. When the committed skills are older than the CLI, the install updates them, and git shows them as modified.
-
-After you copy or move the project, run the commands in the new place. They read the manifest relative to the new root and never change the old one. The install replaces the block of the old path, unless the old path still has its own install in the same exclude file. That happens when you copy a package inside one repository.
-
-Restart the agent sessions of this project in T3 Code. A running session does not load new skills.
-
-To remove the project install:
-
-```sh
-node /path/to/oh-my-t3code/src/cli.ts uninstall --project
-```
-
-It removes the skills, the links, the shim, the hook entry, the exclude block, and the manifest. It also removes each file and empty directory that the install created. When the settings file left after the hook entry goes equals the backup from the install, the uninstall writes the backup's bytes back and deletes the backup. So the project and `.git/info/exclude` are byte for byte as they were before the install, apart from the plans, the ledger, and the evidence that you added. These stay. When the ledger or the evidence stays, `.omt/.gitignore` stays too, so git does not show them. A path that `install --force` replaced stays in `.omt/backups/`, and the uninstall does not move it back. Git does not show it there.
-
-It keeps a file that the install created and that you edited, and a locally modified skill. A `settings.local.json` that the install created stays when other keys are in it, such as the permissions that Claude Code writes there. The exclude block then keeps only the paths that stay. When you edited `settings.local.json` while omt was installed, the uninstall cannot write the old bytes back: it removes only the omt entry, and the backups stay in `.omt/backups/`, where git does not see them. Add `--purge` to also remove an edited `.omt/config.jsonc` that the install created. While a file that the install created stays, `.omt/install.json` stays too, reduced to a record of these files and of the skills and links that existed before the install. So a later install or uninstall keeps these files hidden from git and keeps the existing skills and links. The uninstall that removes the last of them also removes this record. The uninstall removes every omt hook entry, also one that was already in a tracked `settings.local.json` before you installed, such as the entry of another clone. Git then shows that file as modified.
+The [install guide](docs/install.md) has the details: every path that each install writes, how git stays clean, the Codex setting, and the uninstall.
 
 ## First run
 
@@ -116,7 +84,56 @@ With the Claude Code hook installed, the keyword is enough:
 ulw add rate limiting to the public API
 ```
 
-The agent frames the goal, explores the code, writes a plan in `.omt/plans/`, and dispatches each unit. The profile selects reviews, verification, planned tests, and the final oracle. Run `omt init` in the project first if you want a project config and a `.gitignore` for the plans and the ledger.
+The agent frames the goal, explores the code, writes a plan in `.omt/plans/`, and dispatches each unit. The profile selects reviews, verification, planned tests, and the final oracle. The project install already creates `.omt/`. After a global install, run `omt init` in the project first if you want a project config and a `.gitignore` for the plans and the ledger.
+
+
+## What a run looks like
+
+The [walkthrough](docs/walkthrough.md) shows two real runs on this repository, from the plan files, the ledger, and `git log`.
+
+- `code-health` had 4 units and dispatched 29 child tasks: 4 plan-review, 6 execute, 12 review, 5 test, and 2 oracle. The plan needed 3 review rounds. The first oracle round reopened one unit, and the second approved. The run took 2 hours 20 minutes. It landed one commit with 353 fewer lines of TypeScript, and all 521 tests passed.
+- `workflow-profiles` had 10 units and dispatched 128 child tasks over 5 days of work, from 2026-10-09 to 2026-10-17. The owner raised its task budget in steps to 130. The plan file and the ledger kept the state between sessions.
+
+![The Units tab of the code-health plan page: a flowchart of U1 to U4, each unit depending on the one before it, and a table of the units with their dependencies](docs/assets/walkthrough-plan.png)
+
+## What omt does today
+
+| Mode | What omt does today | How to start it | Limit |
+| --- | --- | --- | --- |
+| Loop | `omt-loop` keeps a plan going across turns until a condition command reports done. | Type `$omt-loop`. You start it yourself. | No tool can set a T3 goal. On Claude and Codex threads, you type `/goal <objective>` yourself. Other providers use a scheduled heartbeat. |
+| Graph | Each plan is a dependency graph: every unit lists its `Depends on` units. `omt plan status <slug>` prints a `ready:` line with the open units whose dependencies are done. `omt visual` and `omt-show` draw the units as a flowchart. | `$omt-ulw` or `$omt-plan` writes the plan. Run `omt plan status <slug>` to see the ready units. | No scheduler process runs. The conductor dispatches the ready units on its own turns, and units run in parallel only when their file scopes do not overlap. |
+| Swarm | `omt-swarm` splits work into independent tracks. Each track runs `omt-ulw` in its own T3 worktree thread and ends in a pull request. | Type `$omt-swarm`. You start it yourself. | The thread must run in `full-access` runtime mode and `default` interaction mode. Tracks share no files. Uncommitted edits stay in your checkout. |
+| Zero-to-one | The plan and the ledger in `.omt/` survive context compaction and new sessions, so one plan can run for days. | `$omt-ulw <goal>`. A HEAVY goal gets a reviewed plan first. | The default budget is 24 child tasks per run, about 3 to 4 units. Raise it with `omt plan limit <slug> --tasks <n>`. The 10-unit `workflow-profiles` run used 128. |
+| Custom agents and workflows | A custom role has its own model chain and a persona file in `.omt/roles/<role>.md`. A profile extends a preset, switches workflow steps, and overrides roles, models, and limits. | Add roles and profiles to `.omt/config.jsonc`. Run `omt profile list`, then `$omt-ulw --profile <name> <task>`. | The skills fix the order of the steps. A profile turns steps on or off and changes their settings, but cannot add a step or reorder them. |
+
+## Glossary
+
+- Conductor: the T3 thread that runs an omt skill. It writes the plan, dispatches child tasks, reads their results, and decides what runs next.
+- Unit: one piece of planned work. It has a role, a file scope, a done condition, a verify command, and its dependencies.
+- Brief: the complete task text that a child gets. It has the task, the scope, the done conditions, the verify commands, and a fixed result block. `omt brief` renders it.
+- Ledger: `.omt/ledger.jsonl`. It has one line for each dispatch and each result. omt counts the task budget from it.
+- Profile: a named set of workflow switches, limits, and role overrides. The presets are `normal`, `prototype`, and `pr-review`.
+- Cross-family review: a reviewer from the other model family than the worker. GPT reviews Claude work, and Claude reviews GPT work.
+- Oracle: a final review of the whole change before it counts as done.
+- LIGHT and HEAVY: the two tiers of a run. A LIGHT run has one or two units in one area of code, with no design decision left. Any other run is HEAVY. A HEAVY run gets a reviewed plan, and the `normal` profile adds a final oracle.
+
+## How it builds on T3 orchestrator v2
+
+oh-my-t3code has two parts:
+
+- A set of skills that tell the agent how to plan, delegate, review, and verify.
+- A small CLI, `omt`, that does the deterministic parts. It merges the config, picks a model for each role, renders briefs, and counts plan and ledger state.
+
+The CLI has no runtime dependencies. It makes no network calls and sends no telemetry.
+
+T3 orchestrator v2 gives every agent session the `t3-code` MCP server. With it, an agent can start child tasks on any provider and model (`delegate_task`), check and cancel them (`task_status`, `task_cancel`), and read the live model catalog (`orchestrator_capabilities`). Every child runs as a T3 thread, so the T3 UI already shows its progress and its result.
+
+T3 does not give you roles, model routing, briefs, review loops, or limits. oh-my-t3code adds them on top of the T3 tools. It adds no server and no daemon. It does not change T3 itself.
+
+- A role, such as `execute` or `review`, maps to an ordered chain of provider, model, and effort. When the first choice is not available, the agent falls back to the next one.
+- Every child gets a complete brief. The brief has the task, the scope, the done conditions, the verify commands, and a fixed result block.
+- The plan and the ledger live in `.omt/` in your project, so a long run survives context compaction.
+- Profiles select workflow steps and can override roles, models, and limits. The default permits 6 parallel tasks in one checkout.
 
 ## Default roles
 
@@ -307,26 +324,10 @@ The agent can pick the first six on its own. You start the last three by name.
 | `omt plan` | Creates plan files and shows their progress. `new --profile <name>` selects a profile. `profile <slug> <name\|none>` switches it. `plan new <slug> --light` leaves out the oracle item. `plan mark <slug> <id> <done\|open\|blocked>` ticks one item. |
 | `omt ledger` | Records and counts delegated tasks in `.omt/ledger.jsonl`. A result entry (`completed`, `failed`, and the other terminal statuses) closes the dispatch with the same `--task-id`, or with the same plan, unit, role, round, and attempt. |
 | `omt visual` | Builds a self-contained HTML page with flowcharts, tables, and status cards. `--plan <slug>` adds the plan's summary, unit flowchart, and checks; `--spec` adds tabs from a JSON page spec. |
+| `omt paths` | Prints the absolute paths of the project root, `.omt`, the plans, the ledger, the evidence directory, the project config, and the shim. From a linked git worktree, the paths are in the main checkout. `--json` prints them as an object. |
 | `omt hook user-prompt-submit` | Runs the Claude Code hook. The hook calls it, not you. |
 
 Every command accepts `--help`. [`docs/spec.md`](docs/spec.md) describes each command in detail.
-
-## What gets written where
-
-| Path | What |
-| --- | --- |
-| `~/.agents/skills/<skill>` | A copy of each skill. Codex, Cursor, OpenCode, and Pi read this directory. |
-| `~/.claude/skills/<skill>` | A relative symlink to the copy, for Claude Code. |
-| `~/.gemini/config/skills/<skill>` | A symlink, only when `~/.gemini` exists or you select the `gemini` target. |
-| `~/.config/oh-my-t3code/config.jsonc` | Your config. |
-| `~/.config/oh-my-t3code/install.json` | The manifest of what the install added. |
-| `~/.config/oh-my-t3code/backups/` | Backups of anything that the install replaced or edited. |
-| `~/.claude/settings.json` | One `UserPromptSubmit` hook entry, only with `--hooks`. Other settings stay unchanged. |
-| `.omt/` in a project | The project config, plans, ledger, locks, local guardrail proposals, and evidence files, including the plan pages under `evidence/visuals/`. |
-
-Each installed skill directory holds a `.omt-managed.json` marker. The install never overwrites a path that it does not manage, unless you pass `--force`. With `--force`, it moves the old path to the backups directory first.
-
-`omt uninstall` removes the managed skill copies, the links that point at them, the hook entry, and the manifest. It keeps your config. Add `--purge` to remove the config too. It never removes a path that it does not manage. Project `.omt/` directories stay in place.
 
 ## Limits and known gaps
 
@@ -334,7 +335,8 @@ Each installed skill directory holds a `.omt-managed.json` marker. The install n
 - The `ulw` hook works only in Claude Code. Codex hooks need per-hook trust, so this version installs none. In Codex, start the loop with `$omt-ulw`.
 - No tool can set a T3 goal. To keep work going across turns on Claude and Codex threads, `omt-loop` asks you to type `/goal <objective>` yourself.
 - The CLI cannot call T3. Without `--capabilities`, it trusts the role chains, and T3 checks the target when the agent calls `delegate_task`. The skills then fall back to the next model on a typed T3 error.
-- Child tasks share the parent's checkout. The plan gives each unit a scope, and editing units run in parallel only when their scopes do not overlap.
+- Child tasks share the parent's checkout, because omt does not yet use T3's worktree isolation (`delegate_task` with `isolation: "worktree"`, available since T3 Code v0.1.0). The plan gives each unit a scope, and editing units run in parallel only when their scopes do not overlap.
+- As of 2026-10-17, Codex 0.163.0 keeps a released thread and its MCP server processes for 30 minutes by default. If you use Codex children, set the launch argument in [the install guide](docs/install.md#set-the-codex-unload-delay), so a settled child closes after one minute.
 
 ## Credits
 

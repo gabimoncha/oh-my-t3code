@@ -119,7 +119,7 @@ The installer copies each skill to `~/.agents/skills/<name>`. Codex, Cursor, Ope
 ## What is out of scope
 
 - A T3 fork or a T3 plugin API. oh-my-t3code uses only the surfaces T3 already exposes.
-- A DAG scheduler, team mailboxes, memory, or computer use. T3 child threads and worktree threads cover the common cases.
+- A DAG scheduler, team mailboxes, memory, or computer use. T3 child threads and worktree threads cover the common cases. No scheduler process runs. Instead, `omt plan status` lists the ready units: the open units whose `Depends on` units are done. The conductor dispatches them.
 - Hooks for Codex, Cursor, and OpenCode. Codex hooks need per-hook trust. They are a later step.
 - Copied code or prompt text from OmO. Its license (Sustainable Use License 1.0) does not allow that. oh-my-t3code re-implements ideas in its own words. omp and T3 Code are MIT.
 

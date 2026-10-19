@@ -214,7 +214,7 @@ async function checkPath(ctx: CliContext): Promise<DoctorCheck> {
   return check(
     "path",
     "WARN",
-    "omt is not on PATH; skills fall back to manual role resolution (run pnpm link --global or npm install -g oh-my-t3code)",
+    "omt is not on PATH; skills use .omt/bin/omt from a project install (omt install --project) and otherwise fall back to manual role resolution; run pnpm link --global in a clone to add it",
   );
 }
 

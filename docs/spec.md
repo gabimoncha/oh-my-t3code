@@ -591,8 +591,8 @@ Only `<taskId>` remains a placeholder. The CLI fills and quotes all other values
 - `profile <slug> <name|none>` changes only the plan header. A name sets `profile=<name>` and prints `set profile=<name> for <slug>`. `none` removes the override and prints `removed the profile of <slug>`. It validates the resulting selection, keeps other header keys, and writes atomically. A missing plan or header exits 1. An unknown profile exits 2 and lists known profiles. The `--profile` flag applies only to `new`; other plan subcommands reject it with exit 2.
 - `mark <slug> <id> <done|open|blocked>` sets the checkbox of the column-zero item line for `<id>` (such as `U3`, `D1`, or `F2`) to `x`, a space, or `~`. It appends `- <ISO timestamp> <id> -> <state>` to the end of the file (the `## Log` section is last), writes atomically, prints `marked <id> <state>`, and exits 0. A missing plan or id exits 1. A bad state exits 2.
 - `limit <slug> [<n|none>] [--tasks <n|none>]` changes the header comment of an existing plan. The positional value sets the `max-parallel` key to `<n>`, or removes it with `none`. `--tasks <n>` sets the `max-tasks` key, and `--tasks none` removes it. One call can give both. With neither, it exits 2. It changes only the header comment (section 12.2), not a later omt-plan comment in the body, keeps the other keys, and writes atomically. It prints one line per changed key: `set <key>=<n> for <slug>` or `removed the <key> limit of <slug>`. A missing plan exits 1. A positional value that is not `none` or an integer from 1 to 32 exits 2. A `--tasks` value that is not `none` or an integer from 1 to 500 exits 2.
-- `status [<slug>]` parses one plan and prints its counts and the next open unit (section 12). The first line has the absolute path of the plan file, so a skill can hash and edit the shared plan from any worktree. The next line is `profile: <effective name>`. When the plan has `maxParallel`, it prints `max parallel: <n>` after the `final` line. When the plan has `maxTasks`, it prints `max tasks: <n>` after that. Without a slug it uses the most recently modified plan. `--json` prints the parsed `PlanStatus` with an added `path` and the effective `profile` name.
-- `list` prints one line per plan: slug, unit counts, and the next open unit. `--json` prints an array of `PlanStatus` items, each with an added `path`. Unlike `status`, `list` keeps the stored optional profile name without resolving it.
+- `status [<slug>]` parses one plan and prints its counts, the next open unit, and the ready units (section 12.2). The first line has the absolute path of the plan file, so a skill can hash and edit the shared plan from any worktree. The next line is `profile: <effective name>`. When the plan has `maxParallel`, it prints `max parallel: <n>` after the `final` line. When the plan has `maxTasks`, it prints `max tasks: <n>` after that. The line after `next:` is `ready: <id>, <id>` with the ids of the `ready` units in file order, or `ready: none`. Without a slug it uses the most recently modified plan. `--json` prints the parsed `PlanStatus` with an added `path` and the effective `profile` name.
+- `list` prints one line per plan: slug, unit counts, and the next open unit. `--json` prints an array of `PlanStatus` items, each with an added `path`, so each item also has `ready`. Unlike `status`, `list` keeps the stored optional profile name without resolving it.
 - `list` and `status` skip a `*.md` entry whose `stat` fails with ENOENT, such as a dangling symlink.
 
 ### 5.6 `omt ledger`
@@ -1252,6 +1252,7 @@ interface PlanStatus {
   items: PlanItem[];
   counts: Record<"U" | "D" | "F", { open: number; done: number; blocked: number; total: number }>;
   next?: PlanItem; // the first open U item in file order
+  ready: PlanItem[]; // the open U items, in file order, whose dependencies are all done
   complete: boolean; // every U, D, and F item is done; false for a plan with no items
 }
 ```
@@ -1265,7 +1266,10 @@ units: 3/7 done, 1 blocked, 3 open
 done-when: 0/2
 final: 0/2
 next: U4 Add the token refresh endpoint
+ready: U4, U6
 ```
+
+`ready` reads the plan after it blanks every fenced line, so a checkbox inside a code fence is never ready and never satisfies a dependency. The dependencies of a unit are the `\bU\d+\b` tokens in its `Depends on` field (`  - Depends on: ...` under the item). An empty field, a missing field, or `none` means no dependencies. A self reference is ignored. A unit is ready when it is open and every other token names a `U` item of the plan in state `done`. A token that names no unit of the plan keeps the unit out of `ready`. A blocked unit is never ready. A unit id that appears on more than one `U` item is never ready, and a dependency on that id is unresolved. `next` does not check dependencies.
 
 ## 13. Claude Code ultrawork hook
 
@@ -1560,7 +1564,7 @@ User scope and project scope never read or write each other's files.
     allow_implicit_invocation: false
   ```
 
-- Skills call the CLI as `omt` on `PATH`. That works after `npm install -g oh-my-t3code`, or `pnpm link --global` in a clone. When `command -v omt` finds nothing, a skill uses `.omt/bin/omt` from the project root, which `omt install --project` creates. When that file is missing, as in a linked worktree, a skill uses the shim of the main checkout, `"$(git rev-parse --path-format=absolute --git-common-dir)/../.omt/bin/omt"`. Without any of them, a skill falls back to the manual steps in `roles.md` and `brief.md`. The rule lives in the section "The CLI" of `skills/omt/references/delegation.md`. Skills never use `npx`, which needs the network.
+- Skills call the CLI as `omt` on `PATH`. That works after `pnpm link --global` in a clone. When `command -v omt` finds nothing, a skill uses `.omt/bin/omt` from the project root, which `omt install --project` creates. When that file is missing, as in a linked worktree, a skill uses the shim of the main checkout, `"$(git rev-parse --path-format=absolute --git-common-dir)/../.omt/bin/omt"`. Without any of them, a skill falls back to the manual steps in `roles.md` and `brief.md`. The rule lives in the section "The CLI" of `skills/omt/references/delegation.md`. Skills never use `npx`, which needs the network.
 - Skills name T3 tools by their base names (`delegate_task`, `task_status`). The first skill text that names a tool says that harnesses may add a prefix, such as `mcp__t3-code__delegate_task`.
 - Shared reference lives in `skills/omt/references/`. Other skills link to it with relative paths such as `../omt/references/delegation.md`.
 - Every relative link in a skill must resolve to a file in the repository. A test checks this.

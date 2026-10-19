@@ -1,6 +1,6 @@
 # oh-my-openagent (OmO): orchestration design for oh-my-t3code
 
-Source: clone at `/Users/macowl/development/flowcopilot-company/harness-inspiration/oh-my-openagent`, commit `eff0416` (merge of PR #9490). All file paths below are relative to the clone root. The repo is under the Sustainable Use License 1.0, so this report paraphrases designs and copies no code or prompt bodies.
+Source: clone of https://github.com/code-yeongyu/oh-my-openagent, commit `eff0416` (merge of PR #9490). All file paths below are relative to the clone root. The repo is under the Sustainable Use License 1.0, so this report paraphrases designs and copies no code or prompt bodies.
 
 Labels used in this report:
 
@@ -18,7 +18,7 @@ The editions do not share one agent roster. The OpenCode edition has the Greek-n
 
 ## Corrections to the existing catalog note
 
-The catalog note at `docs/harness-inspiration/repos/oh-my-openagent.md` (FlowCopilot repo) is mostly accurate. These claims are out of date at `eff0416`:
+The catalog note is the owner's private note on oh-my-openagent. It is not public. It is mostly accurate. These claims are out of date at `eff0416`:
 
 - The profiles `capable` and `deep work` no longer exist. The doc says the retired ids `capable`, `deep-work`, and `simple-work` are not aliases (`docs/guide/agent-model-matching.md:35`). The current profiles are `recommended`, `daily-normal`, `daily-heavy`, `geeky-normal`, and `geeky-heavy` (`packages/omo-senpi/src/components/model-profile/builtin-profiles.ts:71-121`).
 - The `deep` category was split into `deep-low` and `deep-high` in 2026-09. The old name resolves to `deep-low` (`packages/omo-config-core/src/schema/legacy-category-names.ts:1-8`).

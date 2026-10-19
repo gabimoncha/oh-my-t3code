@@ -27,6 +27,7 @@ export interface PlanStatus {
   items: PlanItem[];
   counts: Record<PlanItemKind, PlanCounts>;
   next?: PlanItem;
+  ready: PlanItem[];
   complete: boolean;
 }
 
@@ -146,6 +147,35 @@ function emptyCounts(): PlanCounts {
   return { open: 0, done: 0, blocked: 0, total: 0 };
 }
 
+// The open U items outside code fences whose every "Depends on" token names a done U item outside
+// code fences. A token that names no such unit keeps the unit waiting. An id on more than one item
+// has no single state or field set, so it is never ready and never satisfies a dependency.
+function readyUnits(markdown: string, items: PlanItem[]): PlanItem[] {
+  const unfenced = blankFences(markdown);
+  const unfencedLines = new Set<number>();
+  unfenced.split("\n").forEach((line, index) => {
+    if (ITEM_RE.test(line)) unfencedLines.add(index + 1);
+  });
+  const units = items.filter((item) => item.kind === "U" && unfencedLines.has(item.line));
+  const states = new Map<string, PlanItemState>();
+  const duplicates = new Set<string>();
+  for (const unit of units) {
+    if (states.has(unit.id)) duplicates.add(unit.id);
+    else states.set(unit.id, unit.state);
+  }
+  for (const id of duplicates) states.delete(id);
+  const fields = unitFields(unfenced);
+  return units.filter((unit) => {
+    if (unit.state !== "open" || duplicates.has(unit.id)) return false;
+    const depends = fields.get(unit.id)?.get("depends on") ?? "";
+    for (const match of depends.matchAll(/\bU\d+\b/g)) {
+      const token = match[0];
+      if (token !== unit.id && states.get(token) !== "done") return false;
+    }
+    return true;
+  });
+}
+
 export function parsePlan(markdown: string): PlanStatus {
   const lines = planLines(markdown);
   let title = "";
@@ -180,6 +210,7 @@ export function parsePlan(markdown: string): PlanStatus {
     title,
     items,
     counts,
+    ready: readyUnits(markdown, items),
     complete: items.length > 0 && items.every((item) => item.state === "done"),
   };
   if (slug !== undefined) status.slug = slug;

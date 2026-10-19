@@ -33,7 +33,7 @@ export function assertStableCliPath(cliPath: string, tempRoot: string = tmpdir()
     paths.some((path) => temps.some((temp) => isInside(path, temp)));
   if (transient) {
     throw new OmtError("hook_cli_path", `refusing ${flag}: the omt CLI runs from a temporary path (${cliPath})`, {
-      hint: `install the package globally (npm install -g oh-my-t3code) or run it from a clone, then run omt install ${flag} again`,
+      hint: `run it from a clone and add it to PATH with pnpm link --global, then run omt install ${flag} again`,
     });
   }
 }
