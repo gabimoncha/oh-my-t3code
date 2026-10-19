@@ -159,7 +159,7 @@ Show the current setup:
 Tell the user how to change them:
 
 - Pick a profile for one run: `$omt-ulw --profile prototype <task>`. Pick a default: set `"profile": "<name>"` in `.omt/config.jsonc`. Switch a running plan: `.omt/bin/omt plan profile <slug> <name>`.
-- Write a profile: add it under `profiles` in `.omt/config.jsonc` (this project) or `~/.config/oh-my-t3code/config.jsonc` (all projects). A profile `extends` a preset and can switch workflow steps and override roles, models, and limits. A profile without `extends` inherits `normal`. The README section "Choose a workflow" has an example.
+- Write a profile: add it under `profiles` in `.omt/config.jsonc` (this project) or `~/.config/oh-my-t3code/config.jsonc` (all projects). A profile `extends` a preset and can switch workflow steps and override roles, models, and limits. A profile without `extends` inherits `normal`. [Configure roles and profiles](../configuration.md#write-a-custom-profile) has an example.
 - Add a custom role: add it under `roles` in the same config files. A new role needs `description`, `access`, and `chain`. Its `result` field picks the result block: `work`, `review`, `test`, `research`, `plan`, or `guardrail`.
 - Add a persona: write `.omt/roles/<role>.md`. Its content is the persona and rules for that role, and it replaces the bundled persona. The lookup order is `.omt/roles/`, then `~/.config/oh-my-t3code/roles/`, then the bundled personas.
 
@@ -234,4 +234,6 @@ Do not judge the uninstall by `git status`. The other changes that it shows are 
 
 - [Walkthrough](../walkthrough.md): two real omt runs, with their plans, tasks, and reviews.
 - [Install guide](../install.md): the global install, every path the install writes, and the uninstall details.
-- [README](../../README.md): the default roles, the commands, and the limits.
+- [Configure roles and profiles](../configuration.md): the default roles, custom roles and profiles, and fast mode.
+- [Commands](../commands.md): every `omt` command.
+- [README](../../README.md): the features, the skills, and the limits.
