@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { test } from "node:test";
+import { test } from "bun:test";
 import { requestId } from "../../src/ledger/ledger.ts";
 import type { BriefJsonOutput } from "../../src/types.ts";
 import { CAPS_FILE, makeProject } from "./shared.ts";
@@ -12,8 +12,8 @@ function parse(text: string): BriefJsonOutput {
   return JSON.parse(text) as BriefJsonOutput;
 }
 
-test("brief prints the rendered brief with every given section", async (t) => {
-  const { ctx } = await makeProject(t).runOk([
+test("brief prints the rendered brief with every given section", async () => {
+  const { ctx } = await makeProject().runOk([
     "brief",
     "execute",
     "--task",
@@ -42,8 +42,8 @@ test("brief prints the rendered brief with every given section", async (t) => {
   assert.doesNotMatch(text, /^# Prior rounds$/m);
 });
 
-test("brief --json holds exactly the delegate_task fields, without clientRequestId by default", async (t) => {
-  const { ctx } = await makeProject(t).runOk(["brief", "review", "--task", "Check the diff.", "--json"]);
+test("brief --json holds exactly the delegate_task fields, without clientRequestId by default", async () => {
+  const { ctx } = await makeProject().runOk(["brief", "review", "--task", "Check the diff.", "--json"]);
   const output = parse(ctx.out());
   assert.deepEqual(Object.keys(output), ["delegateTask", "fallbacks"]);
   assert.deepEqual(Object.keys(output.delegateTask).sort(), [...DELEGATE_TASK_FIELDS].sort());
@@ -58,8 +58,8 @@ test("brief --json holds exactly the delegate_task fields, without clientRequest
   assert.equal(ctx.err(), "");
 });
 
-test("brief --json adds clientRequestId only with both --plan and --unit", async (t) => {
-  const project = makeProject(t);
+test("brief --json adds clientRequestId only with both --plan and --unit", async () => {
+  const project = makeProject();
   const both = parse(
     (await project.runOk(["brief", "review", "--task", "x", "--plan", "auth", "--unit", "U3", "--round", "2", "--attempt", "3", "--json"])).ctx.out(),
   );
@@ -73,8 +73,8 @@ test("brief --json adds clientRequestId only with both --plan and --unit", async
   assert.equal("clientRequestId" in unitOnly.delegateTask, false);
 });
 
-test("brief --json accepts a plan id without a plan file and keeps it in the request id and header", async (t) => {
-  const project = makeProject(t);
+test("brief --json accepts a plan id without a plan file and keeps it in the request id and header", async () => {
+  const project = makeProject();
   const plan = join(project.cwd, ".omt", "plans", "review-x.md");
   assert.equal(existsSync(plan), false);
   const { code, ctx } = await project.run(["brief", "review", "--task", "t", "--plan", "review-x", "--unit", "G1", "--json"]);
@@ -85,8 +85,8 @@ test("brief --json accepts a plan id without a plan file and keeps it in the req
   assert.equal(existsSync(plan), false);
 });
 
-test("brief --json follows the title rule", async (t) => {
-  const project = makeProject(t);
+test("brief --json follows the title rule", async () => {
+  const project = makeProject();
   const title = async (args: string[]) =>
     parse((await project.runOk(["brief", "review", "--json", ...args])).ctx.out()).delegateTask.title;
   assert.equal(await title(["--task", "\n  token refresh  \nmore", "--unit", "U3", "--round", "2"]), "review U3 r2: token refresh");
@@ -96,8 +96,8 @@ test("brief --json follows the title rule", async (t) => {
   assert.equal((await title(["--task", "x", "--title", "y".repeat(100)])).length, 72);
 });
 
-test("brief reads the task from stdin or a file", async (t) => {
-  const project = makeProject(t);
+test("brief reads the task from stdin or a file", async () => {
+  const project = makeProject();
   const fromStdin = await project.runOk(["brief", "execute", "--task-file", "-"], { stdin: "Task from stdin.\n" });
   assert.match(fromStdin.ctx.out(), /^# Task\n\nTask from stdin\.$/m);
   const file = join(project.root, "task.md");
@@ -110,8 +110,8 @@ test("brief reads the task from stdin or a file", async (t) => {
   assert.match(withPrior.ctx.out(), /^# Prior rounds\n\nFinding 1 is fixed\.$/m);
 });
 
-test("brief rejects bad usage with exit 2", async (t) => {
-  const project = makeProject(t);
+test("brief rejects bad usage with exit 2", async () => {
+  const project = makeProject();
   for (const argv of [
     ["brief"],
     ["brief", "execute"],
@@ -125,8 +125,8 @@ test("brief rejects bad usage with exit 2", async (t) => {
   }
 });
 
-test("brief fails on an unknown role and on an unavailable role with --json", async (t) => {
-  const project = makeProject(t);
+test("brief fails on an unknown role and on an unavailable role with --json", async () => {
+  const project = makeProject();
   const unknown = await project.run(["brief", "nope", "--task", "x"]);
   assert.equal(unknown.code, 1);
   assert.match(unknown.ctx.err(), /unknown role nope/);
@@ -139,8 +139,8 @@ test("brief fails on an unknown role and on an unavailable role with --json", as
   assert.match(unavailable.ctx.err(), /rung 1: provider grok cannot run child tasks/);
 });
 
-test("brief --json --capabilities resolves the target against T3", async (t) => {
-  const { ctx } = await makeProject(t).runOk(["brief", "execute", "--task", "x", "--json", "--capabilities", CAPS_FILE]);
+test("brief --json --capabilities resolves the target against T3", async () => {
+  const { ctx } = await makeProject().runOk(["brief", "execute", "--task", "x", "--json", "--capabilities", CAPS_FILE]);
   assert.deepEqual(parse(ctx.out()).delegateTask.target, {
     providerInstanceId: "claudeAgent",
     model: "claude-opus-5-5",
@@ -148,8 +148,8 @@ test("brief --json --capabilities resolves the target against T3", async (t) => 
   });
 });
 
-test("brief rejects an invalid --plan or --unit with exit code 2", async (t) => {
-  const project = makeProject(t);
+test("brief rejects an invalid --plan or --unit with exit code 2", async () => {
+  const project = makeProject();
   for (const flags of [["--plan", "a -->"], ["--plan", "a b"], ["--plan", "A"], ["--unit", "U 1"], ["--unit", "u".repeat(65)]]) {
     const { code, ctx } = await project.run(["brief", "execute", "--task", "x", ...flags]);
     assert.equal(code, 2, flags.join(" "));
@@ -157,8 +157,8 @@ test("brief rejects an invalid --plan or --unit with exit code 2", async (t) => 
   }
 });
 
-test("brief --max-depth overrides the config max depth, and a deeper --depth is a usage error", async (t) => {
-  const project = makeProject(t);
+test("brief --max-depth overrides the config max depth, and a deeper --depth is a usage error", async () => {
+  const project = makeProject();
   const raised = await project.runOk(["brief", "execute", "--task", "x", "--depth", "2", "--max-depth", "3"]);
   assert.match(raised.ctx.out(), /depth=2\/3/);
   assert.match(raised.ctx.out(), /You may delegate with the T3 delegate_task tool\. Give each child depth 3, and pass --max-depth 3 to omt brief\.$/m);
@@ -176,8 +176,8 @@ test("brief --max-depth overrides the config max depth, and a deeper --depth is 
   }
 });
 
-test("brief adds the evidence line for edit roles only", async (t) => {
-  const project = makeProject(t);
+test("brief adds the evidence line for edit roles only", async () => {
+  const project = makeProject();
   const edit = await project.runOk(["brief", "execute", "--task", "x"]);
   const line = `- Evidence: save command output and logs under ${join(project.cwd, ".omt", "evidence")}/.`;
   assert.ok(edit.ctx.out().split("\n").includes(line), edit.ctx.out());
@@ -185,15 +185,15 @@ test("brief adds the evidence line for edit roles only", async (t) => {
   assert.doesNotMatch(readOnly.ctx.out(), /Evidence:/);
 });
 
-test("brief exits 1 when the rendered task is longer than 120,000 characters", async (t) => {
-  const { code, ctx } = await makeProject(t).run(["brief", "execute", "--task", "x", "--context", "c".repeat(120_000)]);
+test("brief exits 1 when the rendered task is longer than 120,000 characters", async () => {
+  const { code, ctx } = await makeProject().run(["brief", "execute", "--task", "x", "--context", "c".repeat(120_000)]);
   assert.equal(code, 1);
   assert.equal(ctx.out(), "");
   assert.match(ctx.err(), /^hint: shorten --context or --prior-file/m);
 });
 
-test("brief --json --against puts the other family first and prints the notes to stderr", async (t) => {
-  const project = makeProject(t);
+test("brief --json --against puts the other family first and prints the notes to stderr", async () => {
+  const project = makeProject();
   const codex = await project.runOk(["brief", "review", "--task", "Check U1.", "--against", "codex", "--json"]);
   const output = parse(codex.ctx.out());
   assert.deepEqual(Object.keys(output), ["delegateTask", "fallbacks"]);
@@ -209,8 +209,8 @@ test("brief --json --against puts the other family first and prints the notes to
   });
 });
 
-test("brief --json --against auto takes the unit's worker from the ledger", async (t) => {
-  const project = makeProject(t);
+test("brief --json --against auto takes the unit's worker from the ledger", async () => {
+  const project = makeProject();
   project.writeOmt(
     "ledger.jsonl",
     `${JSON.stringify({ ts: "2026-10-06T00:00:00.000Z", role: "execute", status: "dispatched", plan: "p", unit: "U1", provider: "codex", model: "gpt-6.1-sol" })}\n`,
@@ -224,15 +224,15 @@ test("brief --json --against auto takes the unit's worker from the ledger", asyn
   assert.match(ctx.err(), /^note: --against auto: worker codex from the last work dispatch of unit U1$/m);
 });
 
-test("brief --against auto without --plan is a usage error", async (t) => {
-  const { code, ctx } = await makeProject(t).run(["brief", "review", "--task", "x", "--against", "auto", "--json"]);
+test("brief --against auto without --plan is a usage error", async () => {
+  const { code, ctx } = await makeProject().run(["brief", "review", "--task", "x", "--against", "auto", "--json"]);
   assert.equal(code, 2);
   assert.equal(ctx.out(), "");
   assert.match(ctx.err(), /--against auto needs --plan <slug>/);
 });
 
-test("plan, ledger, and brief warn when no .omt or .git is above the current folder", async (t) => {
-  const project = makeProject(t);
+test("plan, ledger, and brief warn when no .omt or .git is above the current folder", async () => {
+  const project = makeProject();
   const outside = join(project.root, "outside");
   mkdirSync(outside, { recursive: true });
   const warned = await project.runOk(["brief", "execute", "--task", "x"], { cwd: outside });

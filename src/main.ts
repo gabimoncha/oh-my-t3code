@@ -1,8 +1,9 @@
-import { readFileSync, realpathSync } from "node:fs";
+import { realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, extname, isAbsolute, join } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
+import pkg from "../package.json" with { type: "json" };
 import * as brief from "./commands/brief.ts";
 import * as config from "./commands/config.ts";
 import * as doctor from "./commands/doctor.ts";
@@ -18,7 +19,7 @@ import * as roles from "./commands/roles.ts";
 import * as route from "./commands/route.ts";
 import * as uninstall from "./commands/uninstall.ts";
 import * as visual from "./commands/visual.ts";
-import type { CliContext, CommandRun } from "./types.ts";
+import type { CliBuild, CliContext, CommandRun } from "./types.ts";
 import { findProjectRoot, hasProjectMarker, omtDir, shadowedWorktreeState } from "./paths.ts";
 import { errorMessage, OmtError } from "./util/errors.ts";
 
@@ -50,11 +51,18 @@ const STATE_COMMANDS = new Set(["plan", "ledger", "brief", "route", "init", "vis
 // Run from a folder outside any project, these commands would write plans, ledger entries, or evidence paths there.
 const PROJECT_COMMANDS = new Set(["plan", "profile", "ledger", "brief", "visual", "lock"]);
 
-const HERE = fileURLToPath(import.meta.url);
+// scripts/build.ts defines OMT_BUILD as "bundle" or "binary". The sources run without it.
+declare const OMT_BUILD: string | undefined;
 
-export function readPackageVersion(packageRoot: string): string {
-  const pkg = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8")) as { version?: unknown };
-  return typeof pkg.version === "string" ? pkg.version : "0.0.0";
+const BUILD: CliBuild =
+  typeof OMT_BUILD === "string" && (OMT_BUILD === "bundle" || OMT_BUILD === "binary") ? OMT_BUILD : "source";
+
+// The bundle dist/cli.js and the sources src/main.ts sit one folder below the package root. A binary
+// holds skills/ in its embedded root, and its own path is the CLI path.
+function locate(): { packageRoot: string; cliPath: string } {
+  if (BUILD === "binary") return { packageRoot: import.meta.dir, cliPath: process.execPath };
+  const here = fileURLToPath(import.meta.url);
+  return { packageRoot: dirname(dirname(here)), cliPath: join(dirname(here), `cli${extname(here)}`) };
 }
 
 async function readAllStdin(): Promise<string> {
@@ -95,7 +103,8 @@ export function logicalCwd(env: Record<string, string | undefined>, physical: st
 }
 
 export function createContext(overrides: Partial<CliContext> = {}): CliContext {
-  const packageRoot = overrides.packageRoot ?? dirname(dirname(HERE));
+  const { packageRoot, cliPath } = locate();
+  const bunVersion: string | undefined = process.versions.bun;
   return {
     argv: [],
     cwd: logicalCwd(process.env, process.cwd()),
@@ -112,10 +121,12 @@ export function createContext(overrides: Partial<CliContext> = {}): CliContext {
     prompt: promptLine,
     now: () => new Date(),
     packageRoot,
-    cliPath: join(dirname(HERE), `cli${extname(HERE)}`),
-    nodePath: process.execPath,
-    nodeVersion: process.versions.node,
-    version: overrides.version ?? readPackageVersion(packageRoot),
+    cliPath,
+    build: BUILD,
+    ...(BUILD === "binary" ? {} : { runtimePath: process.execPath }),
+    runtimeName: bunVersion === undefined ? "node" : "bun",
+    runtimeVersion: bunVersion ?? process.versions.node,
+    version: pkg.version,
     ...overrides,
   };
 }

@@ -1,8 +1,7 @@
-import { tmpdir } from "node:os";
-import { join, relative, isAbsolute } from "node:path";
+import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { OmtError } from "../util/errors.ts";
-import { readFileIfExists, realOrSelf, writeFileAtomic } from "../util/fs.ts";
+import { readFileIfExists, writeFileAtomic } from "../util/fs.ts";
 import { isRecord } from "../util/json.ts";
 import { writeTargetFor } from "./fsops.ts";
 
@@ -14,42 +13,20 @@ export type HookAction = "create" | "update" | "unchanged" | "remove";
 
 type Json = Record<string, unknown>;
 
-function isInside(child: string, parent: string): boolean {
-  const rel = relative(parent, child);
-  return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
-}
-
-function isPackageRunnerCache(path: string): boolean {
-  const normalized = path.replaceAll("\\", "/");
-  return normalized.includes("/_npx/") || /\/pnpm\/(?:[^/]+\/)*dlx\//i.test(normalized);
-}
-
-// Refuses a CLI path that can disappear: a temp directory, an npx cache, or a pnpm dlx cache.
-export function assertStableCliPath(cliPath: string, tempRoot: string = tmpdir(), flag = "--hooks"): void {
-  const temps = [tempRoot, realOrSelf(tempRoot)];
-  const paths = [cliPath, realOrSelf(cliPath)];
-  const transient =
-    paths.some(isPackageRunnerCache) ||
-    paths.some((path) => temps.some((temp) => isInside(path, temp)));
-  if (transient) {
-    throw new OmtError("hook_cli_path", `refusing ${flag}: the omt CLI runs from a temporary path (${cliPath})`, {
-      hint: `run it from a clone and add it to PATH with pnpm link --global, then run omt install ${flag} again`,
-    });
-  }
-}
-
 function assertQuotable(path: string): void {
   if (/["$`\\\n]/.test(path)) {
     throw new OmtError("hook_cli_path", `refusing --hooks: the path cannot be quoted safely for a shell: ${path}`);
   }
 }
 
-export function hookCommand(nodePath: string, cliPath: string): string {
-  for (const path of [nodePath, cliPath]) assertQuotable(path);
-  return `"${nodePath}" "${cliPath}" hook user-prompt-submit ${HOOK_SIGNATURE}`;
+// A binary runs by itself, so its command names no runtime. Source and bundle mode name the runtime.
+export function hookCommand(runtimePath: string | undefined, cliPath: string): string {
+  const paths = runtimePath === undefined ? [cliPath] : [runtimePath, cliPath];
+  for (const path of paths) assertQuotable(path);
+  return `${paths.map((path) => `"${path}"`).join(" ")} hook user-prompt-submit ${HOOK_SIGNATURE}`;
 }
 
-// Project scope calls the shim, so the node and CLI paths live in one file.
+// Project scope calls the shim, so the runtime and CLI paths live in one file.
 export function shimHookCommand(shimPath: string): string {
   assertQuotable(shimPath);
   return `"${shimPath}" hook user-prompt-submit ${HOOK_SIGNATURE}`;

@@ -2,8 +2,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { test } from "node:test";
-import type { TestContext } from "node:test";
+import { test } from "bun:test";
 import type { BriefJsonOutput, LedgerStats, RouteOutput } from "../src/types.ts";
 import { childEnv, CLI_PATH, gitEnv, gitRepo, spawnOmt, tempDir } from "./helpers.ts";
 import { contentTree } from "./install/fixture.ts";
@@ -12,8 +11,8 @@ function omtEntries(dir: string): string[] {
   return existsSync(dir) ? readdirSync(dir).filter((name) => name.startsWith("omt")) : [];
 }
 
-test("end to end: install, use every command in a project, then uninstall", (t) => {
-  const root = tempDir(t, "omt-e2e-");
+test("end to end: install, use every command in a project, then uninstall", () => {
+  const root = tempDir("omt-e2e-");
   const env = childEnv(root);
   const home = env.HOME as string;
   const project = join(root, "project");
@@ -84,8 +83,8 @@ test("end to end: install, use every command in a project, then uninstall", (t) 
 });
 
 // A committed git repository in a temp root, with an omt runner whose HOME and git config point into the root.
-function gitProject(t: TestContext, files: Record<string, string>) {
-  const root = tempDir(t, "omt-e2e-project-");
+function gitProject(files: Record<string, string>) {
+  const root = tempDir("omt-e2e-project-");
   const env = gitEnv(root);
   const project = join(root, "project");
   mkdirSync(env.HOME as string, { recursive: true });
@@ -108,8 +107,8 @@ for (const [label, files] of [
   ["a tracked .omt/plans/x.md", { "README.md": "demo\n", ".omt/plans/x.md": "# x\n" }],
   ["no .omt and no .claude", { "README.md": "demo\n" }],
 ] as const) {
-  test(`end to end: install --project with ${label} leaves no trace in git, and uninstall restores the tree`, (t) => {
-    const p = gitProject(t, files);
+  test(`end to end: install --project with ${label} leaves no trace in git, and uninstall restores the tree`, () => {
+    const p = gitProject(files);
     const excludeBefore = readFileSync(join(p.project, ".git", "info", "exclude"), "utf8");
     const treeBefore = Object.keys(contentTree(p.project));
 
@@ -130,8 +129,8 @@ for (const [label, files] of [
   });
 }
 
-test("end to end: --project keeps the user's own settings.local.json keys and its mode", (t) => {
-  const p = gitProject(t, { "README.md": "demo\n" });
+test("end to end: --project keeps the user's own settings.local.json keys and its mode", () => {
+  const p = gitProject({ "README.md": "demo\n" });
   const local = join(p.project, ".claude", "settings.local.json");
   mkdirSync(dirname(local));
   const mine = `${JSON.stringify({ theme: "dark", permissions: { allow: ["Bash(ls)"] } }, null, 2)}\n`;

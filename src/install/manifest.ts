@@ -1,5 +1,5 @@
-import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
-import { omtDir, projectClaudeSettingsPath, projectConfigPath, projectInstallDirs, projectShimPath, projectSkillRoots } from "../paths.ts";
+import { basename, dirname, join, relative, sep } from "node:path";
+import { isWithin, omtDir, projectClaudeSettingsPath, projectConfigPath, projectInstallDirs, projectShimPath, projectSkillRoots } from "../paths.ts";
 import { OmtError } from "../util/errors.ts";
 import { readFileIfExists, writeFileAtomic } from "../util/fs.ts";
 import { isRecord } from "../util/json.ts";
@@ -216,11 +216,6 @@ export function mergeManifest(previous: Manifest | undefined, next: Manifest): M
   };
 }
 
-function isInside(child: string, parent: string): boolean {
-  const rel = relative(parent, child);
-  return rel === "" || (rel.split(sep)[0] !== ".." && !isAbsolute(rel));
-}
-
 function isName(name: string): boolean {
   return name !== "" && name !== "." && name !== ".." && !name.includes("/") && !name.includes(sep);
 }
@@ -247,12 +242,12 @@ function projectAllowlist(root: string) {
 export function rebaseManifest(manifest: Manifest, root: string): Manifest {
   const from = manifest.root ?? root;
   const allowed = projectAllowlist(root);
-  const map = (path: string): string | undefined => (isInside(path, from) ? join(root, relative(from, path)) : undefined);
+  const map = (path: string): string | undefined => (isWithin(from, path) ? join(root, relative(from, path)) : undefined);
   const mapIf = (path: string, accept: (mapped: string) => boolean): string | undefined => {
     const mapped = map(path);
     return mapped !== undefined && accept(mapped) ? mapped : undefined;
   };
-  const inBackups = (path: string) => path !== allowed.backups && isInside(path, allowed.backups);
+  const inBackups = (path: string) => path !== allowed.backups && isWithin(allowed.backups, path);
   const defined = <T>(items: (T | undefined)[]): T[] => items.filter((item): item is T => item !== undefined);
   const config = manifest.config === undefined ? undefined : mapIf(manifest.config.path, (path) => path === projectConfigPath(root));
   const { config: _config, project: _project, ...rest } = manifest;

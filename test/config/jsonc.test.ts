@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { test } from "bun:test";
 import assert from "node:assert/strict";
 import { parseJsonc } from "../../src/config/jsonc.ts";
 import { OmtError } from "../../src/util/errors.ts";

@@ -1,15 +1,14 @@
 import assert from "node:assert/strict";
 import { chmodSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { test } from "node:test";
-import type { TestContext } from "node:test";
+import { test } from "bun:test";
 import { CLI_PATH } from "../helpers.ts";
 import { doctor } from "../run.ts";
 import { CAPS_FILE, makeProject } from "./shared.ts";
 import type { Project } from "./shared.ts";
 
-async function installed(t: TestContext, args: string[] = []): Promise<Project> {
-  const project = makeProject(t);
+async function installed(args: string[] = []): Promise<Project> {
+  const project = makeProject();
   await project.runOk(["install", "--yes", ...args]);
   return project;
 }
@@ -19,26 +18,27 @@ function t3Settings(project: Project, value: unknown): void {
   writeFileSync(join(project.home, ".t3", "userdata", "settings.json"), JSON.stringify(value));
 }
 
-test("doctor prints one line per check and exits 0 without failures", async (t) => {
-  const project = makeProject(t);
+test("doctor prints one line per check and exits 0 without failures", async () => {
+  const project = makeProject();
   const { ctx } = await project.runOk(["doctor"]);
   const ids = ctx.out().trimEnd().split("\n").map((line) => line.split(/\s+/)[1]);
-  assert.deepEqual(ids, ["node", "config", "skills", "links", "hooks", "path", "t3", "homes"]);
-  assert.match(ctx.out(), /^PASS  config  15 roles$/m);
+  assert.deepEqual(ids, ["runtime", "config", "skills", "links", "hooks", "path", "t3", "homes"]);
+  assert.match(ctx.out(), /^PASS  config   15 roles$/m);
 });
 
-test("doctor node check passes on 22.18 and fails on an older version", async (t) => {
-  const project = makeProject(t);
-  assert.equal((await doctor(project, [], { nodeVersion: "22.18.0" })).get("node").status, "PASS");
-  assert.equal((await doctor(project, [], { nodeVersion: "24.0.0" })).get("node").status, "PASS");
-  const old = await doctor(project, [], { nodeVersion: "22.17.1" });
-  assert.equal(old.get("node").status, "FAIL");
+test("doctor runtime check passes on Node 22 and fails on an older version", async () => {
+  const project = makeProject();
+  const node = (runtimeVersion: string) => ({ runtimeName: "node" as const, runtimeVersion });
+  assert.equal((await doctor(project, [], node("22.0.0"))).get("runtime").status, "PASS");
+  assert.equal((await doctor(project, [], node("24.0.0"))).get("runtime").status, "PASS");
+  const old = await doctor(project, [], node("21.7.3"));
+  assert.equal(old.get("runtime").status, "FAIL");
   assert.equal(old.report.ok, false);
   assert.equal(old.code, 1);
 });
 
-test("doctor config check: PASS, WARN for warnings, FAIL for errors", async (t) => {
-  const project = makeProject(t);
+test("doctor config check: PASS, WARN for warnings, FAIL for errors", async () => {
+  const project = makeProject();
   assert.equal((await doctor(project)).get("config").status, "PASS");
   project.projectConfig('{ "version": 1, "roles": { "ghost": null } }\n');
   assert.equal((await doctor(project)).get("config").status, "WARN");
@@ -48,12 +48,12 @@ test("doctor config check: PASS, WARN for warnings, FAIL for errors", async (t) 
   assert.equal(failed.code, 1);
 });
 
-test("doctor skills check: PASS when current, WARN when missing or modified", async (t) => {
-  const missing = makeProject(t);
+test("doctor skills check: PASS when current, WARN when missing or modified", async () => {
+  const missing = makeProject();
   assert.equal((await doctor(missing)).get("skills").status, "WARN");
   assert.match((await doctor(missing)).get("skills").message, /^missing: omt, /);
 
-  const project = await installed(t);
+  const project = await installed();
   assert.equal((await doctor(project)).get("skills").status, "PASS");
   writeFileSync(join(project.home, ".agents", "skills", "omt", "SKILL.md"), "edited\n");
   const modified = await doctor(project);
@@ -61,8 +61,8 @@ test("doctor skills check: PASS when current, WARN when missing or modified", as
   assert.match(modified.get("skills").message, /modified: omt/);
 });
 
-test("doctor links check: PASS, WARN for a missing link, FAIL for a conflicting or broken link", async (t) => {
-  const project = await installed(t);
+test("doctor links check: PASS, WARN for a missing link, FAIL for a conflicting or broken link", async () => {
+  const project = await installed();
   const claudeSkills = join(project.home, ".claude", "skills");
   assert.equal((await doctor(project)).get("links").status, "PASS");
 
@@ -80,13 +80,13 @@ test("doctor links check: PASS, WARN for a missing link, FAIL for a conflicting 
   assert.match(broken.get("links").message, /omt-plan \(target is missing\)/);
 });
 
-test("doctor hooks check: INFO, PASS, WARN when removed, FAIL for a missing path", async (t) => {
-  const plain = await installed(t);
+test("doctor hooks check: INFO, PASS, WARN when removed, FAIL for a missing path", async () => {
+  const plain = await installed();
   const info = (await doctor(plain)).get("hooks");
   assert.equal(info.status, "INFO");
   assert.match(info.message, /omt install --hooks/);
 
-  const project = await installed(t, ["--hooks"]);
+  const project = await installed(["--hooks"]);
   assert.equal((await doctor(project)).get("hooks").status, "PASS");
 
   const settings = join(project.home, ".claude", "settings.json");
@@ -100,8 +100,8 @@ test("doctor hooks check: INFO, PASS, WARN when removed, FAIL for a missing path
   assert.equal((await doctor(project)).get("hooks").status, "WARN");
 });
 
-test("doctor path check: PASS with an executable omt on PATH, WARN without", async (t) => {
-  const project = makeProject(t);
+test("doctor path check: PASS with an executable omt on PATH, WARN without", async () => {
+  const project = makeProject();
   const bin = join(project.root, "bin");
   mkdirSync(bin);
   const env = { HOME: project.home, PATH: bin };
@@ -114,15 +114,15 @@ test("doctor path check: PASS with an executable omt on PATH, WARN without", asy
   assert.match(found.message, /bin\/omt$/);
 });
 
-test("doctor t3 check: PASS when the T3 settings file exists, WARN otherwise", async (t) => {
-  const project = makeProject(t);
+test("doctor t3 check: PASS when the T3 settings file exists, WARN otherwise", async () => {
+  const project = makeProject();
   assert.equal((await doctor(project)).get("t3").status, "WARN");
   t3Settings(project, {});
   assert.equal((await doctor(project)).get("t3").status, "PASS");
 });
 
-test("doctor homes check: INFO, PASS, and WARN, and it never writes the T3 settings", async (t) => {
-  const project = await installed(t);
+test("doctor homes check: INFO, PASS, and WARN, and it never writes the T3 settings", async () => {
+  const project = await installed();
   assert.equal((await doctor(project)).get("homes").status, "INFO");
   t3Settings(project, { providerInstances: { cursor: { driver: "cursor", config: {} } } });
   assert.equal((await doctor(project)).get("homes").status, "INFO");
@@ -145,8 +145,8 @@ test("doctor homes check: INFO, PASS, and WARN, and it never writes the T3 setti
   assert.equal(readFileSync(settingsPath, "utf8"), before);
 });
 
-test("doctor roles check runs only with --capabilities: PASS, WARN, FAIL", async (t) => {
-  const project = makeProject(t);
+test("doctor roles check runs only with --capabilities: PASS, WARN, FAIL", async () => {
+  const project = makeProject();
   assert.equal((await doctor(project)).report.checks.some((c) => c.id === "roles"), false);
   assert.equal((await doctor(project, ["--capabilities", CAPS_FILE])).get("roles").status, "PASS");
 

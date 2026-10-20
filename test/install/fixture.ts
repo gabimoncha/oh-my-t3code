@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync } from "node:fs";
 import { join } from "node:path";
-import type { TestContext } from "node:test";
 import { tempDir, writeFile } from "../helpers.ts";
 import { runMain, runOk } from "../run.ts";
 
@@ -30,8 +29,8 @@ export function writeSkill(packageRoot: string, name: string, files: Record<stri
   }
 }
 
-export function makeFixture(t: TestContext): Fixture {
-  const root = tempDir(t, "omt-install-");
+export function makeFixture(): Fixture {
+  const root = tempDir("omt-install-");
   const packageRoot = join(root, "package");
   writeSkill(packageRoot, "alpha", { "SKILL.md": "---\nname: alpha\n---\nAlpha.\n" });
   writeSkill(packageRoot, "beta", {
@@ -87,7 +86,8 @@ export function assertAllUnchanged(output: string, options: { message?: string; 
     .filter((line) => /^ {2}\S/.test(line))
     .map((line) => line.trim().split(/\s+/)[0] ?? "")
     .filter((action) => !options.ignoreNone || action !== "none");
-  assert.deepEqual([...new Set(actions)], ["unchanged"], options.message);
+  const unique = [...new Set(actions)];
+  assert.deepEqual(unique, ["unchanged"], options.message ?? `actions: ${unique.join(", ")}`);
 }
 
 // Every path under `dir` except .git, with the bytes of each file and the target of each link.

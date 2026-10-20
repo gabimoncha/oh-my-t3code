@@ -11,13 +11,13 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
-import { test } from "node:test";
+import { test } from "bun:test";
 import assert from "node:assert/strict";
 import { writeFile } from "../helpers.ts";
 import { makeFixture, readJson, snapshot, STAMP } from "./fixture.ts";
 
-test("uninstall removes only managed paths and keeps the user config", async (t) => {
-  const f = makeFixture(t);
+test("uninstall removes only managed paths and keeps the user config", async () => {
+  const f = makeFixture();
   const userHook = { type: "command", command: "echo mine" };
   const settingsText = JSON.stringify({ theme: "dark", hooks: { UserPromptSubmit: [{ hooks: [userHook] }] } }, null, 2);
   writeFile(f.settings, settingsText);
@@ -43,8 +43,8 @@ test("uninstall removes only managed paths and keeps the user config", async (t)
   for (const name of readdirSync(dirname(f.agents))) assert.doesNotMatch(name, /\.omt-(tmp|old)-/);
 });
 
-test("uninstall finds managed skills by scan when the manifest is gone", async (t) => {
-  const f = makeFixture(t);
+test("uninstall finds managed skills by scan when the manifest is gone", async () => {
+  const f = makeFixture();
   await f.runOk(["install", "--yes"]);
   rmSync(f.manifest);
   await f.runOk(["uninstall", "--yes"]);
@@ -52,16 +52,16 @@ test("uninstall finds managed skills by scan when the manifest is gone", async (
   assert.deepEqual(readdirSync(f.claudeSkills), []);
 });
 
-test("uninstall --purge removes the config and the empty config directory", async (t) => {
-  const f = makeFixture(t);
+test("uninstall --purge removes the config and the empty config directory", async () => {
+  const f = makeFixture();
   await f.runOk(["install", "--yes"]);
   const { ctx } = await f.runOk(["uninstall", "--yes", "--purge"]);
   assert.match(ctx.out(), /remove {3}.*config\.jsonc/);
   assert.ok(!existsSync(f.configDir));
 });
 
-test("uninstall deletes a settings.json that install --hooks created, without a backup", async (t) => {
-  const f = makeFixture(t);
+test("uninstall deletes a settings.json that install --hooks created, without a backup", async () => {
+  const f = makeFixture();
   await f.runOk(["install", "--yes", "--hooks"]);
   assert.equal((readJson(f.manifest).hooks as { created?: boolean }[])[0]?.created, true);
   await f.runOk(["install", "--yes", "--hooks"], undefined, "a second run keeps the record");
@@ -71,8 +71,8 @@ test("uninstall deletes a settings.json that install --hooks created, without a 
   assert.ok(!existsSync(f.backups));
 });
 
-test("uninstall keeps a created settings.json that gained other keys", async (t) => {
-  const f = makeFixture(t);
+test("uninstall keeps a created settings.json that gained other keys", async () => {
+  const f = makeFixture();
   await f.runOk(["install", "--yes", "--hooks"]);
   writeFileSync(f.settings, JSON.stringify({ ...readJson(f.settings), theme: "dark" }, null, 2));
   await f.runOk(["uninstall", "--yes"]);
@@ -80,8 +80,8 @@ test("uninstall keeps a created settings.json that gained other keys", async (t)
   assert.ok(existsSync(join(f.backups, STAMP, "claude-settings.json")));
 });
 
-test("uninstall --purge keeps the config directory when it still holds other files", async (t) => {
-  const f = makeFixture(t);
+test("uninstall --purge keeps the config directory when it still holds other files", async () => {
+  const f = makeFixture();
   writeFile(f.settings, '{ "theme": "dark" }\n');
   await f.runOk(["install", "--yes", "--hooks"]);
   mkdirSync(join(f.configDir, "roles"));
@@ -92,8 +92,8 @@ test("uninstall --purge keeps the config directory when it still holds other fil
   assert.ok(!existsSync(f.backups));
 });
 
-test("uninstall --dry-run, a declined prompt, and a missing --yes write nothing", async (t) => {
-  const f = makeFixture(t);
+test("uninstall --dry-run, a declined prompt, and a missing --yes write nothing", async () => {
+  const f = makeFixture();
   await f.runOk(["install", "--yes", "--hooks"]);
   const before = snapshot(f.home);
   const dry = await f.runOk(["uninstall", "--dry-run", "--purge"]);
@@ -107,14 +107,14 @@ test("uninstall --dry-run, a declined prompt, and a missing --yes write nothing"
   assert.deepEqual(snapshot(f.home), before);
 });
 
-test("uninstall with nothing installed reports nothing to remove", async (t) => {
-  const f = makeFixture(t);
+test("uninstall with nothing installed reports nothing to remove", async () => {
+  const f = makeFixture();
   const { ctx } = await f.runOk(["uninstall"]);
   assert.match(ctx.out(), /Nothing to remove/);
 });
 
-test("uninstall keeps a locally modified skill and the links that point at it", async (t) => {
-  const f = makeFixture(t);
+test("uninstall keeps a locally modified skill and the links that point at it", async () => {
+  const f = makeFixture();
   await f.runOk(["install", "--yes"]);
   writeFileSync(join(f.agents, "alpha", "SKILL.md"), "my edits\n");
 
@@ -128,8 +128,8 @@ test("uninstall keeps a locally modified skill and the links that point at it", 
   assert.ok(!existsSync(f.backups));
 });
 
-test("uninstall --force backs up a locally modified skill before it removes it", async (t) => {
-  const f = makeFixture(t);
+test("uninstall --force backs up a locally modified skill before it removes it", async () => {
+  const f = makeFixture();
   await f.runOk(["install", "--yes"]);
   writeFileSync(join(f.agents, "alpha", "SKILL.md"), "my edits\n");
 
@@ -141,15 +141,15 @@ test("uninstall --force backs up a locally modified skill before it removes it",
   assert.match(ctx.out(), new RegExp(`backup {3}${backup}`));
 });
 
-test("uninstall with nothing installed lists only paths that exist", async (t) => {
-  const f = makeFixture(t);
+test("uninstall with nothing installed lists only paths that exist", async () => {
+  const f = makeFixture();
   const { ctx } = await f.runOk(["uninstall"]);
   assert.doesNotMatch(ctx.out(), /config\.jsonc|install\.json/);
   assert.match(ctx.out(), /Config:\n {2}none\n/);
 });
 
-test("hook removal through a symlinked settings.json keeps the link and the file mode", async (t) => {
-  const f = makeFixture(t);
+test("hook removal through a symlinked settings.json keeps the link and the file mode", async () => {
+  const f = makeFixture();
   const real = join(f.root, "dotfiles", "settings.json");
   writeFile(real, '{ "apiKey": "secret" }\n');
   chmodSync(real, 0o600);

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "bun:test";
 import { DEFAULT_CONFIG } from "../../src/config/defaults.ts";
 import { formatRolesTable, formatTarget } from "../../src/routing/format.ts";
 import { resolveAll } from "../../src/routing/resolve.ts";

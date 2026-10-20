@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { realpathSync } from "node:fs";
 import type { Stats } from "node:fs";
-import { chmod, cp, lstat, mkdir, readFile, readdir, readlink, rename, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, readFile, readdir, readlink, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
 export const MANAGED_MARKER = ".omt-managed.json";
@@ -80,9 +80,25 @@ export async function isSymlink(path: string): Promise<boolean> {
   return (await lstatIfExists(path))?.isSymbolicLink() ?? false;
 }
 
+// fs.cp calls copyfile, which cannot read the files that a compiled binary embeds under /$bunfs, so
+// the copy reads and writes each file. Links stay links, the permission bits of files and directories stay, and an existing target is an error.
 export async function copyDir(source: string, target: string): Promise<void> {
   await ensureDir(dirname(target));
-  await cp(source, target, { recursive: true, verbatimSymlinks: true, errorOnExist: true, force: false });
+  await mkdir(target);
+  for (const entry of await readdir(source, { withFileTypes: true })) {
+    const from = join(source, entry.name);
+    const to = join(target, entry.name);
+    if (entry.isDirectory()) {
+      await copyDir(from, to);
+    } else if (entry.isSymbolicLink()) {
+      await symlink(await readlink(from), to);
+    } else {
+      await writeFile(to, await readFile(from), { flag: "wx" });
+      await chmod(to, (await stat(from)).mode & 0o777);
+    }
+  }
+  // Last, so that a read-only source directory does not block the copy of its entries.
+  await chmod(target, (await stat(source)).mode & 0o777);
 }
 
 async function listFiles(root: string, relative: string, out: string[]): Promise<void> {

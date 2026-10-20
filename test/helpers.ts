@@ -3,9 +3,9 @@ import { accessSync, constants, mkdirSync, mkdtempSync, rmSync, statSync, writeF
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { TestContext } from "node:test";
 import type { CliContext } from "../src/types.ts";
 import { OmtError } from "../src/util/errors.ts";
+import { onTestFinished } from "bun:test";
 
 export const PACKAGE_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 export const CLI_PATH = join(PACKAGE_ROOT, "src", "cli.ts");
@@ -30,9 +30,9 @@ function findTool(name: string, fallback: string): string {
 export const GIT = findTool("git", "/usr/bin/git");
 
 // Creates a temp directory that the test runner removes after the test, even when it fails.
-export function tempDir(t: TestContext, prefix = "omt-test-"): string {
+export function tempDir(prefix = "omt-test-"): string {
   const path = mkdtempSync(join(tmpdir(), prefix));
-  t.after(() => rmSync(path, { recursive: true, force: true }));
+  onTestFinished(() => rmSync(path, { recursive: true, force: true }));
   return path;
 }
 
@@ -149,8 +149,10 @@ export function fakeContext(overrides: FakeContextOptions = {}): FakeContext {
     now: () => new Date("2026-01-02T03:04:05.000Z"),
     packageRoot: PACKAGE_ROOT,
     cliPath: CLI_PATH,
-    nodePath: process.execPath,
-    nodeVersion: process.versions.node,
+    build: "source",
+    runtimePath: process.execPath,
+    runtimeName: process.versions.bun === undefined ? "node" : "bun",
+    runtimeVersion: process.versions.bun ?? process.versions.node,
     version: "0.1.0",
     ...rest,
   };
@@ -161,8 +163,8 @@ export interface ProjectContext extends FakeContext {
   at: (argv: string[]) => ProjectContext;
 }
 
-export function projectContext(t: TestContext, argv: string[] = []): ProjectContext {
-  const ctx = fakeContext({ root: tempDir(t), argv });
+export function projectContext(argv: string[] = []): ProjectContext {
+  const ctx = fakeContext({ root: tempDir(), argv });
   mkdirSync(join(ctx.cwd, ".git"));
   const at = (argv: string[]): ProjectContext => ({
     ...fakeContext({ homedir: ctx.homedir, cwd: ctx.cwd, env: ctx.env, argv }),

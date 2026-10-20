@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { test } from "bun:test";
 import assert from "node:assert/strict";
 import { renderPage, textHtml } from "../../src/visual/page.ts";
 import { validateSpec } from "../../src/visual/spec.ts";

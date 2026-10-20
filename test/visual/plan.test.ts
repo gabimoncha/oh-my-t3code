@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { test } from "bun:test";
 import assert from "node:assert/strict";
 import { layoutFlow } from "../../src/visual/flow.ts";
 import { mergeSpec, planSections, reduceDependencies } from "../../src/visual/plan.ts";

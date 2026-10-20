@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "bun:test";
 import { DEFAULT_CONFIG } from "../../src/config/defaults.ts";
 import type { RouteOutput } from "../../src/types.ts";
 import { CAPS_FILE, makeProject } from "./shared.ts";
@@ -11,8 +11,8 @@ async function route(project: Project, argv: string[]) {
   return { ctx, output: JSON.parse(ctx.out()) as RouteOutput };
 }
 
-test("route prints an unverified RouteOutput and exits 0", async (t) => {
-  const { output } = await route(makeProject(t), ["review"]);
+test("route prints an unverified RouteOutput and exits 0", async () => {
+  const { output } = await route(makeProject(), ["review"]);
   assert.deepEqual(output, {
     role: "review",
     status: "unverified",
@@ -30,8 +30,8 @@ test("route prints an unverified RouteOutput and exits 0", async (t) => {
   });
 });
 
-test("route --capabilities resolves against the provider instances", async (t) => {
-  const { output } = await route(makeProject(t), ["execute", "--capabilities", CAPS_FILE]);
+test("route --capabilities resolves against the provider instances", async () => {
+  const { output } = await route(makeProject(), ["execute", "--capabilities", CAPS_FILE]);
   assert.equal(output.status, "resolved");
   assert.deepEqual(output.delegateTask?.target, {
     providerInstanceId: "claudeAgent",
@@ -40,8 +40,8 @@ test("route --capabilities resolves against the provider instances", async (t) =
   });
 });
 
-test("route prints an unavailable role without delegateTask and exits 1", async (t) => {
-  const project = makeProject(t);
+test("route prints an unavailable role without delegateTask and exits 1", async () => {
+  const project = makeProject();
   project.projectConfig('{ "version": 1, "roles": { "oracle": { "chain": [{ "driver": "grok", "model": "grok-build" }] } } }\n');
   const { code, ctx } = await project.run(["route", "oracle", "--capabilities", CAPS_FILE]);
   assert.equal(code, 1);
@@ -51,8 +51,8 @@ test("route prints an unavailable role without delegateTask and exits 1", async 
   assert.match(output.notes[0] ?? "", /^rung 1: provider grok cannot run child tasks: /);
 });
 
-test("route fails on an unknown role and needs exactly one role", async (t) => {
-  const project = makeProject(t);
+test("route fails on an unknown role and needs exactly one role", async () => {
+  const project = makeProject();
   const unknown = await project.run(["route", "nope"]);
   assert.equal(unknown.code, 1);
   assert.match(unknown.ctx.err(), /unknown role nope; known roles: /);
@@ -60,8 +60,8 @@ test("route fails on an unknown role and needs exactly one role", async (t) => {
   assert.equal((await project.run(["route", "review", "execute"])).code, 2);
 });
 
-test("route --against reorders a cross-family role and prints the note", async (t) => {
-  const project = makeProject(t);
+test("route --against reorders a cross-family role and prints the note", async () => {
+  const project = makeProject();
   const claude = await route(project, ["review", "--against", "claudeAgent"]);
   const againstClaude = claude.output;
   assert.equal(againstClaude.delegateTask?.target.providerInstanceId, "codex");
@@ -82,8 +82,8 @@ function ledger(lines: object[]): string {
   return lines.map((line) => JSON.stringify({ ts: "2026-10-06T00:00:00.000Z", status: "dispatched", ...line })).join("\n") + "\n";
 }
 
-test("route --against auto reads the worker from the ledger", async (t) => {
-  const project = makeProject(t);
+test("route --against auto reads the worker from the ledger", async () => {
+  const project = makeProject();
   project.writeOmt(
     "ledger.jsonl",
     ledger([
@@ -121,8 +121,8 @@ test("route --against auto reads the worker from the ledger", async (t) => {
   ]);
 });
 
-test("route --against auto re-reviews each fix with the provider of its own fix worker", async (t) => {
-  const project = makeProject(t);
+test("route --against auto re-reviews each fix with the provider of its own fix worker", async () => {
+  const project = makeProject();
   project.writeOmt(
     "ledger.jsonl",
     ledger([
@@ -140,8 +140,8 @@ test("route --against auto re-reviews each fix with the provider of its own fix 
   assert.equal(f2.output.delegateTask?.target.providerInstanceId, "codex");
 });
 
-test("route --against auto skips a worker entry whose provider is not a non-empty string, with a warning", async (t) => {
-  const project = makeProject(t);
+test("route --against auto skips a worker entry whose provider is not a non-empty string, with a warning", async () => {
+  const project = makeProject();
   project.writeOmt(
     "ledger.jsonl",
     ledger([
@@ -159,8 +159,8 @@ test("route --against auto skips a worker entry whose provider is not a non-empt
   assert.match(warnings[1] ?? "", /invalid provider ""/);
 });
 
-test("route --against maps a configured provider instance to its driver without capabilities", async (t) => {
-  const project = makeProject(t);
+test("route --against maps a configured provider instance to its driver without capabilities", async () => {
+  const project = makeProject();
   project.projectConfig(
     JSON.stringify({
       version: 1,
@@ -188,8 +188,8 @@ test("route --against maps a configured provider instance to its driver without 
   ]);
 });
 
-test("route --against maps a rung that names only a provider through the configured drivers, like the worker", async (t) => {
-  const project = makeProject(t);
+test("route --against maps a rung that names only a provider through the configured drivers, like the worker", async () => {
+  const project = makeProject();
   project.projectConfig(
     JSON.stringify({
       version: 1,
@@ -234,8 +234,8 @@ test("route --against maps a rung that names only a provider through the configu
   assert.equal(forReview.notes[0], "cross-family: worker family claudeAgent; other families first");
 });
 
-test("route --against auto without --plan, or a bad --against value, is a usage error", async (t) => {
-  const project = makeProject(t);
+test("route --against auto without --plan, or a bad --against value, is a usage error", async () => {
+  const project = makeProject();
   const noPlan = await project.run(["route", "review", "--against", "auto"]);
   assert.equal(noPlan.code, 2);
   assert.match(noPlan.ctx.err(), /--against auto needs --plan <slug>/);

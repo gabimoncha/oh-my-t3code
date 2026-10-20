@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { test } from "bun:test";
 import assert from "node:assert/strict";
 import { assignRows, layoutFlow, renderFlow, renderLegend, segmentCrossesBox, wrapWords } from "../../src/visual/flow.ts";
 import type { EdgeLabel, FlowLayout, LayoutEdge } from "../../src/visual/flow.ts";

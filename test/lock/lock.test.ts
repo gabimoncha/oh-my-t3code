@@ -4,8 +4,7 @@ import type { ChildProcess } from "node:child_process";
 import { accessSync, constants, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { delimiter, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { test } from "node:test";
-import type { TestContext } from "node:test";
+import { onTestFinished, test } from "bun:test";
 import { childEnv, CLI_PATH, fakeContext, GIT, gitEnv, gitRepo, OMT_GITIGNORE, tempDir, writeFile } from "../helpers.ts";
 
 const hasLockTool = ["flock", "lockf"].some((name) => (process.env.PATH ?? "").split(delimiter).some((dir) => {
@@ -17,7 +16,7 @@ const hasLockTool = ["flock", "lockf"].some((name) => (process.env.PATH ?? "").s
     return false;
   }
 }));
-const needsLock = { skip: hasLockTool ? false : "neither flock nor lockf is on PATH", timeout: 180_000 };
+const lockTest = test.skipIf(!hasLockTool);
 
 async function waitFor(check: () => boolean, message: string): Promise<void> {
   const deadline = Date.now() + 60_000;
@@ -61,10 +60,10 @@ function parsePids(text: string): number[] | undefined {
   }
 }
 
-function fixture(t: TestContext) {
+function fixture() {
   const children = new Set<ChildProcess>();
   const pids = new Map<number, string>();
-  t.after(() => {
+  onTestFinished(() => {
     for (const child of children) {
       if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
       child.stdout?.destroy();
@@ -81,7 +80,7 @@ function fixture(t: TestContext) {
       }
     }
   });
-  const root = tempDir(t);
+  const root = tempDir();
   const ctx = fakeContext({ root, env: childEnv(root) });
   mkdirSync(join(ctx.cwd, ".omt"));
   function start(args: string[], cwd = ctx.cwd, env: NodeJS.ProcessEnv = {}) {
@@ -144,8 +143,8 @@ function fixture(t: TestContext) {
   return { root, ctx, start, run, hold, tryRun, pids };
 }
 
-test("D4(a): a command holds its lock after SIGKILL of the wrapper", needsLock, async (t) => {
-  const f = fixture(t);
+lockTest("D4(a): a command holds its lock after SIGKILL of the wrapper", async () => {
+  const f = fixture();
   const holder = await f.hold();
   assert.equal((await f.tryRun()).code, 75);
   holder.child.kill("SIGKILL");
@@ -158,10 +157,10 @@ test("D4(a): a command holds its lock after SIGKILL of the wrapper", needsLock, 
   holder.release();
   await waitForFile(holder.ended, (text) => text === "done\n" ? text : undefined, "the command did not end");
   assert.equal((await f.tryRun(3)).code, 0);
-});
+}, 180_000);
 
-test("D4(b): a shell background process keeps the inherited lock", needsLock, async (t) => {
-  const f = fixture(t);
+lockTest("D4(b): a shell background process keeps the inherited lock", async () => {
+  const f = fixture();
   const pidFile = join(f.root, "background-pid");
   const release = join(f.root, "background-release");
   const ended = join(f.root, "background-ended");
@@ -175,10 +174,10 @@ test("D4(b): a shell background process keeps the inherited lock", needsLock, as
   writeFileSync(release, "go");
   await waitForFile(ended, (text) => text === "done\n" ? text : undefined, "the background process did not end");
   assert.equal((await f.tryRun(5)).code, 0, "the lock becomes free after the background process exits");
-});
+}, 180_000);
 
-test("D4(c): a failure and forwarded SIGTERM or SIGINT release the lock after the command exits", needsLock, async (t) => {
-  const f = fixture(t);
+lockTest("D4(c): a failure and forwarded SIGTERM or SIGINT release the lock after the command exits", async () => {
+  const f = fixture();
   const failed = await f.run(["lock", "run", "build", "--", process.execPath, "-e", "process.exit(23)"]);
   assert.equal(failed.code, 23, failed.stderr);
   assert.equal((await f.tryRun()).code, 0);
@@ -191,10 +190,10 @@ test("D4(c): a failure and forwarded SIGTERM or SIGINT release the lock after th
     assert.equal((await holder.exited).code, 27, holder.err());
     assert.equal((await f.tryRun()).code, 0);
   }
-});
+}, 180_000);
 
-test("D4(d): a Node command holds the lock while it waits for a child with stdio inherit", needsLock, async (t) => {
-  const f = fixture(t);
+lockTest("D4(d): a Node command holds the lock while it waits for a child with stdio inherit", async () => {
+  const f = fixture();
   const ready = join(f.root, "subprocess-pids");
   const release = join(f.root, "subprocess-release");
   const ended = join(f.root, "subprocess-ended");
@@ -223,10 +222,10 @@ test("D4(d): a Node command holds the lock while it waits for a child with stdio
   writeFileSync(release, "go");
   assert.equal((await holder.exited).code, 0, holder.err());
   assert.equal((await f.tryRun()).code, 0);
-});
+}, 180_000);
 
-test("D4(e): without a lock tool, the command runs and returns its exit code", { timeout: 180_000 }, async (t) => {
-  const f = fixture(t);
+test("D4(e): without a lock tool, the command runs and returns its exit code", async () => {
+  const f = fixture();
   const path = join(f.root, "empty-path");
   mkdirSync(path);
   const command = [process.execPath, "-e", 'process.stdout.write(JSON.stringify(process.argv.slice(1)) + "\\n"); process.exit(19)', "--", "--help", "--wait"];
@@ -235,10 +234,10 @@ test("D4(e): without a lock tool, the command runs and returns its exit code", {
   assert.equal(result.stdout, '["--help","--wait"]\n');
   assert.equal(result.stderr, `warning: no flock or lockf on PATH; running ${command.join(" ")} without a lock\n`);
   assert.ok(!existsSync(join(f.ctx.cwd, ".omt", "locks")));
-});
+}, 180_000);
 
-test("concurrent runs wait once, list the holder, and preserve the lock file", needsLock, async (t) => {
-  const f = fixture(t);
+lockTest("concurrent runs wait once, list the holder, and preserve the lock file", async () => {
+  const f = fixture();
   const holder = await f.hold();
   const path = join(f.ctx.cwd, ".omt", "locks", "build.lock");
   assert.equal(readFileSync(join(f.ctx.cwd, ".omt", "locks", ".gitignore"), "utf8"), "*\n");
@@ -269,12 +268,12 @@ test("concurrent runs wait once, list the holder, and preserve the lock file", n
   assert.equal(second.err(), `waiting for lock build (pid ${holder.child.pid}: ${holder.command})\n`);
   assert.equal(statSync(path).ino, inode);
   assert.equal((await f.run(["lock", "list"])).stdout, "build.lock free\n");
-});
+}, 180_000);
 
 for (const separate of [false, true]) {
   for (const subdir of ["", "pkg"]) {
-    test(`linked worktrees with trailing spaces share one ignored lock for a ${subdir === "" ? "root" : "nested"} project with a ${separate ? "separate" : "normal"} git directory`, needsLock, async (t) => {
-      const f = fixture(t);
+    lockTest(`linked worktrees with trailing spaces share one ignored lock for a ${subdir === "" ? "root" : "nested"} project with a ${separate ? "separate" : "normal"} git directory`, async () => {
+      const f = fixture();
       const project = join(f.ctx.cwd, subdir);
       writeFile(join(project, ".omt", ".gitignore"), OMT_GITIGNORE);
       const git = gitRepo(f.root, f.ctx.cwd);
@@ -300,7 +299,7 @@ for (const separate of [false, true]) {
         assert.match((await f.run(["lock", "list"], cwd)).stdout, /^build\.lock held /);
         assert.equal(git(["status", "--porcelain", "--untracked-files=all"], worktree), "");
       }
-      assert.deepEqual(readdirSync(dir), [".gitignore", "build.lock"]);
+      assert.deepEqual(readdirSync(dir).sort(), [".gitignore", "build.lock"]);
       assert.equal(readFileSync(join(dir, ".gitignore"), "utf8"), "*\n");
       if (separate) assert.ok(!existsSync(join(project, ".omt", "locks")));
       if (subdir !== "") assert.ok(!existsSync(join(f.ctx.cwd, ".omt", "locks")));
@@ -321,15 +320,15 @@ for (const separate of [false, true]) {
       linkedHolder.release();
       assert.equal((await linkedHolder.exited).code, 0, linkedHolder.err());
       assert.equal((await f.run(["lock", "list"], project)).stdout, "build.lock free\n");
-      assert.deepEqual(readdirSync(dir), [".gitignore", "build.lock"]);
+      assert.deepEqual(readdirSync(dir).sort(), [".gitignore", "build.lock"]);
       assert.equal(statSync(path).ino, inode);
       assert.equal(git(["status", "--porcelain", "--untracked-files=all"]), "");
-    });
+    }, 180_000);
   }
 }
 
-test("a project only in a linked worktree keeps the main checkout clean", needsLock, async (t) => {
-  const f = fixture(t);
+lockTest("a project only in a linked worktree keeps the main checkout clean", async () => {
+  const f = fixture();
   const git = gitRepo(f.root, f.ctx.cwd);
   const worktree = join(f.root, "worktree");
   git(["worktree", "add", "-q", worktree]);
@@ -343,7 +342,7 @@ test("a project only in a linked worktree keeps the main checkout clean", needsL
   assert.ok(!existsSync(mainProject));
   const holder = await f.hold("build", undefined, project);
   const dir = join(mainProject, ".omt", "locks");
-  assert.deepEqual(readdirSync(dir), [".gitignore", "build.lock"]);
+  assert.deepEqual(readdirSync(dir).sort(), [".gitignore", "build.lock"]);
   assert.equal(readFileSync(join(dir, ".gitignore"), "utf8"), "*\n");
   assert.ok(!existsSync(join(project, ".omt", "locks")));
   for (const cwd of [project, mainProject]) {
@@ -359,10 +358,10 @@ test("a project only in a linked worktree keeps the main checkout clean", needsL
   assert.equal((await f.run(["lock", "list"], project)).stdout, "build.lock free\n");
   assert.equal((await f.tryRun(0, mainProject)).code, 0);
   assert.equal(git(["status", "--porcelain", "--untracked-files=all"]), "");
-});
+}, 180_000);
 
-test("lock validates its arguments and appears in help and project warnings", { timeout: 180_000 }, async (t) => {
-  const f = fixture(t);
+test("lock validates its arguments and appears in help and project warnings", async () => {
+  const f = fixture();
   for (const args of [
     [], ["clear", "build"], ["list", "build"], ["list", "--wait", "0"],
     ["run", "build"], ["run", "build", "--"], ["run", "--", process.execPath],
@@ -381,4 +380,4 @@ test("lock validates its arguments and appears in help and project warnings", { 
   assert.equal(empty.code, 0, empty.stderr);
   assert.equal(empty.stdout, "");
   assert.match(empty.stderr, /warning: no .omt or .git found above/);
-});
+}, 180_000);
