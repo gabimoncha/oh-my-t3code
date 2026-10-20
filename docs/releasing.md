@@ -63,7 +63,7 @@ On npmjs.com:
    - Repository: `oh-my-t3code`
    - Workflow filename: `release.yml`
    - Environment: `npm`
-   - Allow stage publish: on
+   - Allowed actions: leave **Allow `npm publish`** and **Allow `npm dist-tag`** unchecked. npm always allows `npm stage publish`, and the workflow uses only that.
 
    As an alternative, run this command once for each package. It needs npm 11.15 or later and your 2FA:
 
