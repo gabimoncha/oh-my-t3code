@@ -70,6 +70,23 @@ The agent explores the code, writes a plan in `.omt/plans/`, and sends each unit
 
 After a global install, run `omt init` in the project first. It creates `.omt/` with a project config and a `.gitignore` for the plans and the ledger.
 
+## Worktree setup
+
+A new T3 worktree has no `node_modules`. omt can create a setup script that installs the dependencies before the agent starts, with packages from one global store that all checkouts share.
+
+```sh
+omt worktree check
+omt worktree setup --dry-run
+omt worktree setup
+```
+
+- `setup` writes only missing files: `t3.json` with a blocking `Setup` script, the runner `.t3/omt-worktree-setup.mjs`, and for pnpm a `pnpm-workspace.yaml` with `enableGlobalVirtualStore: true`. It never rewrites an existing file. When an existing file blocks the setup, or the project selects a linker other than `isolated`, it stops and tells you what to change.
+- At each run, the runner finds the package manager from `package.json` and the lockfile, so a later change from pnpm to Bun needs no new runner. It needs Bun 1.3.14 or later, or pnpm 10.12.1 or later. It installs no package manager.
+- The runner does a frozen install with the isolated linker into the global virtual store. A package manager can keep some packages local, for example patched packages. pnpm before 11.23 can turn off the global store in CI.
+- The files do nothing until T3 runs them. Commit them on the branch that new worktrees start from. Then, in T3 **Project Settings**, import `Setup` from `t3.json` and keep the inherited scripts. `omt worktree check` cannot see whether T3 runs the script.
+
+This repository has these files. Their T3 import waits until the files are on the base branch.
+
 ## What a run looks like
 
 The [walkthrough](docs/walkthrough.md) follows two runs on this repository. It uses their plan files, their ledgers, and `git log`.

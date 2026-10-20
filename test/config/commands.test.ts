@@ -174,6 +174,11 @@ test("the starter configs are valid layers", () => {
   }
 });
 
+// init ends with one worktree setup line, which test/commands covers.
+function pathLines(text: string): string {
+  return text.replace(/^worktree setup: .*\n/m, "");
+}
+
 test("init creates the config, plans dir, and .gitignore in the project root", async (t) => {
   const { project, ctx } = setup(t);
   const nested = join(project, "a", "b");
@@ -186,7 +191,7 @@ test("init creates the config, plans dir, and .gitignore in the project root", a
   assert.equal(await init(c), 0);
   const omt = join(project, ".omt");
   assert.equal(
-    out,
+    pathLines(out),
     `create ${join(omt, "config.jsonc")}\ncreate ${join(omt, "plans")}\ncreate ${join(omt, ".gitignore")}\n`,
   );
   assert.equal(readFileSync(join(omt, "config.jsonc"), "utf8"), PROJECT_STARTER_CONFIG);
@@ -201,14 +206,14 @@ test("init creates only what is missing and never overwrites the config", async 
   const c = ctx([]);
   assert.equal(await init(c), 0);
   assert.equal(
-    c.out(),
+    pathLines(c.out()),
     `exists ${projectPath}\ncreate ${join(omt, "plans")}\ncreate ${join(omt, ".gitignore")}\n`,
   );
   assert.equal(readFileSync(projectPath, "utf8"), "{ /* mine */ }");
   const again = ctx([]);
   assert.equal(await init(again), 0);
   assert.equal(
-    again.out(),
+    pathLines(again.out()),
     `exists ${projectPath}\nexists ${join(omt, "plans")}\nexists ${join(omt, ".gitignore")}\n`,
   );
 });
@@ -220,7 +225,7 @@ test("init adds the missing lines to an existing .gitignore and keeps the user's
   const c = ctx([]);
   assert.equal(await init(c), 0);
   assert.equal(
-    c.out(),
+    pathLines(c.out()),
     `create ${projectPath}\ncreate ${join(project, ".omt", "plans")}\nupdate ${ignore}\n`,
   );
   assert.equal(

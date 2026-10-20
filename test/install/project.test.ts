@@ -443,7 +443,7 @@ test("doctor --project checks the shim and the exclude block, and skips path and
   const empty = await doctor(f, ["--project"]);
   assert.deepEqual(
     empty.report.checks.map((c) => c.id),
-    ["node", "config", "skills", "links", "hooks", "shim", "exclude", "t3"],
+    ["node", "config", "skills", "links", "hooks", "shim", "exclude", "t3", "worktree"],
   );
   assert.equal(empty.get("shim").status, "WARN");
   assert.equal(empty.get("exclude").status, "WARN");

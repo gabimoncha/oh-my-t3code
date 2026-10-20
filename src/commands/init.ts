@@ -6,6 +6,7 @@ import { findProjectRoot, omtDir, plansDir, projectConfigPath } from "../paths.t
 import type { CommandRun } from "../types.ts";
 import { parseArgs } from "../util/args.ts";
 import { ensureDir, pathExists, readFileIfExists, writeFileAtomic } from "../util/fs.ts";
+import { worktreeSummary } from "../worktree/check.ts";
 
 export const summary = "Create .omt/ in the project root with a starter config.";
 
@@ -14,6 +15,8 @@ export const usage = `Usage: omt init
 Create what is missing in the project root: .omt/config.jsonc,
 .omt/plans/, and .omt/.gitignore. Add the lines that an existing
 .omt/.gitignore lacks. Never overwrites or removes anything else.
+Then print the T3 worktree setup state of the current checkout, as
+omt worktree check does.
 
 Options:
   -h, --help        print this help
@@ -37,6 +40,8 @@ export const run: CommandRun = async (ctx) => {
     ctx.stdout(`create ${plans}\n`);
   }
   ctx.stdout(await initGitignore(join(omtDir(root), ".gitignore")));
+  const worktree = await worktreeSummary(ctx);
+  ctx.stdout(`worktree setup: ${worktree.status} ${worktree.message}\n`);
   return 0;
 };
 

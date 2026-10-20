@@ -31,7 +31,9 @@ To find the CLI (`omt`, `.omt/bin/omt`, or the manual steps), follow [The CLI](r
 
 | Command | Prints |
 | --- | --- |
-| `omt init` | creates `.omt/config.jsonc`, `.omt/plans/`, `.omt/.gitignore`; adds missing `.gitignore` lines |
+| `omt init` | creates `.omt/config.jsonc`, `.omt/plans/`, `.omt/.gitignore`; adds missing `.gitignore` lines; prints the worktree setup state |
+| `omt worktree check` | the current checkout's package manager, linker, `t3.json` setup script, and T3 activation note ([worktrees.md](references/worktrees.md)) |
+| `omt worktree setup [--dry-run] [--yes]` | writes a missing `t3.json`, `.t3/omt-worktree-setup.mjs`, and for pnpm `pnpm-workspace.yaml`, for Bun or pnpm; never rewrites a file |
 | `omt roles` | every role with its target, access, and mode |
 | `omt route <role> [--against <provider\|driver\|auto>]` | `delegateTask` and `fallbacks` for one role, as JSON; `--against` names the worker that a cross-family role reviews ([roles.md](references/roles.md#cross-family-roles)) |
 | `omt brief <role> --task-file - --title "<role> <unit>: <title>" --scope <p> --done <c> --verify <cmd> --plan <slug> --unit <id> --round <n> --attempt <n> [--against <provider\|driver\|auto>] --save --json` | `{ delegateTask, fallbacks, ledger }`; the full brief is in a file and `delegateTask.task` names it |
@@ -57,5 +59,6 @@ Pass `delegateTask` to `delegate_task` unchanged. Record the dispatch with the p
 - [roles.md](references/roles.md): the default roles, when to pick each, manual resolution, effort options, fallback, custom roles.
 - [brief.md](references/brief.md): the brief layout, how to write the task text, and a full example.
 - [results.md](references/results.md): how to read each result block and verify a claim.
+- [worktrees.md](references/worktrees.md): the T3 worktree setup script. Check it on the first run in a project, keep a compatible setup, and activate a new one only from the base branch.
 - `references/roles/<role>.md`: one persona per role, for example [execute.md](references/roles/execute.md).
 - `references/results/<kind>.md`: one result contract per kind, for example [work.md](references/results/work.md).

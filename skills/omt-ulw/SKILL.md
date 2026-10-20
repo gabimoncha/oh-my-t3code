@@ -39,6 +39,8 @@ Call `t3_thread_configuration` with no `threadId` and read your `interactionMode
 
 Then run the [branch check](../omt/references/delegation.md#branch-check).
 
+On the first run in a project, or when `omt init` printed a `WARN` worktree setup line, follow [worktrees.md](../omt/references/worktrees.md). Generate or activate a setup only with the owner's yes.
+
 Done when: you run in `default` mode, or the user has the question.
 
 ### 1. Frame

@@ -47,6 +47,10 @@ Step 0 checks whether the current branch is behind the default branch. A worktre
    - In `plan` mode, only report the count.
    - In `default` mode, when `git status --porcelain` prints nothing and `git merge-base --is-ancestor HEAD <default>` succeeds, run `git merge --ff-only <default>` and report it. Otherwise report the count and ask the user how to continue.
 
+## Worktree setup
+
+A worktree thread needs the project's T3 setup script to install dependencies. On the first run in a project, check it with `omt worktree check` and follow [worktrees.md](worktrees.md). A `t3.json` file is not proof that T3 runs it.
+
 ## `delegate_task`
 
 | Field | Value |

@@ -61,6 +61,33 @@ Each project root has its own block. In a monorepo, the entries of a package sta
 
 A repository has one project install, in the main checkout. `install`, `uninstall`, or `doctor` with `--project` in a worktree acts on the main checkout and its `.omt`, which all worktrees share. The skill folders stay in the main checkout. So an agent in a worktree finds them only if its harness reads the skill folders of the main checkout.
 
+### Set up new worktrees
+
+T3 can run a setup script in each new worktree before the agent starts. Without one, a worktree thread has no `node_modules`. `install --project`, `init`, and `doctor --project` each print one line about the setup of the current checkout. Check it in full:
+
+```sh
+.omt/bin/omt worktree check
+```
+
+For a Bun or pnpm project without a setup script, generate one:
+
+```sh
+.omt/bin/omt worktree setup --dry-run
+.omt/bin/omt worktree setup --yes
+```
+
+This writes `t3.json` and `.t3/omt-worktree-setup.mjs` in the current checkout, also in a linked worktree. For pnpm, it also writes `pnpm-workspace.yaml` with `enableGlobalVirtualStore: true` when that file is missing. The runner uses only Node, so it works in worktrees without omt. It installs from the lockfile with a frozen install and the isolated linker, into a global virtual store, so worktrees share the installed package directories. It needs Bun 1.3.14 or later, or pnpm 10.12.1 or later, already on `PATH`. It downloads no package manager and sets no global configuration. It stops instead of converting an existing `node_modules`.
+
+omt never rewrites an existing `t3.json`, runner, or `pnpm-workspace.yaml`, and never changes a linker or store setting. pnpm needs the store setting in `pnpm-workspace.yaml`: without it, a later `pnpm run` or `pnpm exec` can re-install `node_modules` with a local store. When an existing `pnpm-workspace.yaml` lacks the setting, turns it off, or cannot be read, `omt worktree setup` prints `Setup is incomplete` with the line to add and exits 1, `omt worktree check` shows it on its `store` line, and the runner stops before it installs anything. Add `enableGlobalVirtualStore: true` (or `virtualStoreType: global` with pnpm 11.23.0 or later) as a top-level line.
+
+omt also refuses a `.t3` folder or runner that is a symlink, even one that stays inside the checkout. Node runs a linked script from the link target, so the runner would install in another folder.
+
+The files do nothing until T3 saves the script. T3 runs setup scripts from the project's saved scripts, not from `t3.json`. To activate:
+
+1. Commit `t3.json`, `.t3/`, and for pnpm `pnpm-workspace.yaml` on the branch that new worktrees start from. Before that, a new worktree would lack the runner, and its setup would fail.
+2. In T3 Project Settings, import Setup from `t3.json`. Keep the scripts that the project inherits.
+3. Check that Setup is the project's setup script, then open a new worktree thread and run `omt worktree check` there.
+
 ### When `settings.local.json` shows in git
 
 One file can still show in git. When the repository tracks `.claude/settings.local.json`, `git status` shows it as modified while the hook is installed.
