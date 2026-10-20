@@ -48,4 +48,4 @@ Run each command through `mise exec --` (or in a shell where mise is active), so
 
 - Put tests in `test/<module>.test.ts`. `bun test` runs them. Use `bun:test` and `node:assert/strict`.
 - Tests never read or write the real home directory. Use the temp-directory helper and `fakeContext()` from `test/helpers.ts`, and pass `env` and `homedir` explicitly.
-- A test that runs the CLI as a child process sets `HOME` and the `OMT_*`, `XDG_*`, `CLAUDE_*`, and `T3CODE_*` variables to temp paths.
+- A test that runs the CLI as a child process sets `HOME`, `TMPDIR`, and the `OMT_*`, `XDG_*`, `CLAUDE_*`, and `T3CODE_*` variables to temp paths.

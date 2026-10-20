@@ -3,7 +3,8 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { onTestFinished, test } from "bun:test";
-import { childEnv, gitRepo, PACKAGE_ROOT, tempDir } from "../helpers.ts";
+import { gitRepo, PACKAGE_ROOT, tempDir } from "../helpers.ts";
+import { isolatedEnv } from "./registry.ts";
 
 function skillFiles(root: string, relative = ""): string[] {
   return readdirSync(join(root, relative), { withFileTypes: true }).flatMap((entry) => {
@@ -19,20 +20,7 @@ test("compiled host binary installs matching skills and hooks, passes doctor, an
   const root = mkdtempSync(join(parent, "binary-"));
   onTestFinished(() => rmSync(root, { recursive: true, force: true }));
   const homeRoot = tempDir("omt-binary-home-");
-  const env = childEnv(homeRoot);
-  for (const name of Object.keys(env)) {
-    if (/^(OMT_|XDG_|CLAUDE_|T3CODE_)/.test(name)) delete env[name];
-  }
-  Object.assign(env, {
-    OMT_CONFIG_DIR: join(homeRoot, "omt"),
-    XDG_CONFIG_HOME: join(homeRoot, "config"),
-    XDG_CACHE_HOME: join(homeRoot, "cache"),
-    XDG_DATA_HOME: join(homeRoot, "data"),
-    XDG_STATE_HOME: join(homeRoot, "state"),
-    CLAUDE_CONFIG_DIR: join(homeRoot, "claude"),
-    T3CODE_HOME: join(homeRoot, "t3"),
-  });
-  mkdirSync(env.HOME!, { recursive: true });
+  const env = isolatedEnv(homeRoot);
   const project = join(root, "project");
   gitRepo(homeRoot, project, { "package.json": JSON.stringify({ packageManager: "bun@1.4.4" }), "bun.lock": "" });
 

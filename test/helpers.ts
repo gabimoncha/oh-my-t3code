@@ -52,6 +52,8 @@ export function writeFile(path: string, text: string): void {
 // A child-process environment where every variable that affects omt paths points into `root`.
 export function childEnv(root: string): NodeJS.ProcessEnv {
   const home = join(root, "home");
+  const tmp = join(root, "tmp");
+  mkdirSync(tmp, { recursive: true });
   return {
     ...process.env,
     HOME: home,
@@ -60,6 +62,9 @@ export function childEnv(root: string): NodeJS.ProcessEnv {
     XDG_CONFIG_HOME: join(home, ".config"),
     CLAUDE_CONFIG_DIR: join(home, ".claude"),
     T3CODE_HOME: join(home, ".t3"),
+    TMPDIR: tmp,
+    TMP: tmp,
+    TEMP: tmp,
   };
 }
 
