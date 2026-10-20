@@ -1998,16 +1998,16 @@ Two GitHub Actions workflows run the tests and the release. Both set workflow-le
 | --- | --- | --- | --- |
 | `verify` | none | `contents: read` | Calls `./.github/workflows/ci.yml` as a reusable workflow. |
 | `build` | `verify` | `contents: read` | Checkout and mise. Reads the version with `jq` and fails when the tag is not `v` plus the `version` of `package.json`. Runs `bun install --frozen-lockfile` and `bun scripts/release.ts`. Fails unless `dist/release/github` holds 6 `.tar.gz` archives and `SHA256SUMS`, and `sha256sum -c SHA256SUMS` passes. Uploads `dist/release/npm` and `dist/release/github` as the artifact `release`, with root `dist/release`, `if-no-files-found: error`, and `retention-days: 7`. |
-| `npm` | `build` | `contents: read`, `id-token: write` | Runs in the environment `npm`. Downloads `release` to `dist/release`. Fails when `dist/release/npm/<pkg>/package.json` is missing for `oh-my-t3code` or `omt3`. Sets up Node, then stages each package. |
+| `npm` | `build` | `contents: read`, `id-token: write` | Runs in the environment `npm`. Downloads `release` to `dist/release`. Fails when `dist/release/npm/<pkg>/package.json` is missing for `oh-my-t3code` or `omt3`. Sets up Node, then publishes each package. |
 | `github` | `build` | `contents: write` | Downloads `release` to `dist/release`. Creates or checks the GitHub release. |
 
 The `npm` job uses npm trusted publishing (OIDC). No npm token is stored. For each of `oh-my-t3code` and `omt3`, it reads the version from the package's `package.json` and runs `npm view <pkg>@<version> version` outside the package folder:
 
 - Exit 0 with the version as output: the version is published. The job skips the package.
-- Exit 1 with `E404` in the output: the job runs `npm stage publish --access public --tag latest` in the package folder.
-- Any other result, or a failed `npm stage publish`: the package fails.
+- Exit 1 with `E404` in the output: the job runs `npm publish --access public --tag latest` in the package folder.
+- Any other result, or a failed `npm publish`: the package fails.
 
-The job tries both packages before it fails. The job summary lists the failed packages, if any, and tells the owner to approve each staged package on npmjs.com or with `npm stage list` and `npm stage approve <stage-id>`. The job exits 1 when a package failed.
+The job tries both packages before it fails. The job summary lists the failed packages, if any, and the published packages. The job exits 1 when a package failed.
 
 The `github` job uses `GH_TOKEN: ${{ github.token }}`. It expects the 6 archives and `SHA256SUMS`, 7 assets in total, and fails otherwise. Then it runs `gh release view <tag>`:
 

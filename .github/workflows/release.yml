@@ -108,12 +108,13 @@ jobs:
           node-version: 24.22.0
           package-manager-cache: false
 
-      - name: Stage the npm packages
+      - name: Publish the npm packages
         run: |
           set -uo pipefail
           set +e
           root="$PWD"
           failed=()
+          published=()
           for pkg in oh-my-t3code omt3; do
             dir="$root/dist/release/npm/$pkg"
             if ! version="$(node -p 'require(process.argv[1]).version' "$dir/package.json")"; then
@@ -134,9 +135,11 @@ jobs:
               failed+=("$pkg")
               continue
             fi
-            echo "$pkg@$version is not published; stage it."
-            if ! (cd "$dir" && npm stage publish --access public --tag latest); then
-              echo "::error::npm stage publish failed for $pkg@$version."
+            echo "$pkg@$version is not published; publish it."
+            if (cd "$dir" && npm publish --access public --tag latest); then
+              published+=("$pkg@$version")
+            else
+              echo "::error::npm publish failed for $pkg@$version."
               failed+=("$pkg")
             fi
           done
@@ -147,12 +150,7 @@ jobs:
               echo "These packages failed: ${failed[*]}. Read the job log, fix the cause, and re-run the job."
               echo
             fi
-            echo "Approve each staged package on npmjs.com, or run:"
-            echo
-            echo '```sh'
-            echo "npm stage list"
-            echo "npm stage approve <stage-id>"
-            echo '```'
+            echo "Published: ${published[*]:-none}."
           } >> "$GITHUB_STEP_SUMMARY"
           if [ "${#failed[@]}" -gt 0 ]; then
             exit 1

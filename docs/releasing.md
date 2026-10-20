@@ -1,6 +1,6 @@
 # Release oh-my-t3code
 
-This page is for the owner. A release has two npm packages, `oh-my-t3code` and `omt3`, and one GitHub release with the binary archives. When you push a `v<version>` tag, the workflow `.github/workflows/release.yml` builds the release, stages both npm packages, and creates the GitHub release. You then approve each staged package with your 2FA. [Spec section 17](spec.md#17-packaging-and-release) describes the release script and the workflows.
+This page is for the owner. A release has two npm packages, `oh-my-t3code` and `omt3`, and one GitHub release with the binary archives. When you push a `v<version>` tag, the workflow `.github/workflows/release.yml` builds the release, publishes both npm packages, and creates the GitHub release. [Spec section 17](spec.md#17-packaging-and-release) describes the release script and the workflows.
 
 Before the first automated release, do the steps in [Set up once](#set-up-once).
 
@@ -32,18 +32,9 @@ Do these steps in order, in the repository root. Start on `main` with a clean wo
 5. Wait for the release workflow. To follow it, run `gh run watch` and select the `Release` run. The workflow does these jobs:
    - `verify` runs the CI workflow `.github/workflows/ci.yml` on the tagged commit.
    - `build` checks that the tag is `v` plus the `version` of `package.json`. Then it runs `bun scripts/release.ts`, checks the 6 archives against `SHA256SUMS`, and uploads `dist/release` as the artifact `release`.
-   - `npm` stages `oh-my-t3code` and `omt3` with `npm stage publish --access public --tag latest`. It uses npm trusted publishing, so no npm token is stored in GitHub.
+   - `npm` publishes `oh-my-t3code` and `omt3` with `npm publish --access public --tag latest`. It uses npm trusted publishing, so no npm token is stored in GitHub.
    - `github` creates the GitHub release `v<version>` with the 6 archives and `SHA256SUMS`, and with notes that GitHub generates.
-6. Approve each staged package. Open the package on npmjs.com and approve the staged version there, or run these commands. They need npm 11.15 or later and ask for your 2FA code:
-
-   ```sh
-   npm stage list
-   npm stage approve <stage-id>
-   ```
-
-   Approve one stage for `oh-my-t3code` and one for `omt3`. On approval, the version gets the `latest` tag.
-
-7. Check each channel on a clean machine, or in a fresh user account. Each command must print the new version:
+6. Check each channel on a clean machine, or in a fresh user account. Each command must print the new version:
 
    ```sh
    mise use -g github:gabimoncha/oh-my-t3code@<version>
@@ -63,13 +54,13 @@ On npmjs.com:
    - Repository: `oh-my-t3code`
    - Workflow filename: `release.yml`
    - Environment: `npm`
-   - Allowed actions: leave **Allow `npm publish`** and **Allow `npm dist-tag`** unchecked. npm always allows `npm stage publish`, and the workflow uses only that.
+   - Allowed actions: check **Allow `npm publish`**. Leave **Allow `npm dist-tag`** unchecked.
 
    As an alternative, run this command once for each package. It needs npm 11.15 or later and your 2FA:
 
    ```sh
-   npm trust github oh-my-t3code --file release.yml --repo gabimoncha/oh-my-t3code --env npm --allow-stage-publish
-   npm trust github omt3 --file release.yml --repo gabimoncha/oh-my-t3code --env npm --allow-stage-publish
+   npm trust github oh-my-t3code --file release.yml --repo gabimoncha/oh-my-t3code --env npm --allow-publish
+   npm trust github omt3 --file release.yml --repo gabimoncha/oh-my-t3code --env npm --allow-publish
    ```
 
    A new trusted publisher configuration expires when no publish uses it within two days. Add it shortly before you push the tag of the first automated release. Read [trusted publishers](https://docs.npmjs.com/trusted-publishers/) for the details.
@@ -78,15 +69,17 @@ On npmjs.com:
 
 On your machine:
 
-1. Update npm to 11.15 or later, so that `npm stage` and `npm trust` work. Check the version with `npm --version`. npm 12 needs Node `^22.22.2 || ^24.15.0 || >=26`. If your Node version is in that range, run `npm install -g npm@latest`. If not, run `npm install -g npm@11`.
+1. Update npm to 11.15 or later, so that `npm trust` works. Check the version with `npm --version`. npm 12 needs Node `^22.22.2 || ^24.15.0 || >=26`. If your Node version is in that range, run `npm install -g npm@latest`. If not, run `npm install -g npm@11`.
 2. Log in to npm with `npm login`.
 3. Log in to GitHub with `gh auth login`, with write access to `gabimoncha/oh-my-t3code`.
 4. Install the repository tools as a contributor does: run `mise install` and `bun install` in the clone.
 
-On GitHub (optional):
+On GitHub:
 
-1. The `npm` job creates the environment `npm` on its first run. To let only release tags use it, open **Settings** > **Environments** > `npm`, and add a deployment tag rule for `v*`.
-2. To protect the release tags, add a tag ruleset for `v*` in **Settings** > **Rules** > **Rulesets**.
+1. Add a tag ruleset for `v*` in **Settings** > **Rules** > **Rulesets**, so that only you can create release tags. A pushed `v*` tag publishes to npm with no other check.
+2. The `npm` job creates the environment `npm` on its first run. To let only release tags use it, open **Settings** > **Environments** > `npm`, and add a deployment tag rule for `v*`.
+
+If another person gets the right to push release tags, add an approval before npm publishes. One way: in **Settings** > **Environments** > `npm`, add yourself as a required reviewer. The `npm` job then waits for your approval. The other way: change `npm publish` to `npm stage publish` in `release.yml`, and approve each version on npmjs.com.
 
 ## If a release job fails
 
@@ -98,8 +91,7 @@ gh run rerun <run-id> --failed
 
 A re-run uses the same commit. If the fix needs a code change, release a new version. A re-run does not repeat the work that is done:
 
-- The `npm` job asks `npm view <pkg>@<version> version` for each package. If npm shows the version, the job skips that package. If npm answers `E404`, the job stages the package. Any other answer fails the package. The job tries both packages before it fails.
-- A pending stage reserves the version. Before you re-run the `npm` job, run `npm stage list`. Approve the stage with `npm stage approve <stage-id>`, or remove it with `npm stage reject <stage-id>`.
+- The `npm` job asks `npm view <pkg>@<version> version` for each package. If npm shows the version, the job skips that package. If npm answers `E404`, the job publishes the package. Any other answer fails the package. The job tries both packages before it fails.
 - The `github` job skips a published release that has all 7 assets. If the release is a draft or has missing assets, the job fails and prints the recovery commands:
 
   ```sh
@@ -115,14 +107,13 @@ If the `build` job fails because the tag does not match `package.json`, delete t
 
 Use these steps when the workflow cannot publish, or when it stops partway. Do steps 1 to 4 of [Publish a release](#publish-a-release) first.
 
-1. Check which channels are done already. A workflow run that stops partway can leave a published package, a pending stage, or a GitHub release. Run these commands for each of `oh-my-t3code` and `omt3`:
+1. Check which channels are done already. A workflow run that stops partway can leave a published package or a GitHub release. Run these commands for each of `oh-my-t3code` and `omt3`:
 
    ```sh
    npm view <pkg>@<version> version
-   npm stage list <pkg>
    ```
 
-   `npm view` prints the version when the package is published, and fails with `E404` when it is not. A pending stage reserves the version. Approve it with `npm stage approve <stage-id>`, or remove it with `npm stage reject <stage-id>`. Then check the GitHub release:
+   `npm view` prints the version when the package is published, and fails with `E404` when it is not. Then check the GitHub release:
 
    ```sh
    gh release view v<version>
@@ -138,13 +129,13 @@ Use these steps when the workflow cannot publish, or when it stops partway. Do s
 
    The script writes `dist/release/`: the npm packages in `npm/oh-my-t3code/` and `npm/omt3/`, and one archive per platform with `SHA256SUMS` in `github/`. It publishes nothing. At the end, it prints the publish commands. It refuses an unsafe output directory, and it refuses a `skills/` directory that holds untracked or ignored files, such as `.DS_Store`. Remove those files and run the script again.
 
-3. Publish the main package. Skip this step if `oh-my-t3code@<version>` is published, or if you approved its stage in step 1. npm asks for your 2FA code:
+3. Publish the main package. Skip this step if `oh-my-t3code@<version>` is published. npm asks for your 2FA code:
 
    ```sh
    (cd dist/release/npm/oh-my-t3code && npm publish --access public)
    ```
 
-4. Publish the one-shot package. It is the same build under the name `omt3`. Skip this step if `omt3@<version>` is published, or if you approved its stage in step 1:
+4. Publish the one-shot package. It is the same build under the name `omt3`. Skip this step if `omt3@<version>` is published:
 
    ```sh
    (cd dist/release/npm/omt3 && npm publish --access public)
@@ -160,7 +151,7 @@ Use these steps when the workflow cannot publish, or when it stops partway. Do s
 
    `--verify-tag` stops the command when the tag is not on GitHub. Without it, `gh` creates the tag from the last commit of the default branch, which can differ from the commit that you released. The release script prints this command without `--verify-tag`. Use the command of this step.
 
-6. Do steps 7 and later of [Publish a release](#publish-a-release).
+6. Do step 6 of [Publish a release](#publish-a-release).
 
 ## What happened in the first release
 
