@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_call:
+
+permissions: {}
+
+# The group starts with "ci-" and not github.workflow: in a workflow_call run,
+# github.workflow is the caller's name, so the group would match the release
+# run's own group and deadlock it.
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  verify:
+    name: verify
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: jdx/mise-action@fc42bcc7ddbf51124c30f95a877a0c5168a3bfde # v5.2.1
+        with:
+          version: 2026.10.15
+          # Shims would put a bun shim in a folder next to other tools; the
+          # e2e tests need bun only in its own install folder.
+          add_shims_to_path: false
+          install: true
+          cache: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.22.0
+          package-manager-cache: false
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 12.13.0
+          run_install: false
+
+      - name: Check worktree setup template syntax
+        run: node --check templates/worktree-setup.mjs
+
+      - name: Check that bun is not in a Node tool folder
+        run: |
+          set -euo pipefail
+          for tool in bun node npm npx pnpm; do
+            path="$(command -v "$tool")"
+            echo "$tool: $path -> $(realpath "$path")"
+          done
+          # Same rule as test/e2e/registry.ts tools().
+          dirs=(
+            "$(dirname "$(realpath "$(command -v node)")")"
+            "$(dirname "$(realpath "$(command -v npm)")")"
+            "$(dirname "$(realpath "$(command -v pnpm)")")"
+            /usr/bin
+            /bin
+          )
+          status=0
+          for dir in "${dirs[@]}"; do
+            if [ -e "$dir/bun" ]; then
+              echo "::error::Node-only PATH contains bun: $dir"
+              status=1
+            fi
+          done
+          exit "$status"
+
+      - run: bun install --frozen-lockfile
+
+      - run: bun run verify

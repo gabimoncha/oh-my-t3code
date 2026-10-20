@@ -2,7 +2,7 @@
 // - npm/oh-my-t3code/ and npm/omt3/: the two npm packages, identical except the name.
 // - github/oh-my-t3code-v<version>-<platform>.tar.gz: one archive per platform, with omt at the root.
 // - github/SHA256SUMS: one checksum line per archive.
-// It builds into <outdir>/build, so each outdir has its own build. Publishing stays a manual step.
+// It builds into <outdir>/build, so each outdir has its own build. It publishes nothing: the release workflow (.github/workflows/release.yml) or the owner publishes.
 import { createHash } from "node:crypto";
 import { existsSync, realpathSync } from "node:fs";
 import { chmod, cp, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";

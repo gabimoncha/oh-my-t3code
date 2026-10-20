@@ -36,6 +36,8 @@ The package is named `oh-my-t3code` and is `private`, so nobody publishes the re
 ## 2. Repository layout
 
 ```text
+.github/
+  workflows/             ci.yml (CI) and release.yml (release on a v* tag) (section 17.1)
 mise.toml                pins bun = "1.4.3"
 package.json             scripts (section 1), packageManager bun@1.4.3, dev dependency @types/bun
 bun.lock                 Bun lockfile
@@ -1974,3 +1976,42 @@ The script publishes nothing. At the end it prints the owner's publish commands,
 3. `gh release create v<version> <outdir>/github/*`.
 
 The commands use paths relative to the current directory. A path with a character other than a letter, a digit, `_`, `.`, `/`, or `-` is in single quotes. The `/*` glob stays outside the quotes, so the shell expands it.
+
+### 17.1 Workflows
+
+Two GitHub Actions workflows run the tests and the release. Both set workflow-level `permissions: {}`, and each job sets its own permissions. Each job with steps runs on `ubuntu-24.04`. Each action is pinned by its full commit SHA, with a `# vX.Y.Z` comment. `actions/checkout` runs with `persist-credentials: false`. Where a job uses them, `jdx/mise-action` installs mise 2026.10.15 with `add_shims_to_path: false`, `install: true`, and `cache: false`, so Bun comes from `mise.toml`. `actions/setup-node` installs Node 24.22.0, which includes npm 11.19.1, with `package-manager-cache: false`.
+
+`.github/workflows/ci.yml` (name `CI`):
+
+- Triggers: `push` to `main`, `pull_request` to `main`, and `workflow_call`.
+- Concurrency group `ci-${{ github.event_name }}-${{ github.ref }}`. A new run cancels the previous run only for `pull_request`. The group does not use `github.workflow`, because in a `workflow_call` run that is the caller's name, so the group would match the release group and deadlock the release run.
+- One job, `verify`, with `contents: read`. Its steps are, in order: checkout, mise, Node, `pnpm/action-setup` with pnpm 12.13.0 and `run_install: false`, `node --check templates/worktree-setup.mjs`, the bun-folder check, `bun install --frozen-lockfile`, and `bun run verify`.
+- The bun-folder check prints `command -v` and `realpath` for `bun`, `node`, `npm`, `npx`, and `pnpm`. It fails when `bun` is in the folder of `node`, `npm`, or `pnpm`, or in `/usr/bin` or `/bin`. This is the rule of `tools()` in `test/e2e/registry.ts`.
+
+`.github/workflows/release.yml` (name `Release`):
+
+- Trigger: `push` of a tag that matches `v*`.
+- Concurrency group `release-${{ github.ref }}`, with `cancel-in-progress: false`.
+- Jobs: `verify`, then `build`, then `npm` and `github` in parallel.
+
+| Job | Needs | Permissions | Does |
+| --- | --- | --- | --- |
+| `verify` | none | `contents: read` | Calls `./.github/workflows/ci.yml` as a reusable workflow. |
+| `build` | `verify` | `contents: read` | Checkout and mise. Reads the version with `jq` and fails when the tag is not `v` plus the `version` of `package.json`. Runs `bun install --frozen-lockfile` and `bun scripts/release.ts`. Fails unless `dist/release/github` holds 6 `.tar.gz` archives and `SHA256SUMS`, and `sha256sum -c SHA256SUMS` passes. Uploads `dist/release/npm` and `dist/release/github` as the artifact `release`, with root `dist/release`, `if-no-files-found: error`, and `retention-days: 7`. |
+| `npm` | `build` | `contents: read`, `id-token: write` | Runs in the environment `npm`. Downloads `release` to `dist/release`. Fails when `dist/release/npm/<pkg>/package.json` is missing for `oh-my-t3code` or `omt3`. Sets up Node, then stages each package. |
+| `github` | `build` | `contents: write` | Downloads `release` to `dist/release`. Creates or checks the GitHub release. |
+
+The `npm` job uses npm trusted publishing (OIDC). No npm token is stored. For each of `oh-my-t3code` and `omt3`, it reads the version from the package's `package.json` and runs `npm view <pkg>@<version> version` outside the package folder:
+
+- Exit 0 with the version as output: the version is published. The job skips the package.
+- Exit 1 with `E404` in the output: the job runs `npm stage publish --access public --tag latest` in the package folder.
+- Any other result, or a failed `npm stage publish`: the package fails.
+
+The job tries both packages before it fails. The job summary lists the failed packages, if any, and tells the owner to approve each staged package on npmjs.com or with `npm stage list` and `npm stage approve <stage-id>`. The job exits 1 when a package failed.
+
+The `github` job uses `GH_TOKEN: ${{ github.token }}`. It expects the 6 archives and `SHA256SUMS`, 7 assets in total, and fails otherwise. Then it runs `gh release view <tag>`:
+
+- No release: the job runs `gh release create <tag> --verify-tag --title <tag> --generate-notes dist/release/github/*`.
+- A published release that has all 7 assets: the job skips.
+- A draft, or a release with missing assets: the job fails. It prints the draft state, the missing assets, and the recovery commands `gh release upload "<tag>" <files> --clobber` and `gh release edit "<tag>" --draft=false`, or tells the owner to delete the draft release and re-run the job.
+- Any other `gh release view` error: the job fails.

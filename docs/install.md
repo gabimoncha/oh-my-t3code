@@ -40,6 +40,10 @@ The `omt` command of the npm package needs `node` on `PATH`. This applies to the
 
 `mise use -g github:gabimoncha/oh-my-t3code` downloads a binary from the GitHub release. The binary holds the skills and needs neither Node nor Bun. The release has binaries for macOS on arm64 and x64, and for Linux on arm64 and x64, with glibc or musl. Windows has no binary yet.
 
+To pin a version, add it after `@`. For example, `mise use -g github:gabimoncha/oh-my-t3code@0.1.0` installs version 0.1.0.
+
+By default, recent mise versions hide a release for its first 24 hours, through the setting `minimum_release_age`. In that time, `mise use -g github:gabimoncha/oh-my-t3code` installs the previous release, or fails with `no versions found ... matching minimum_release_age` when no older release exists. A pinned version, such as `@0.1.0`, installs the new release at once.
+
 mise checks the archive against the `SHA256SUMS` file of the release. mise puts `omt` on your `PATH` only in a shell where mise is active, or where the mise shims directory is on `PATH`. `mise which omt` prints the path of the binary.
 
 ### npm package

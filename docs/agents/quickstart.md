@@ -66,6 +66,10 @@ The release binary holds the skills and needs neither Node nor Bun. It runs on m
 
 mise puts `omt` on `PATH` only in a shell where mise is active, or where the mise shims directory is on `PATH`. If `omt` is not found after a mise install, `mise which omt` prints its path.
 
+To pin a version of the release binary, add it after `@`. For example, `mise use -g github:gabimoncha/oh-my-t3code@0.1.0` installs version 0.1.0.
+
+By default, recent mise versions hide a release for its first 24 hours, through the setting `minimum_release_age`. In that time, mise installs the previous release, or fails when no older release exists. If `mise use -g github:gabimoncha/oh-my-t3code` fails with a `minimum_release_age` message, run it again with the version that the message names, such as `mise use -g github:gabimoncha/oh-my-t3code@0.1.0`.
+
 A dev dependency installs omt into the project only. Run the command in the project root. The project must have a `package.json`. The command changes `package.json` and the lockfile, and git shows these changes:
 
 | Channel | Command |

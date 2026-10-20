@@ -2,7 +2,20 @@
 
 # oh-my-t3code
 
+[![npm](https://img.shields.io/npm/v/oh-my-t3code)](https://www.npmjs.com/package/oh-my-t3code) [![CI](https://github.com/gabimoncha/oh-my-t3code/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/gabimoncha/oh-my-t3code/actions/workflows/ci.yml)
+
 oh-my-t3code (`omt`) adds plans, roles, task briefs, and review loops to the agents that you run in [T3 Code](https://t3.codes). You write one sentence, such as `ulw add OAuth to the API`. The agent splits the work into units, sends each unit to a model as a T3 child task, and reviews and verifies the result.
+
+## Quick install
+
+omt is on npm as `oh-my-t3code` and on GitHub as release binaries. [Install](#install) has the table of all channels, and the [install guide](docs/install.md) has the details. Run one of these commands. A bare `omt` from mise runs only with mise shell activation or the mise shims on `PATH`. By default, mise waits 24 hours (`minimum_release_age`) before it installs a new release. [Release binary](docs/install.md#release-binary) explains both.
+
+```sh
+npm i -g oh-my-t3code && omt --version                                    # needs Node 22 or later
+mise use -g github:gabimoncha/oh-my-t3code && mise exec -- omt --version  # release binary, needs no Node
+npx omt3 --version                                                        # one-shot run, installs nothing
+bunx omt3 --version                                                       # one-shot run with Bun
+```
 
 ## Who it is for
 
@@ -68,9 +81,7 @@ Then restart the agent sessions of this project in T3 Code. A running session do
 You can also skip the global install:
 
 - Add omt to the project as a dev dependency: `npm i -D oh-my-t3code`, `pnpm add -D oh-my-t3code`, or `bun add -D oh-my-t3code`. Then run `npx omt install --project`, `pnpm exec omt install --project`, or `bunx omt install --project`.
-- Run omt once, with no install: `npx omt3 install --project`, `bunx omt3 install --project`, or `pnpm dlx omt3 install --project`. The project then calls the same runner with the pinned version, which needs the network again after the runner's cache is cleared.
-
-Use `npx omt3` for a one-shot run, not `npx omt`. Outside a project that installed omt, `npx omt` downloads a different npm package named `omt`.
+- Run omt once, with no install: `npx omt3 install --project`, `bunx omt3 install --project`, or `pnpm dlx omt3 install --project`. The project then calls the same runner with the pinned version, which needs the network again after the runner's cache is cleared. Use `npx omt3` for a one-shot run, not `npx omt`. Outside a project that installed omt, `npx omt` downloads a different npm package named `omt`.
 
 To install the skills for all your projects, run `omt install` without `--project`. The [install guide](docs/install.md) has every channel, every path that each install writes, and the uninstall.
 
