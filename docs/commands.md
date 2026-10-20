@@ -1,12 +1,12 @@
 # omt commands
 
-Every command accepts `--help`. The [spec](spec.md) describes each command in detail. In a project install without `omt` on `PATH`, run the commands as `.omt/bin/omt`.
+Every command accepts `--help`. The [spec](spec.md) describes each command in detail. In a project install without `omt` on `PATH`, run the commands as `.omt/bin/omt`. The [install guide](install.md#install-the-cli) lists the other ways to run omt, such as `npx omt` after a dev-dependency install and `npx omt3` for a one-shot run. Use `npx omt` only in a project that has omt as a dev dependency. Outside such a project, `npx omt` downloads a different npm package named `omt`. For a one-shot run, use `npx omt3`.
 
 | Command | What it does |
 | --- | --- |
 | `omt install` | Installs the skills, the links, and the starter config. `--hooks` adds the Claude Code hook. `--project` installs into the current project. |
 | `omt uninstall` | Removes what `omt install` added. `--project` removes the project install. |
-| `omt doctor` | Checks Node, the config, the skills, the links, the hook, `PATH`, and T3. `--project` checks the project install. |
+| `omt doctor` | Checks the runtime, the config, the skills, the links, the hook, `PATH`, and T3. `--project` checks the project install. |
 | `omt init` | Creates `.omt/` in the project with a starter config. |
 | `omt config` | Shows, finds, validates, or creates the config. |
 | `omt roles` | Prints how every role resolves. |

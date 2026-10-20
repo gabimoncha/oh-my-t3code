@@ -37,7 +37,7 @@ First, verify runs the artifact and the existing checks. Then qa writes only the
 Parallel workers share one checkout and edit different files. Commands that share build state take a lock, one lock name for each resource:
 
 ```sh
-omt lock run build -- pnpm build
+omt lock run build -- npm run build
 omt lock list
 ```
 

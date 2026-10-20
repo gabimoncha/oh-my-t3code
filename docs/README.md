@@ -1,10 +1,11 @@
 # oh-my-t3code docs
 
-Start with the page that fits your task. The [project README](../README.md) has the pitch and the quick start.
+Start with the page that fits your task. The [project README](../README.md) has the pitch, and its [Install](../README.md#install) section installs omt.
 
 | Page | Read it when |
 | --- | --- |
 | [install.md](install.md) | You install omt for one project or for your user, or you want to know which files the install writes. |
+| [releasing.md](releasing.md) | You are the owner, and you publish a new version to npm and GitHub. |
 | [agents/quickstart.md](agents/quickstart.md) | You are a coding agent, and your user asked you to evaluate, install, or use omt. |
 | [configuration.md](configuration.md) | You change the models of a role, add a custom role or profile, or set fast mode. |
 | [workflows.md](workflows.md) | You want to know how a pull request review runs, how omt adds tests, how parallel workers share builds, or what a plan page shows. |

@@ -116,6 +116,20 @@ OmO re-prompts the agent with hooks until a plan is done. T3 already ships nativ
 
 The installer copies each skill to `~/.agents/skills/<name>`. Codex, Cursor, OpenCode, and Pi read that root. It adds a relative symlink in `~/.claude/skills/<name>` for Claude Code, which does not read `~/.agents/skills`. The installer shows the full plan first, asks once, keeps backups, and records a manifest so that `omt uninstall` removes exactly what it added. This mirrors OmO's consent-first setup.
 
+### Bun builds omt, and users need no clone
+
+An earlier omt ran from a git clone: Node ran the TypeScript sources through type stripping, and a global install linked the clone onto `PATH` with pnpm. Node does not strip types in files under `node_modules`, so the same sources could not ship as an npm package. Users had to clone, and the shim recorded the clone path.
+
+The repository now uses Bun for each step: the package manager, the type checker (`bun check`), the tests (`bun test`), the bundle, and the compiled binary. One tool replaces pnpm, `tsc`, and the Node test runner, and `mise.toml` pins its version. The type checker brings one trap: `bun check` runs a package script named `check` before the checker, so the repository has no such script and the aggregate script is `verify`.
+
+The npm package holds one JavaScript file that `bun build --target=node` makes, plus the skills. A package that starts with `#!/usr/bin/env bun` fails on a machine with only Node, and most users have Node. So the bundle starts with `#!/usr/bin/env node` and runs on Node 22 or later, or on Bun. Node 20 is past its end of life, so 22 is the minimum. Because the bundle must run on Node, `src/` uses only `node:` built-in modules and no `Bun.*` API. The bundle has no dependencies and no install scripts. A launcher with one optional package per platform, as Biome ships, would run the binary through npm too. It needs one more package for each platform in every release, and the bundle needs none.
+
+The package is also published as `omt3`. The npm name `omt` belongs to another author. A one-shot runner such as `npx` downloads the package that has the name of the command, so `npx omt` outside a project that installed omt runs that other package. `omt3` is free, and `npx omt3` runs omt. The docs never tell users to run `npx omt` outside a project with omt as a dev dependency.
+
+The GitHub release holds a compiled binary for each POSIX platform: macOS, Linux with glibc, and Linux with musl, on arm64 and x64. The binary holds the skills, and needs neither Node nor Bun. It serves users who install tools with mise, and machines without a JavaScript runtime. mise reads the platform from each archive name and checks `SHA256SUMS`. Windows binaries come later.
+
+A project install from a one-shot runner writes a shim that calls the same runner with the pinned version, such as `npx --yes omt3@0.1.0`. The runner cache is not a stable path, so the shim cannot record it. The pinned version keeps the project on the version that installed it, and a cleared cache does not break the project. The cost is the network: after a cache clean, the next call downloads the package again. With the Claude Code hook, that call runs on each prompt and can pass the hook timeout when the network is down. So the docs point hook users to a global install or a dev dependency.
+
 ## What is out of scope
 
 - A T3 fork or a T3 plugin API. oh-my-t3code uses only the surfaces T3 already exposes.

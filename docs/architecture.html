@@ -413,7 +413,7 @@ footer.page-footer ul { columns: 2 300px; }
     <li><strong>Three ways to start ulw.</strong> (1) On Claude Code with <code>--hooks</code>, the hook adds a pointer to the prompt. (2) On any driver, the model loads <code>omt-ulw</code> on its own, because the skill description holds the words <code>ulw</code> and <code>ultrawork</code>. (3) The user types a mention, such as <code>/omt-ulw</code> in Claude or <code>$omt-ulw</code> in Codex. The hook is optional. It only makes start (1) more reliable.</li>
     <li>The <strong>CLI</strong> merges config, resolves role chains, maps effort to options, renders briefs, and counts plan items and ledger entries.</li>
     <li>The CLI cannot call T3. Claude and Codex sessions get the MCP server through config, not through environment variables. So routing is unverified by default, and T3 checks the target at dispatch.</li>
-    <li>The skills also work without the CLI. They look for <code>omt</code> on <code>PATH</code>, then <code>.omt/bin/omt</code>, then follow the manual steps in <code>roles.md</code> and <code>brief.md</code>. They never use <code>npx</code>. Without the CLI, the conductor resolves roles with the table in <code>roles.md</code>, writes briefs by the layout in <code>brief.md</code>, edits the plan checkboxes and log by hand, and counts the open task ids in the plan's log in place of <code>omt ledger stats</code>.</li>
+    <li>The skills also work without the CLI. They look for <code>omt</code> on <code>PATH</code>, then <code>.omt/bin/omt</code>, then follow the manual steps in <code>roles.md</code> and <code>brief.md</code>. They never call a runner such as <code>npx</code> themselves. A shim from a one-shot install calls its runner with the pinned version. Without the CLI, the conductor resolves roles with the table in <code>roles.md</code>, writes briefs by the layout in <code>brief.md</code>, edits the plan checkboxes and log by hand, and counts the open task ids in the plan's log in place of <code>omt ledger stats</code>.</li>
   </ul>
 </section>
 
@@ -984,7 +984,7 @@ OPEN:
     <li>Each file is JSONC. Comments and trailing commas are allowed. A syntax error becomes one issue, and the loader skips that file. A missing file is not an error.</li>
     <li>Root keys are <code>$schema</code>, <code>version</code> (must be 1), <code>profile</code>, <code>profiles</code>, <code>models</code>, <code>roles</code>, <code>limits</code>, and <code>visuals</code>. An unknown key is an error, and the loader drops it.</li>
     <li>An existing role merges field by field. A new <code>chain</code> replaces the old chain as a whole. A new role needs <code>description</code>, <code>access</code>, and <code>chain</code>.</li>
-    <li><code>src/config/schema.ts</code> builds the JSON Schema from the constants in <code>validate.ts</code>. <code>pnpm schema</code> writes it to <code>schema/omt.schema.json</code>, and a test checks that the committed file matches.</li>
+    <li><code>src/config/schema.ts</code> builds the JSON Schema from the constants in <code>validate.ts</code>. <code>bun run schema</code> writes it to <code>schema/omt.schema.json</code>, and a test checks that the committed file matches.</li>
   </ul>
   <p>The project starter config holds empty objects and commented examples.</p>
 <pre><code>// oh-my-t3code project config. It overrides the user config for this project.
@@ -1021,7 +1021,7 @@ Failed HTTP calls retry with backoff, so a short outage does not fail a sync.
 
 ## Done when
 
-- [ ] D1. `pnpm test` passes with the new retry tests.
+- [ ] D1. `npm test` passes with the new retry tests.
 
 ## Units
 
@@ -1029,12 +1029,12 @@ Failed HTTP calls retry with backoff, so a short outage does not fail a sync.
   - Role: execute
   - Scope: src/http/retry.ts
   - Done when: three failures then a success returns the response
-  - Verify: `pnpm test`
+  - Verify: `npm test`
   - Depends on: none
 
 ## Final verification
 
-- [ ] F1. The full test suite passes: `pnpm check`
+- [ ] F1. The full test suite passes: `npm run check`
 - [ ] F2. The oracle role approves the whole change.
 
 ## Log
@@ -1372,7 +1372,7 @@ can dispatch: yes</code></pre>
         <tr><th scope="row">Gemini links</th><td><code>~/.gemini/config/skills/&lt;name&gt;</code>, default when <code>~/.gemini</code> exists</td><td>None. <code class="cmd"><span class="nw">--targets</span> <span class="nw">gemini</span></code> is a usage error.</td></tr>
         <tr><th scope="row">Config</th><td><code>&lt;configDir&gt;/config.jsonc</code></td><td><code>&lt;root&gt;/.omt/config.jsonc</code> plus <code>.omt/plans/</code></td></tr>
         <tr><th scope="row">Hook file (<code>--hooks</code>)</th><td><code>&lt;claudeConfigDir&gt;/settings.json</code></td><td><code>&lt;root&gt;/.claude/settings.local.json</code></td></tr>
-        <tr><th scope="row">Hook command</th><td><code class="cmd"><span class="nw">"&lt;node&gt;"</span> <span class="nw">"&lt;cli&gt;"</span> <span class="nw">hook</span> <span class="nw">user-prompt-submit</span> <span class="nw">#</span> <span class="nw">oh-my-t3code</span></code></td><td><code class="cmd"><span class="nw">"&lt;root&gt;/.omt/bin/omt"</span> <span class="nw">hook</span> <span class="nw">user-prompt-submit</span> <span class="nw">#</span> <span class="nw">oh-my-t3code</span></code></td></tr>
+        <tr><th scope="row">Hook command</th><td><code class="cmd"><span class="nw">"&lt;runtime&gt;"</span> <span class="nw">"&lt;cli&gt;"</span> <span class="nw">hook</span> <span class="nw">user-prompt-submit</span> <span class="nw">#</span> <span class="nw">oh-my-t3code</span></code>, or <code class="cmd"><span class="nw">"&lt;binary&gt;"</span> <span class="nw">hook</span> <span class="nw">user-prompt-submit</span> <span class="nw">#</span> <span class="nw">oh-my-t3code</span></code> for the release binary</td><td><code class="cmd"><span class="nw">"&lt;root&gt;/.omt/bin/omt"</span> <span class="nw">hook</span> <span class="nw">user-prompt-submit</span> <span class="nw">#</span> <span class="nw">oh-my-t3code</span></code></td></tr>
         <tr><th scope="row">CLI shim</th><td>None</td><td><code>&lt;root&gt;/.omt/bin/omt</code>, mode 0755</td></tr>
         <tr><th scope="row">Manifest</th><td><code>&lt;configDir&gt;/install.json</code></td><td><code>&lt;root&gt;/.omt/install.json</code></td></tr>
         <tr><th scope="row">Backups</th><td><code>&lt;configDir&gt;/backups/&lt;stamp&gt;/</code></td><td><code>&lt;root&gt;/.omt/backups/&lt;stamp&gt;/</code></td></tr>
@@ -1387,7 +1387,7 @@ can dispatch: yes</code></pre>
 │   ├── skills/&lt;name&gt;             symlink to ../../.agents/skills/&lt;name&gt;
 │   └── settings.local.json       UserPromptSubmit hook (with --hooks)
 ├── .omt/
-│   ├── bin/omt                   shim that runs node with cli.ts
+│   ├── bin/omt                   shim that runs the CLI that made the install
 │   ├── config.jsonc              project starter config
 │   ├── plans/
 │   ├── .gitignore                ledger.jsonl, evidence/, bin/, install.json, backups/,
@@ -1395,7 +1395,7 @@ can dispatch: yes</code></pre>
 │   ├── install.json              manifest for exact uninstall
 │   └── backups/                  first backup adds .gitignore with *
 └── .git/info/exclude             block between the oh-my-t3code markers</code></pre>
-    <figcaption>Figure 9. Files of a project install. The hook calls the shim, and the shim calls the same <code>cli.ts</code>. Skills reach the CLI as <code>.omt/bin/omt</code>.</figcaption>
+    <figcaption>Figure 9. Files of a project install. The hook calls the shim, and the shim calls the CLI that made the install: the binary, <code>dist/cli.js</code>, <code>src/cli.ts</code>, or a one-shot runner. Skills reach the CLI as <code>.omt/bin/omt</code>.</figcaption>
   </figure>
   <div class="callout">
     <strong>The no-trace guarantee.</strong>
@@ -1418,7 +1418,7 @@ can dispatch: yes</code></pre>
       <caption>Doctor checks</caption>
       <thead><tr><th scope="col">Check</th><th scope="col">Scope</th><th scope="col">What it looks at</th></tr></thead>
       <tbody>
-        <tr><th scope="row"><code>node</code></th><td>both</td><td>Node 22.18 or later</td></tr>
+        <tr><th scope="row"><code>runtime</code></th><td>both</td><td>The release binary, Node 22 or later, or Bun 1.4.3 or later</td></tr>
         <tr><th scope="row"><code>config</code></th><td>both</td><td>Config loads with no issues</td></tr>
         <tr><th scope="row"><code>skills</code></th><td>both</td><td>All skills installed and current, not modified</td></tr>
         <tr><th scope="row"><code>links</code></th><td>both</td><td>Every Claude skill link resolves to its managed skill copy</td></tr>
@@ -1482,7 +1482,7 @@ can dispatch: yes</code></pre>
 <!-- 11. CLI -->
 <section id="cli" aria-labelledby="cli-h">
   <h2 id="cli-h">11. The CLI at a glance</h2>
-  <p><code>omt</code> is a Node ESM TypeScript CLI. Node 22.18 or later runs the <code>.ts</code> sources through type stripping. <code>src/main.ts</code> holds a fixed registry of 15 commands. Each command module exports <code>summary</code>, <code>usage</code>, and <code>run</code>, and stays a thin adapter over a domain module.</p>
+  <p><code>omt</code> is an ESM TypeScript CLI. It runs in three modes. In a clone, Bun runs the <code>.ts</code> sources. The npm package holds one JavaScript file, <code>dist/cli.js</code>, that <code>bun build --target=node</code> makes, and Node 22 or later or Bun 1.4.3 or later runs it. The release binary comes from <code>bun build --compile</code>, holds the skills, and needs neither Node nor Bun. <code>src/main.ts</code> holds a fixed registry of 15 commands. Each command module exports <code>summary</code>, <code>usage</code>, and <code>run</code>, and stays a thin adapter over a domain module.</p>
   <div class="table-wrap" tabindex="0" role="region" aria-label="Commands">
     <table>
       <caption>Commands</caption>
@@ -1547,12 +1547,12 @@ can dispatch: yes</code></pre>
         <tr><th scope="row"><code>src/commands/</code></th><td>One file per command (15), plus <code>shared.ts</code>.</td></tr>
         <tr><th scope="row"><code>src/util/</code></th><td>args, errors (<code>OmtError</code>), fs (<code>writeFileAtomic</code>), ids, json, output</td></tr>
         <tr><th scope="row"><code>skills/</code></th><td>The nine skills and <code>omt/references/</code>.</td></tr>
-        <tr><th scope="row"><code>scripts/</code>, <code>schema/</code></th><td><code>build-schema.ts</code> writes <code>schema/omt.schema.json</code> from <code>src/config/schema.ts</code>. Run <code class="cmd"><span class="nw">pnpm</span> <span class="nw">schema</span></code> after you change validation.</td></tr>
-        <tr><th scope="row"><code>test/</code></th><td><code>node:test</code> suites with temp-dir helpers and <code>fakeContext()</code>. Child-process tests point <code>HOME</code> and the <code>OMT_*</code>, <code>XDG_*</code>, <code>CLAUDE_*</code>, and <code>T3CODE_*</code> variables at temp paths.</td></tr>
+        <tr><th scope="row"><code>scripts/</code>, <code>schema/</code></th><td><code>build-schema.ts</code> writes <code>schema/omt.schema.json</code> from <code>src/config/schema.ts</code>. Run <code class="cmd"><span class="nw">bun</span> <span class="nw">run</span> <span class="nw">schema</span></code> after you change validation. <code>build.ts</code> writes the bundle and the binary, and <code>release.ts</code> writes the npm packages and the release archives.</td></tr>
+        <tr><th scope="row"><code>test/</code></th><td><code>bun:test</code> suites with temp-dir helpers and <code>fakeContext()</code>. Child-process tests point <code>HOME</code> and the <code>OMT_*</code>, <code>XDG_*</code>, <code>CLAUDE_*</code>, and <code>T3CODE_*</code> variables at temp paths.</td></tr>
       </tbody>
     </table>
   </div>
-  <p>The package has no runtime dependencies. The only dev dependencies are <code>typescript</code> and <code>@types/node</code>. The CLI makes no network calls and sends no telemetry. All file writes are atomic, except the ledger append. <code>pnpm check</code> runs the typecheck and all tests.</p>
+  <p>The package has no runtime dependencies. The only dev dependency is <code>@types/bun</code>. <code>src/</code> uses only <code>node:</code> built-in modules, because the npm bundle runs on Node. The CLI makes no network calls and sends no telemetry. All file writes are atomic, except the ledger append. <code>bun run verify</code> runs the type check and all tests.</p>
 </section>
 
 <!-- 12. Where to make a change -->
@@ -1564,7 +1564,7 @@ can dispatch: yes</code></pre>
     <li><strong>A new command.</strong> Add a file in <code>src/commands/</code> and register it in <code>src/main.ts</code>.</li>
     <li><strong>A skill change.</strong> Edit <code>skills/&lt;name&gt;/SKILL.md</code>. A test checks that every relative link in a skill resolves.</li>
   </ul>
-  <p>For each change, update <code>docs/spec.md</code> in the same change and run <code>pnpm check</code>.</p>
+  <p>For each change, update <code>docs/spec.md</code> in the same change and run <code>bun run verify</code>.</p>
 </section>
 
 <!-- 13. Glossary -->
@@ -1608,7 +1608,7 @@ can dispatch: yes</code></pre>
     <dt>track</dt><dd>An <code>omt-swarm</code> unit that runs as a top-level T3 thread in its own worktree and ends in a PR.</dd>
     <dt>tick</dt><dd>One <code>omt-loop</code> iteration, recorded in the ledger with role <code>loop</code>.</dd>
     <dt>pointer</dt><dd>The <code>additionalContext</code> text that the ulw hook injects. It tells the agent to load <code>omt-ulw</code> first.</dd>
-    <dt>shim</dt><dd><code>&lt;root&gt;/.omt/bin/omt</code>, a <code>sh</code> script that runs the recorded node with the recorded <code>cli.ts</code>.</dd>
+    <dt>shim</dt><dd><code>&lt;root&gt;/.omt/bin/omt</code>, a <code>sh</code> script that runs the CLI that made the install: the recorded binary, the recorded runtime with the recorded CLI file, or a one-shot runner with the pinned version.</dd>
     <dt>exclude block</dt><dd>A per-root section in the repository's <code>info/exclude</code> that hides a project install from git.</dd>
     <dt>managed directory</dt><dd>A skill directory that holds <code>.omt-managed.json</code> with package, version, skill, and hash.</dd>
     <dt>locally modified</dt><dd>A managed skill whose current hash differs from its marker hash. Install treats it as a conflict.</dd>
