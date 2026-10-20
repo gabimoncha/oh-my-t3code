@@ -816,7 +816,7 @@ Role descriptions (shown to agents in `omt roles` and in skills):
 - `design`: Design screens and flows in Paper, and write a design spec that UI units cite.
 - `ui`: Implement one UI unit from its design spec, inside its scope.
 
-Default limits: `maxParallel` 6, `maxTasksPerRun` 24, `maxDepth` 1, `maxReviewRounds` 3.
+Default limits: `maxParallel` 6, `maxTasksPerRun` 24, `maxDepth` 1, `maxReviewRounds` 4.
 
 Default profile: `normal`. Default models: `{ "gpt-6.1-sol": { "fast": true } }`. No default role or rung sets `fast`.
 

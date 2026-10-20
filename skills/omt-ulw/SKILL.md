@@ -162,7 +162,7 @@ Rounds count per cycle. A cycle starts at the unit's first dispatch, or at a reo
 | --- | --- | --- |
 | 1 | the unit's planned role; after a reopen, a fix | round 2 |
 | 2 to `maxReviewRounds` - 1 | a fix | the next round |
-| `maxReviewRounds` (default 3) | a fix | stop |
+| `maxReviewRounds` (default 4) | a fix | stop |
 
 When `maxReviewRounds` is 1, round 1 is also the last round, so a failure in round 1 stops the unit.
 

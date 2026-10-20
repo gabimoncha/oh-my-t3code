@@ -202,7 +202,7 @@ export const DEFAULT_CONFIG: OmtConfig = {
     maxParallel: 6,
     maxTasksPerRun: 24,
     maxDepth: 1,
-    maxReviewRounds: 3,
+    maxReviewRounds: 4,
   },
   visuals: {
     plan: true,

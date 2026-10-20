@@ -91,7 +91,7 @@ test("the default visuals show the plan page", () => {
 });
 
 test("the default limits match the plan", () => {
-  assert.deepEqual(DEFAULT_CONFIG.limits, { maxParallel: 6, maxTasksPerRun: 24, maxDepth: 1, maxReviewRounds: 3 });
+  assert.deepEqual(DEFAULT_CONFIG.limits, { maxParallel: 6, maxTasksPerRun: 24, maxDepth: 1, maxReviewRounds: 4 });
   assert.equal(DEFAULT_CONFIG.version, 1);
 });
 

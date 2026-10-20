@@ -79,7 +79,7 @@ Run `omt profile show --plan <slug> --json` before each round. Before the plan f
 
 When `plan.review` is `owner`, ask the owner to approve the plan and its `## Tests` list. Dispatch no `plan-review` task for this value. After the owner approves, go to step 5. In plan mode, write the temp plan file from item 1 before the handoff.
 
-For `two-families` or `one`, run up to `maxReviewRounds` rounds (default 3). Each round dispatches fresh `plan-review` tasks; reuse no reviewer thread.
+For `two-families` or `one`, run up to `maxReviewRounds` rounds (default 4). Each round dispatches fresh `plan-review` tasks; reuse no reviewer thread.
 
 1. Make every plan edit first, `omt plan limit` included. Then compute the hash: `shasum -a 256 <plan path>`, with the path from step 3. In plan mode no file exists: write the exact plan text you put in the brief to `$TMPDIR/omt-<slug>-plan.md` with a quoted heredoc (`<<'EOF'`), then hash it with `shasum -a 256 < "$TMPDIR/omt-<slug>-plan.md"`.
 2. Build each brief with `omt brief plan-review --task-file - --title "plan-review: <title>" --round <n> --attempt 1 --plan <slug> --unit <unit> --against <provider> --json`. The task names the plan path and its SHA-256, and asks the reviewer to confirm the hash before it reads. From round 2, pass `--prior-file` with the blocker list and your response to each blocker.
