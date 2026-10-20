@@ -4,8 +4,10 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, 
 import { dirname, join } from "node:path";
 import { test } from "bun:test";
 import type { BriefJsonOutput, LedgerStats, RouteOutput } from "../src/types.ts";
-import { childEnv, CLI_PATH, gitEnv, gitRepo, spawnOmt, tempDir } from "./helpers.ts";
+import { childEnv, CLI_PATH, gitEnv, gitRepo, PACKAGE_ROOT, spawnOmt, tempDir } from "./helpers.ts";
 import { contentTree } from "./install/fixture.ts";
+
+const PACKAGE_VERSION = (JSON.parse(readFileSync(join(PACKAGE_ROOT, "package.json"), "utf8")) as { version: string }).version;
 
 function omtEntries(dir: string): string[] {
   return existsSync(dir) ? readdirSync(dir).filter((name) => name.startsWith("omt")) : [];
@@ -118,7 +120,7 @@ for (const [label, files] of [
       assert.ok(existsSync(join(p.project, path)), path);
     }
     assert.equal(p.git(["status", "--porcelain", "--untracked-files=all"]), "");
-    assert.equal(p.run(join(p.project, ".omt", "bin", "omt"), ["--version"]).trim(), "0.1.0");
+    assert.equal(p.run(join(p.project, ".omt", "bin", "omt"), ["--version"]).trim(), PACKAGE_VERSION);
     assert.match(p.run(join(p.project, ".omt", "bin", "omt"), ["roles"]), /^execute\s+unverified\s+/m);
     assert.deepEqual(omtEntries(join(p.env.HOME as string, ".agents", "skills")), []);
 
