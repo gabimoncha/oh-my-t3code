@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { test } from "node:test";
-import type { TestContext } from "node:test";
+import { test } from "bun:test";
 import { DEFAULT_CONFIG } from "../../src/config/defaults.ts";
 import { loadConfig } from "../../src/config/load.ts";
 import { mergeLayer } from "../../src/config/merge.ts";
@@ -17,8 +16,8 @@ function merge(value: unknown, base = DEFAULT_CONFIG) {
   return { config: merged.config, issues: [...validated.issues, ...merged.issues] };
 }
 
-function setup(t: TestContext) {
-  const ctx = fakeContext({ root: tempDir(t) });
+function setup() {
+  const ctx = fakeContext({ root: tempDir() });
   mkdirSync(join(ctx.cwd, ".git"));
   const userPath = join(ctx.homedir, ".config", "oh-my-t3code", "config.jsonc");
   const projectPath = join(ctx.cwd, ".omt", "config.jsonc");
@@ -287,8 +286,8 @@ test("roles.test emits the split warning and still follows normal custom role ru
   assert.deepEqual(invalid.layer.roles, {});
 });
 
-test("a project profile can extend a user profile and select it after all layers merge", async (t) => {
-  const { userPath, projectPath, write, load } = setup(t);
+test("a project profile can extend a user profile and select it after all layers merge", async () => {
+  const { userPath, projectPath, write, load } = setup();
   write(userPath, { profiles: { user: { description: "User.", extends: "prototype" } } });
   write(projectPath, { profile: "project", profiles: { project: { description: "Project.", extends: "user" } } });
   const loaded = await load();
@@ -300,8 +299,8 @@ test("a project profile can extend a user profile and select it after all layers
   assert.deepEqual((await load()).issues, []);
 });
 
-test("a cycle across user and project layers names its chain and each profile's last source", async (t) => {
-  const { userPath, projectPath, write, load } = setup(t);
+test("a cycle across user and project layers names its chain and each profile's last source", async () => {
+  const { userPath, projectPath, write, load } = setup();
   write(userPath, { profiles: { user: { description: "User.", extends: "project" } } });
   write(projectPath, { profiles: { project: { description: "Project.", extends: "user" } } });
   const loaded = await load();
@@ -336,8 +335,8 @@ test("profile chains allow eight profiles and reject deeper chains without chang
   assert.deepEqual(deep, before);
 });
 
-test("final validation uses the last profile definition and root selection source", async (t) => {
-  const { userPath, projectPath, write, load } = setup(t);
+test("final validation uses the last profile definition and root selection source", async () => {
+  const { userPath, projectPath, write, load } = setup();
   write(userPath, { profile: "missing", profiles: { custom: { description: "Custom.", extends: "missing" } } });
   write(projectPath, { profiles: { custom: { description: "Project override." } } });
   const loaded = await load();
@@ -361,8 +360,8 @@ test("root profile rejects invalid names and unknown names, including inherited 
   assert.deepEqual(validateMergedProfiles(config).map((issue) => issue.path), ["profile"]);
 });
 
-test("config show prints the planned defaults and the roles.test warning", async (t) => {
-  const { ctx, write, projectPath } = setup(t);
+test("config show prints the planned defaults and the roles.test warning", async () => {
+  const { ctx, write, projectPath } = setup();
   const options = { homedir: ctx.homedir, cwd: ctx.cwd, env: ctx.env };
   const defaults = await runOk(["config", "show", "--defaults"], options);
   const printed = JSON.parse(defaults.ctx.out()) as OmtConfig;

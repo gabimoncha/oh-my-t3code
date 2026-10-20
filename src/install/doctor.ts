@@ -15,7 +15,16 @@ import { classifyLink, planLinks } from "./links.ts";
 import type { Manifest } from "./manifest.ts";
 import { loadScopeManifest, scopePaths } from "./plan.ts";
 import type { InstallScope, ScopePaths } from "./plan.ts";
-import { excludeBlockLines, excludeBlockRoots, findGitExclude, isManagedShim, shimPaths } from "./project.ts";
+import {
+  excludeBlockLines,
+  excludeBlockRoots,
+  findGitExclude,
+  INSTALL_CHANNELS,
+  isManagedShim,
+  oneShotRunner,
+  runnerCommand,
+  shimPaths,
+} from "./project.ts";
 import { worktreeSummary } from "../worktree/check.ts";
 import { classifySkill, isManagedDir, listBundledSkills } from "./skills.ts";
 import type { BundledSkill } from "./skills.ts";
@@ -35,18 +44,29 @@ export interface DoctorReport {
 
 type ScopeManifest = { manifest: Manifest | undefined } | { error: unknown };
 
-export const MIN_NODE = [22, 18] as const;
+export const MIN_NODE = [22, 0, 0] as const;
+export const MIN_BUN = [1, 4, 3] as const;
 
 function check(id: string, status: CheckStatus, message: string): DoctorCheck {
   return { id, status, message };
 }
 
-export function checkNode(version: string): DoctorCheck {
-  const [major = 0, minor = 0] = version.replace(/^v/, "").split(".").map((part) => Number.parseInt(part, 10) || 0);
-  const ok = major > MIN_NODE[0] || (major === MIN_NODE[0] && minor >= MIN_NODE[1]);
-  return ok
-    ? check("node", "PASS", `node ${version}`)
-    : check("node", "FAIL", `node ${version} is older than ${MIN_NODE.join(".")}; install Node ${MIN_NODE.join(".")} or later`);
+function atLeast(version: string, min: readonly number[]): boolean {
+  const parts = version.replace(/^v/, "").split(".").map((part) => Number.parseInt(part, 10) || 0);
+  for (const [index, wanted] of min.entries()) {
+    const part = parts[index] ?? 0;
+    if (part !== wanted) return part > wanted;
+  }
+  return true;
+}
+
+// A binary carries its own runtime. The bundle and the sources need Node 22 or Bun 1.4.3, or later.
+export function checkRuntime(ctx: Pick<CliContext, "build" | "version" | "runtimeName" | "runtimeVersion">): DoctorCheck {
+  if (ctx.build === "binary") return check("runtime", "PASS", `omt ${ctx.version} binary`);
+  const runtime = `${ctx.runtimeName} ${ctx.runtimeVersion}`;
+  return atLeast(ctx.runtimeVersion, ctx.runtimeName === "bun" ? MIN_BUN : MIN_NODE)
+    ? check("runtime", "PASS", runtime)
+    : check("runtime", "FAIL", `${runtime} is too old; omt needs Node ${MIN_NODE[0]} or later, or Bun ${MIN_BUN.join(".")} or later`);
 }
 
 function checkConfig({ config, issues }: LoadedConfig): DoctorCheck {
@@ -58,15 +78,26 @@ function checkConfig({ config, issues }: LoadedConfig): DoctorCheck {
   return check("config", "PASS", roles);
 }
 
+// The command that runs this CLI again: the runner with the pinned version for a one-shot run, the
+// binary itself, the bundle with the runtime that runs it now (node or bun), or the sources with bun.
+function cliCommand(ctx: CliContext): string {
+  const runner = oneShotRunner(ctx.cliPath, ctx.env);
+  if (runner !== undefined) return runnerCommand(runner, ctx.version);
+  if (ctx.build === "binary") return `"${ctx.cliPath}"`;
+  return `${ctx.build === "bundle" ? ctx.runtimeName : "bun"} "${ctx.cliPath}"`;
+}
+
 // In project scope there may be no `omt` on PATH and the shim may be broken, so the hint names the running CLI.
 function installHint(ctx: CliContext, paths: ScopePaths, flags = ""): string {
   if (paths.scope === "user") return `omt install${flags}`;
-  const cli = /\s/.test(ctx.cliPath) ? `"${ctx.cliPath}"` : ctx.cliPath;
-  return `node ${cli} install --project${flags}`;
+  return `${cliCommand(ctx)} install --project${flags}`;
 }
 
 async function checkSkills(ctx: CliContext, paths: ScopePaths, bundled: BundledSkill[]): Promise<DoctorCheck> {
   const root = paths.agentsRoot;
+  if (bundled.length === 0) {
+    return check("skills", "FAIL", `the omt CLI has no bundled skills in ${join(ctx.packageRoot, "skills")}; reinstall omt`);
+  }
   const groups: Record<string, string[]> = { missing: [], outdated: [], modified: [], unmanaged: [] };
   for (const skill of bundled) {
     const result = await classifySkill(skill.dir, join(root, skill.name));
@@ -99,7 +130,8 @@ async function checkLinks(ctx: CliContext, paths: ScopePaths, names: string[]): 
   return check("links", "PASS", `${plural(plan.links.length, "link")} in ${claude}`);
 }
 
-// The managed command is `"<node>" "<cli>" hook ...` in user scope and `"<shim>" hook ...` in project scope.
+// The managed command is `"<runtime>" "<cli>" hook ...` or `"<binary>" hook ...` in user scope, and
+// `"<shim>" hook ...` in project scope.
 function commandPaths(command: string): string[] {
   const match = /^"([^"]*)"(?: "([^"]*)")?/.exec(command);
   if (match === null) return [];
@@ -153,13 +185,14 @@ async function checkShim(ctx: CliContext, paths: ScopePaths, loaded: ScopeManife
   }
   if (text === undefined) return check("shim", "WARN", `${shimPath} does not exist; run ${hint}`);
   if (!isManagedShim(text)) return check("shim", "WARN", `${shimPath} is not managed by omt`);
-  const { node, cli } = shimPaths(text);
-  if (cli === undefined || !(await pathExists(cli))) {
+  const { runtime, runtimeFallback, cli, runner } = shimPaths(text);
+  if (runner === undefined && (cli === undefined || !(await pathExists(cli)))) {
     return check("shim", "FAIL", `the shim points at a missing CLI path: ${cli ?? shimPath}; run ${hint}`);
   }
   if (!(await isExecutableFile(shimPath))) return check("shim", "FAIL", `${shimPath} is not executable; run ${hint}`);
-  if (node === undefined || !(await pathExists(node))) {
-    return check("shim", "WARN", `the shim's node path ${node ?? "(none)"} is missing; it falls back to node on PATH (run ${hint})`);
+  if (runner !== undefined) return check("shim", "PASS", `${shimPath} runs ${runner}`);
+  if (runtime !== undefined && !(await pathExists(runtime))) {
+    return check("shim", "WARN", `the shim's runtime ${runtime} is missing; it falls back to ${runtimeFallback ?? "node"} on PATH (run ${hint})`);
   }
   return check("shim", "PASS", shimPath);
 }
@@ -215,7 +248,7 @@ async function checkPath(ctx: CliContext): Promise<DoctorCheck> {
   return check(
     "path",
     "WARN",
-    "omt is not on PATH; skills use .omt/bin/omt from a project install (omt install --project) and otherwise fall back to manual role resolution; run pnpm link --global in a clone to add it",
+    `omt is not on PATH; skills use .omt/bin/omt from a project install (omt install --project) and otherwise fall back to manual role resolution; install omt with one of: ${INSTALL_CHANNELS.join(", ")}`,
   );
 }
 
@@ -304,7 +337,7 @@ export async function runDoctor(ctx: CliContext, caps?: Capabilities, scope: Ins
   const bundled = await listBundledSkills(ctx.packageRoot);
   const names = bundled.map((skill) => skill.name);
   const checks = [
-    checkNode(ctx.nodeVersion),
+    checkRuntime(ctx),
     checkConfig(loadedConfig),
     await checkSkills(ctx, paths, bundled),
     await checkLinks(ctx, paths, names),

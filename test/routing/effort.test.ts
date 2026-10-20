@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "bun:test";
 import { mapEffort } from "../../src/routing/effort.ts";
 import type { OptionDescriptor } from "../../src/types.ts";
 

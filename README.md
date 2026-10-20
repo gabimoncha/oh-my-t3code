@@ -24,8 +24,8 @@ Do not use omt if:
 - Claude Code (`claude auth login`), Codex with a ChatGPT sign-in, or both. Enable them in T3 under **Settings** > **Providers**.
   - With both, a model from the other family reviews each change. With one, the same family reviews its own work.
   - The `design` and `ui` roles run only on Claude. Without Claude Code, omt cannot do design or UI units.
-- Node.js 22.18 or later, and git.
-- pnpm, only for the global install.
+- git.
+- For the npm package: Node.js 22 or later on `PATH`. The release binary that mise installs needs neither Node nor Bun. It is the best channel for a machine with only Bun.
 
 ## For agents
 
@@ -39,22 +39,40 @@ step by step, run the check at the end of each step, and tell me what to restart
 
 The [agent quick start](docs/agents/quickstart.md) checks the fit, installs omt for one project, and lists the first tasks to try.
 
-## Quick start
+## Install
 
-Install omt into one project. The install writes only inside the project, hides its files from git, and needs no `pnpm install`.
+Install the `omt` CLI with one of these commands. You do not clone the repository.
+
+| Channel | Command |
+| --- | --- |
+| mise, release binary | `mise use -g github:gabimoncha/oh-my-t3code` |
+| mise, npm package | `mise use -g npm:oh-my-t3code` |
+| npm | `npm i -g oh-my-t3code` |
+| pnpm | `pnpm add -g oh-my-t3code` |
+| Bun | `bun add -g oh-my-t3code` |
+
+The release binary holds the skills and needs neither Node nor Bun. The npm package gives three commands: `omt`, `omt3`, and `oh-my-t3code`. These commands need Node 22 or later on `PATH`. On a machine with Bun 1.4.3 or later and no Node, they fail with `env: node: No such file or directory`. There, use the release binary, or run the package through `bunx` as [the install guide](docs/install.md#run-the-npm-package-with-bun-only) shows.
+
+Then install omt into one project. The install writes only inside the project and hides its files from git:
 
 ```sh
-git clone https://github.com/gabimoncha/oh-my-t3code.git ~/src/oh-my-t3code
 cd /path/to/your-project
-node ~/src/oh-my-t3code/src/cli.ts install --project --hooks
-node ~/src/oh-my-t3code/src/cli.ts doctor --project
+omt install --project --hooks
+omt doctor --project
 ```
 
 The install shows what it will write and asks before it writes. `--hooks` adds the `ulw` keyword for Claude Code. If you use only Codex, leave it out. Doctor prints one line for each check. Expect `PASS` lines and no `FAIL` line. A `WARN t3` line means that doctor found no T3 Code settings file.
 
 Then restart the agent sessions of this project in T3 Code. A running session does not load new skills.
 
-To install omt for all your projects, run `pnpm install`, `pnpm build`, and `pnpm link --global` in the clone, and then `omt install`. The [install guide](docs/install.md) has these steps, every path that each install writes, and the uninstall.
+You can also skip the global install:
+
+- Add omt to the project as a dev dependency: `npm i -D oh-my-t3code`, `pnpm add -D oh-my-t3code`, or `bun add -D oh-my-t3code`. Then run `npx omt install --project`, `pnpm exec omt install --project`, or `bunx omt install --project`.
+- Run omt once, with no install: `npx omt3 install --project`, `bunx omt3 install --project`, or `pnpm dlx omt3 install --project`. The project then calls the same runner with the pinned version, which needs the network again after the runner's cache is cleared.
+
+Use `npx omt3` for a one-shot run, not `npx omt`. Outside a project that installed omt, `npx omt` downloads a different npm package named `omt`.
+
+To install the skills for all your projects, run `omt install` without `--project`. The [install guide](docs/install.md) has every channel, every path that each install writes, and the uninstall.
 
 ## First run
 
@@ -145,7 +163,8 @@ Each role, such as `execute` or `review`, has an ordered list of models. When T3
 
 ## Docs
 
-- [Install guide](docs/install.md): the project and global installs, the paths they write, and the uninstall.
+- [Install guide](docs/install.md): the install channels, the project and global installs, the paths they write, and the uninstall.
+- [Release guide](docs/releasing.md): the steps that publish a new version.
 - [Configure roles and profiles](docs/configuration.md): the default models, custom roles and profiles, and fast mode.
 - [How the workflows run](docs/workflows.md): pull request review, tests, shared builds, and plan pages.
 - [Commands](docs/commands.md): every `omt` command.

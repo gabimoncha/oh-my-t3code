@@ -1,6 +1,7 @@
 import { applyInstall } from "../install/apply.ts";
 import { confirmApply } from "../install/confirm.ts";
 import { buildInstallPlan, installConflicts, installHasChanges, parseTargets, renderInstallPlan } from "../install/plan.ts";
+import { shimPaths } from "../install/project.ts";
 import type { CommandRun } from "../types.ts";
 import { parseArgs } from "../util/args.ts";
 import { usageError } from "../util/errors.ts";
@@ -15,8 +16,10 @@ Install the bundled skills into ~/.agents/skills and link them into the
 selected agent skill roots. Shows the plan first, then asks to apply it.
 With --project, install into the current project instead: skills in
 .agents/skills, links in .claude/skills, the CLI shim .omt/bin/omt, and the
-hook in .claude/settings.local.json, all hidden from git. --project also
-prints the T3 worktree setup state of the current checkout (omt worktree check).
+hook in .claude/settings.local.json, all hidden from git. When omt runs
+from npx, pnpm dlx, or bunx, a user install is refused. Use --project, and
+the shim calls that runner. --project also prints the T3 worktree setup
+state of the current checkout (omt worktree check).
 
 Options:
   --project         install into the project root, not the home directory
@@ -84,6 +87,8 @@ export const run: CommandRun = async (ctx) => {
   if (plan.project?.excludeNote !== undefined && plan.project.excludeNote !== "--no-git-exclude") {
     ctx.stdout(`note: ${plan.project.excludeNote}\n`);
   }
+  const runner = plan.project === undefined ? undefined : shimPaths(plan.project.shim.after).runner;
+  if (runner !== undefined) ctx.stdout(`note: .omt/bin/omt runs ${runner}, which needs the network again after its cache is cleared\n`);
   ctx.stdout(
     plan.project === undefined
       ? "Next steps:\n" +

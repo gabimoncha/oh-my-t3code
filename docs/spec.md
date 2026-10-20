@@ -4,35 +4,42 @@ This page is the reference for the code, the skills, and the tests. [`design.md`
 
 ## 1. Toolchain and conventions
 
-- Runtime: Node.js 22.18 or later. Node runs the TypeScript sources directly through type stripping.
+- Toolchain: Bun 1.4.3, pinned in `mise.toml` and in the `packageManager` field (`bun@1.4.3`). `engines.bun` is `>=1.4.3`. Run Bun through `mise exec --` so that the pinned version runs. The lockfile is `bun.lock`.
+- Runtime: Bun runs the TypeScript sources directly. `src/cli.ts` starts with `#!/usr/bin/env bun`.
 - Language: TypeScript, ESM (`"type": "module"`). Use erasable syntax only. That means no `enum`, no `namespace`, no parameter properties, and no decorators. Use `import type` for type-only imports. Relative imports end in `.ts`.
-- Runtime dependencies: none. Use only `node:` built-in modules.
-- Dev dependencies: `typescript` and `@types/node`.
-- Build: `tsc -p tsconfig.build.json` writes `dist/` with `rewriteRelativeImportExtensions`. The published `bin` points at `dist/cli.js`.
-- Tests: the Node test runner (`node:test`, `node:assert/strict`). Test files are `test/**/*.test.ts`.
+- Runtime dependencies: none.
+- `src/` uses only `node:` built-in modules, because the npm bundle runs on Node. Scripts in `scripts/` and tests may use Bun APIs.
+- Dev dependencies: `@types/bun` only.
+- Type check: `bun check` with `tsconfig.json` (`types: ["bun"]`, `resolveJsonModule`, `allowImportingTsExtensions`, `noEmit`). The package has no script named `check`, because `bun check` would run that script instead of the type checker.
+- Tests: `bun test` runs `test/**/*.test.ts`. The tests use `bun:test` and `node:assert/strict`.
 - Strict TypeScript: `strict`, `noUncheckedIndexedAccess`, `verbatimModuleSyntax`, `erasableSyntaxOnly`.
 - Formatting: 2-space indentation, double quotes, semicolons, trailing commas in multi-line literals.
 - Comments: only for a non-obvious reason that the code cannot show.
 - File writes: atomic, except the ledger and lock metadata (section 5.11). Write a temp file in the same directory, then rename. Create parent directories as needed. When the target exists, the temp file gets the target's mode before the rename, so a 0600 file stays 0600. Each ledger entry is one `appendFile` call, so concurrent appends do not overwrite each other.
 - When the target of a write is a symlink, write next to its real path (`fs.realpath`) and rename onto the real path, so the symlink stays a symlink.
-- No network calls. No telemetry. The CLI starts no package manager. Only the generated worktree setup runner (section 5.12) starts one, when T3 runs it.
+- The omt CLI makes no network calls and sends no telemetry. Build scripts may download Bun cross-compile runtimes. The CLI starts no package manager. Only the generated worktree setup runner (section 5.12) starts one, when T3 runs it.
 
 `package.json` scripts:
 
 | Script | Command |
 | --- | --- |
-| `omt` | `node src/cli.ts` |
-| `test` | `node --test "test/**/*.test.ts"` |
-| `typecheck` | `tsc --noEmit` |
-| `build` | `tsc -p tsconfig.build.json` |
-| `schema` | `node scripts/build-schema.ts` |
-| `check` | `pnpm typecheck && pnpm test` |
+| `omt` | `bun src/cli.ts` |
+| `test` | `bun test` |
+| `typecheck` | `bun check` |
+| `schema` | `bun scripts/build-schema.ts` |
+| `build` | `bun scripts/build.ts` (section 5) |
+| `release` | `bun scripts/release.ts` (section 17) |
+| `verify` | `bun run typecheck && bun test` |
 
-The package is named `oh-my-t3code`. It has two bin names, `omt` and `oh-my-t3code`. The `files` list is `dist`, `skills`, `schema`, `templates`, `README.md`, and `LICENSE`.
+The package is named `oh-my-t3code` and is `private`, so nobody publishes the repository root. Its two bin names, `omt` and `oh-my-t3code`, point at `dist/cli.js`, the default bundle output, for a link from a clone. The published packages come from `scripts/release.ts` (section 17).
 
 ## 2. Repository layout
 
 ```text
+mise.toml                pins bun = "1.4.3"
+package.json             scripts (section 1), packageManager bun@1.4.3, dev dependency @types/bun
+bun.lock                 Bun lockfile
+tsconfig.json            compiler options for bun check
 src/
   cli.ts                 entry: shebang, calls main(process.argv.slice(2)), sets process.exitCode
   main.ts                main(), createContext(), command registry, help text
@@ -49,17 +56,20 @@ src/
   lock/                  lock.ts
   install/               skills.ts, links.ts, claudeHook.ts, manifest.ts, plan.ts, apply.ts, doctor.ts, confirm.ts, fsops.ts, project.ts
   hooks/                 userPromptSubmit.ts
-  worktree/              runner.ts, check.ts, setup.ts (section 5.12)
+  worktree/              runner.ts, runnerText.ts, check.ts, setup.ts (section 5.12)
   commands/              one file per command, each exports `run: CommandRun`
                          profile.ts and lock.ts add profile and lock commands
                          worktree.ts adds the worktree command
                          shared.ts holds the helpers that commands share and exports no `run`
 scripts/
   build-schema.ts        writes schema/omt.schema.json from src/config/schema.ts
+  build.ts               builds dist/cli.js and the omt binaries (section 5)
+  release.ts             writes the npm packages, archives, and SHA256SUMS (section 17)
 schema/
   omt.schema.json        JSON Schema for config files
 templates/
   worktree-setup.mjs     the standalone worktree setup runner (section 5.12)
+  worktree-setup.d.mts   its types for src/worktree/runner.ts
 skills/
   omt/                   router skill and shared references
   omt-ulw/ omt-plan/ omt-design/ omt-review/ omt-research/ omt-swarm/ omt-loop/ omt-show/
@@ -348,6 +358,9 @@ export interface LedgerStats {
   canDispatch: boolean; // active < maxParallel && dispatched < maxTasksPerRun
 }
 
+// How the CLI runs: the TypeScript sources with Bun, the JavaScript bundle dist/cli.js, or a compiled binary.
+export type CliBuild = "source" | "bundle" | "binary";
+
 export interface CliContext {
   argv: string[]; // arguments after the command name
   cwd: string;
@@ -359,15 +372,19 @@ export interface CliContext {
   isTTY: boolean; // true when stdin is a terminal
   prompt: (question: string) => Promise<string>;
   now: () => Date;
-  packageRoot: string; // directory that holds package.json, skills/, schema/
-  cliPath: string; // absolute path of the running entry file
-  nodePath: string; // process.execPath
-  nodeVersion: string; // process.versions.node, injectable for tests
+  packageRoot: string; // directory that holds skills/: the package root, or the embedded root of a binary
+  cliPath: string; // absolute path of src/cli.ts, dist/cli.js, or the binary
+  build: CliBuild; // set at build time; "source" when the sources run
+  runtimePath?: string; // process.execPath in source and bundle mode; unset in binary mode
+  runtimeName: "node" | "bun";
+  runtimeVersion: string; // process.versions.bun or process.versions.node, injectable for tests
   version: string; // package.json version
 }
 
 export type CommandRun = (ctx: CliContext) => Promise<number>;
 ```
+
+Section 5 says how `createContext()` sets `build`, `packageRoot`, `cliPath`, and the runtime fields in each run mode.
 
 Code that lists the result kinds uses `RESULT_KINDS`.
 
@@ -420,7 +437,6 @@ export class OmtError extends Error {
 | `t3ProjectFilePath(root)` | `<root>/t3.json` |
 | `worktreeRunnerPath(root)` | `<root>/.t3/omt-worktree-setup.mjs` |
 | `pnpmWorkspacePath(root)` | `<root>/pnpm-workspace.yaml` |
-| `runnerTemplatePath(packageRoot)` | `<packageRoot>/templates/worktree-setup.mjs` |
 
 `mainCheckoutOf`, `findProjectRoot`, `findCheckoutRoot`, and `shadowedWorktreeState` are the only functions that read the file system. None of them starts a `git` process.
 
@@ -460,6 +476,25 @@ In every flag that takes a file, `-` means standard input.
 `--project` selects project scope for `install`, `uninstall`, and `doctor` (section 14.8). Without it, these commands work in user scope. `--no-git-exclude` without `--project` is a usage error.
 
 `--capabilities` is optional everywhere. Without it, routing is `unverified`: the CLI trusts the chain, and T3 validates the target when `delegate_task` runs. The skills treat that as the normal path and fall back to the next rung on a typed T3 error. To verify, the agent saves the `orchestrator_capabilities` result to a file. Claude Code saves a large tool result to a file by itself and reports the path. On ACP providers, `acp-mcp-call orchestrator_capabilities '{}' > caps.json` writes it. Any agent can also write a trimmed copy that keeps only the providers and models its chains name.
+
+Run modes. The CLI runs in one of three modes. `scripts/build.ts` sets the mode at build time with `--define OMT_BUILD='"bundle"'` or `--define OMT_BUILD='"binary"'`. `src/main.ts` reads it with `typeof OMT_BUILD` and uses `source` when it is not defined. `createContext()` sets these fields:
+
+| `build` | What runs | `packageRoot` | `cliPath` | `runtimePath` |
+| --- | --- | --- | --- | --- |
+| `source` | Bun runs `src/cli.ts`, as in `bun src/cli.ts` in a clone | the directory above `src/` | `<packageRoot>/src/cli.ts` | `process.execPath` |
+| `bundle` | Node 22 or later, or Bun, runs `dist/cli.js`, the one JavaScript file of the npm package | the directory above `dist/`, which holds `skills/` | `<packageRoot>/dist/cli.js` | `process.execPath` |
+| `binary` | the compiled binary runs by itself, with neither Node nor Bun installed | `import.meta.dir`, the embedded root `/$bunfs/root` that holds `skills/` | `process.execPath` | unset |
+
+`runtimeName` is `bun` when `process.versions.bun` is set, else `node`, and `runtimeVersion` is the version of that runtime. A binary reports the Bun runtime that it carries. The version comes from `import pkg from "../package.json" with { type: "json" }`, which the build inlines. In every mode, `src/` uses only `node:` built-in modules and no `Bun.*` API.
+
+A binary reads its embedded files with `readdir`, `readFile`, `lstat`, and `stat`. `fs.cp`, `fs.copyFile`, and `fs.realpath` fail on them with `ENOENT`, because these calls go to the operating system, which has no `/$bunfs`. So code that reads `<packageRoot>/skills` uses only the calls that work (section 14.1).
+
+Build. `bun run build` runs `bun scripts/build.ts [--bundle] [--binary] [--target <bun-target>]... [--outdir <dir>]`. Without `--bundle` and `--binary`, it builds both, for the host. The default output directory is `dist`. The script runs `bun build` from the repository root:
+
+- `<outdir>/cli.js` comes from `bun build --target=node --define OMT_BUILD='"bundle"' src/cli.ts`. `bun build` keeps the source shebang, `#!/usr/bin/env bun`, so the script replaces the first line with `#!/usr/bin/env node`. The file then has exactly one shebang. The script sets its mode to 0755.
+- `<outdir>/bin/omt` comes from `bun build --compile --minify --asset ./skills --define OMT_BUILD='"binary"' src/cli.ts`. The skills land at `/$bunfs/root/skills`. With `--target`, each target goes to `<outdir>/bin/<target>/omt`, and a cross-compile downloads the Bun runtime of that target.
+
+Both outputs inline the worktree setup runner, its module and its text (section 5.12), so neither needs a `templates/` folder.
 
 ### 5.1 `omt config`
 
@@ -725,7 +760,7 @@ Each lock folder gets a `.gitignore` with `*`. `omt init` also adds `locks/` to 
 
 Root. The command works on `findCheckoutRoot(cwd)`, the checkout of the current directory, not on `findProjectRoot(cwd)`. In a linked worktree the setup files go into that worktree, while `.omt` stays in the main checkout (section 4). Without `.git` above `cwd`, the report inspects `findProjectRoot(cwd)` and setup refuses.
 
-Shared code. `templates/worktree-setup.mjs` is the runner that setup copies to `<root>/.t3/omt-worktree-setup.mjs`. It uses only Node built-ins and runs without omt. The CLI loads the same file with a dynamic `import()` and uses its exports, `detectManager(root)`, `checkLinker(root, manager, { env, home })`, `persistentGlobalStore(root)`, and `PNPM_WORKSPACE_CONTENT`, so a check and a runner agree. `src/worktree/runner.ts` declares those exports as `RunnerModule`. The runner starts the install only when its path is `process.argv[1]`, so an import has no effect. `node --check templates/worktree-setup.mjs` must pass, because `tsc` does not check it.
+Shared code. `templates/worktree-setup.mjs` is the runner that setup copies to `<root>/.t3/omt-worktree-setup.mjs`. It uses only Node built-ins and runs without omt. `src/worktree/runner.ts` imports the same file as a module and uses its exports, `detectManager(root)`, `checkLinker(root, manager, { env, home })`, `persistentGlobalStore(root)`, and `PNPM_WORKSPACE_CONTENT`, so a check and a runner agree. It declares those exports as `RunnerModule`, and `templates/worktree-setup.d.mts` types them. It gets the runner's text from the Bun macro `runnerText()` in `src/worktree/runnerText.ts`, imported `with { type: "macro" }`: Bun reads the file when it transpiles or bundles `runner.ts` and inlines the text. So in every run mode of section 5 the module and the text come from the build, the npm bundle and the binary carry the runner, and no mode reads a `templates/` folder at run time. The runner starts the install only when its own file name ends in `.mjs` and its path is `process.argv[1]`. In `dist/cli.js` or a binary, the inlined runner's file is the CLI itself, so the CLI never starts a setup. `node --check templates/worktree-setup.mjs` must pass, because `bun check` does not check it.
 
 Package manager detection (`detectManager`):
 
@@ -1410,11 +1445,18 @@ On no match, on empty input, or on invalid JSON, the command prints nothing and 
 
 ### 14.1 Bundled skills
 
-The bundled skills are the directories in `<packageRoot>/skills/` that contain `SKILL.md`.
+The bundled skills are the directories in `<packageRoot>/skills/` that contain `SKILL.md`. A missing `skills/` directory gives no bundled skills. In binary mode, `<packageRoot>/skills` is the embedded directory (section 5). The install copies a skill with `readdir`, `readFile`, and `writeFile`, not `fs.cp`, so that it can read the embedded directory. The copy keeps a symlink as a link and keeps the permission bits of each file.
 
 ### 14.2 Install plan
 
 `omt install` first builds a plan without writing anything.
+
+The plan first checks where the CLI runs from, because the install records that path. It reads `cliPath` and its real path:
+
+- A one-shot runner cache, matched from the cache root: an npx cache (`<npm cache>/_npx/<hash>/node_modules/`), a pnpm dlx cache (`<pnpm cache>/dlx/<hash>/<id>/node_modules/`, where the cache folder is named `pnpm`, or `pnpm-cache` on Windows, and pnpm 8 has no `<id>`; with a custom `cache-dir` of any name, a `dlx/<hash>/<id>/node_modules/` path counts only when `npm_config_user_agent` starts with `pnpm/`, which pnpm dlx sets, and `dlx/<hash>/pkg` is a symlink that resolves to `dlx/<hash>/<id>`, which pnpm dlx writes for each cache entry; `pnpm exec` sets the same user agent, so the user agent alone does not show a dlx cache), or a bunx cache (`<temp>/bunx-<uid>-<package>/node_modules/`). An older pnpm runs dlx from `<temp>/dlx-<pid>/node_modules/`, which counts as a one-shot cache too. A `_npx`, `dlx`, or `bunx-` directory at another place, such as `<temp>/project/fixtures/dlx-123/`, or `<temp>/project/dlx/x/node_modules/` without the pnpm user agent or without the `pkg` symlink, is no cache. A project install from a one-shot cache writes the runner shim of section 14.8. A user install from it is refused, because it would leave no `omt` command for the skills and the hook.
+- Any other path inside the temp directory (`os.tmpdir()` or its real path): every install is refused, because such a path can disappear.
+
+The one-shot check runs first, because the bunx cache is inside the temp directory. A refusal exits 1. It prints `refusing the user install: the omt CLI runs from ...` or `refusing --project: the omt CLI runs from ...` with the path, and a hint that names `npm i -g oh-my-t3code`, `pnpm add -g oh-my-t3code`, `bun add -g oh-my-t3code`, `mise use -g github:gabimoncha/oh-my-t3code`, and `npx omt3 install --project`.
 
 Skill copies go to `skillRoots().agents/<name>`. Each target is one of:
 
@@ -1456,19 +1498,25 @@ A second run on an unchanged system shows only `unchanged` actions and writes no
 
 ### 14.4 Claude hook entry
 
-The hook command is:
+In user scope, the hook command runs the CLI with the runtime that runs it now:
 
 ```text
-"<nodePath>" "<cliPath>" hook user-prompt-submit # oh-my-t3code
+"<runtimePath>" "<cliPath>" hook user-prompt-submit # oh-my-t3code
 ```
 
-In project scope, the command calls the shim instead, so one file holds the node and CLI paths:
+In binary mode, the binary runs by itself:
+
+```text
+"<cliPath>" hook user-prompt-submit # oh-my-t3code
+```
+
+In project scope, the command calls the shim instead, so one file holds the runtime and CLI paths:
 
 ```text
 "<root>/.omt/bin/omt" hook user-prompt-submit # oh-my-t3code
 ```
 
-The trailing comment is the signature that marks the entry as managed. `--hooks` is refused, with exit 1 and a hint to install the package globally, when `cliPath` is inside a temp directory (`os.tmpdir()`) an npx cache (a path that contains `/_npx/`), or a pnpm dlx cache (a path that contains `/dlx/` under a `pnpm` directory). Such a path can disappear.
+The trailing comment is the signature that marks the entry as managed. The check of section 14.2 refuses an install that would record a path that can disappear.
 
 The installer edits `claudeSettingsPath()`:
 
@@ -1519,25 +1567,25 @@ The plan lists the user config and the manifest only when they exist. Two names 
 
 | Id | PASS | WARN | FAIL | INFO |
 | --- | --- | --- | --- | --- |
-| `node` | `ctx.nodeVersion` is 22.18 or later | | older version | |
+| `runtime` | binary mode, with the message `omt <version> binary`; otherwise `ctx.runtimeName` is `node` with `ctx.runtimeVersion` 22 or later, or `bun` with 1.4.3 or later | | an older Node or Bun; the message names both minimum versions | |
 | `config` | no issues | warnings only | any error | |
-| `skills` | every bundled skill is installed, managed, and current | missing, outdated, or locally modified skills | | |
+| `skills` | every bundled skill is installed, managed, and current | missing, outdated, or locally modified skills | the CLI has no bundled skills (section 14.1) | |
 | `links` | every Claude link resolves to its canonical directory | a missing link | a broken or conflicting link | |
-| `hooks` | the manifest hook is present in the Claude settings, and its node and CLI paths exist | the manifest hook is missing from the settings | the hook's node or CLI path does not exist | no hook installed; suggest `omt install --hooks` |
-| `path` | an executable `omt` exists in a `PATH` directory | none found; skills fall back to manual role resolution | | |
+| `hooks` | the manifest hook is present in the Claude settings, and the paths in its command exist | the manifest hook is missing from the settings | a path in the hook's command does not exist | no hook installed; suggest `omt install --hooks` |
+| `path` | an executable `omt` exists in a `PATH` directory | none found; skills fall back to manual role resolution, and the message names the install channels of section 14.2 | | |
 | `t3` | `t3SettingsPath()` exists | it does not exist | | |
 | `homes` | every T3 `claudeAgent` instance that sets `config.homePath` has the skills linked in `<homePath>/skills` | an instance with a `homePath` that lacks the skills | | no instance sets a `homePath` |
 | `roles` | every role resolves (only with `--capabilities`) | some roles are unavailable | the `execute` role is unavailable | |
 
-With `--project`, doctor checks the project scope (section 14.8). It runs `node` and `config` as above, and `skills`, `links`, and `hooks` against the project paths. It replaces `path` and `homes` with these checks, keeps `t3` and `roles`, and adds `worktree` after `t3`. `worktree` checks the checkout of the current directory, which can be a linked worktree, while the other project checks use the main checkout:
+With `--project`, doctor checks the project scope (section 14.8). It runs `runtime` and `config` as above, and `skills`, `links`, and `hooks` against the project paths. It replaces `path` and `homes` with these checks, keeps `t3` and `roles`, and adds `worktree` after `t3`. `worktree` checks the checkout of the current directory, which can be a linked worktree, while the other project checks use the main checkout:
 
 | Id | PASS | WARN | FAIL | INFO |
 | --- | --- | --- | --- | --- |
-| `shim` | `.omt/bin/omt` is present, carries the signature, is executable, and its node and CLI paths exist | the shim is missing or not managed, or its recorded node path does not exist (the shim falls back to `node` on `PATH`) | the shim's CLI path does not exist, or the shim is not executable | |
+| `shim` | `.omt/bin/omt` is present, carries the signature, is executable, and its recorded runtime and CLI paths exist; for a runner shim, the message names the runner command | the shim is missing or not managed, or its recorded runtime does not exist (the shim falls back to `bun` or `node` on `PATH`) | the shim's recorded CLI path does not exist, or the shim is not executable | |
 | `exclude` | the exclude file holds the block of this root | the exclude file has no block for this root, or it holds a block for a root that no longer exists | | no `.git` in the root or a parent directory, or the last install ran with `--no-git-exclude` and there is no block |
 | `worktree` | the current checkout's managed setup is current, waits for completion, and every worktree check passes (section 5.12) | setup is missing, invalid, incomplete, blocked, does not wait, or the pnpm store is not `set` (the message then holds the store problem); also a read error | | no setup is needed, or a custom setup waits for completion |
 
-In project scope, every install hint names the running CLI, `node <cliPath> install --project`, because `omt` may not be on `PATH` and the shim may be broken.
+In project scope, every install hint names the running CLI, because `omt` may not be on `PATH` and the shim may be broken. The hint is `"<cliPath>" install --project` in binary mode, `node "<cliPath>" install --project` or `bun "<cliPath>" install --project` in bundle mode, after the runtime that runs the bundle (`runtimeName`), so the hint works with no `node` on `PATH` under Bun, and `bun "<cliPath>" install --project` in source mode. When the CLI runs from a one-shot cache, as it does through a runner shim, the hint is `npx --yes omt3@<version> install --project`, or the `pnpm dlx` or `bunx` form of the shim.
 
 The `hooks` check reads the settings paths from the manifest. With no manifest hook, it looks for a signed entry in `claudeSettingsPath()`. The `homes` check reads `providerInstances` from `t3SettingsPath()` and never writes it. It looks at instances whose `driver` is `claudeAgent`, expands a leading `~`, and accepts a link or a managed copy for each skill. The `roles` check is left out without `--capabilities`. The status set is `PASS`, `WARN`, `FAIL`, and `INFO`. `--json` prints `{ "ok": boolean, "checks": [{ "id", "status", "message" }] }`, where `ok` is false when any check fails. The exit code is 1 when any check fails.
 
@@ -1561,7 +1609,73 @@ Skills and links that were in place before the install. A repository can track a
 
 `--targets` with `gemini` and `--project` is a usage error (exit 2). Antigravity reads `<root>/.agents/skills` directly. The default targets are `agents,claude`.
 
-The shim is `<root>/.omt/bin/omt`, with mode 0755:
+The shim is `<root>/.omt/bin/omt`, with mode 0755. Its second line is the signature. Its body depends on the run mode of the CLI that installs it (section 5).
+
+In source mode, the shim runs the recorded `src/cli.ts` with the recorded Bun. When that Bun is gone, it uses `bun` on `PATH`, so a Bun upgrade does not break the shim or the project hook:
+
+```sh
+#!/bin/sh
+# oh-my-t3code project shim
+runtime="<runtimePath>"
+cli="<cliPath>"
+[ -x "$runtime" ] || runtime=bun
+exec "$runtime" "$cli" "$@"
+```
+
+In bundle mode, the shim runs the recorded `dist/cli.js` with the recorded runtime, or with `node` on `PATH` when that runtime is gone. In binary mode, it runs the recorded binary. In both modes, the shim runs the fallback lines when the recorded file is gone:
+
+```sh
+#!/bin/sh
+# oh-my-t3code project shim
+runtime="<runtimePath>"
+cli="<cliPath>"
+if [ -f "$cli" ]; then
+  [ -x "$runtime" ] || runtime=node
+  exec "$runtime" "$cli" "$@"
+fi
+<fallback lines>
+```
+
+```sh
+#!/bin/sh
+# oh-my-t3code project shim
+cli="<cliPath>"
+if [ -x "$cli" ]; then
+  exec "$cli" "$@"
+fi
+<fallback lines>
+```
+
+The fallback lines run `<root>/node_modules/.bin/omt`, where `<root>` is two directories above the shim. Without it, they run the first `omt` on `PATH` that is an executable file and not the shim itself (`-ef "$0"`), so `.omt/bin` on `PATH` cannot make the shim call itself. An empty `PATH` entry, also the last one (`PATH=/usr/bin:`), means the current directory. The loop splits `$PATH:`, because field splitting drops a trailing empty field. When neither exists, the shim prints `omt: the omt CLI is not installed; see https://github.com/gabimoncha/oh-my-t3code#install` to stderr and exits 127:
+
+```sh
+case $0 in */*) root=${0%/*}/../.. ;; *) root=../.. ;; esac
+if [ -x "$root/node_modules/.bin/omt" ]; then
+  exec "$root/node_modules/.bin/omt" "$@"
+fi
+IFS=:
+set -f
+dirs="$PATH:"
+for dir in $dirs; do
+  if [ -f "${dir:-.}/omt" ] && [ -x "${dir:-.}/omt" ] && [ ! "${dir:-.}/omt" -ef "$0" ]; then
+    exec "${dir:-.}/omt" "$@"
+  fi
+done
+echo "omt: the omt CLI is not installed; see https://github.com/gabimoncha/oh-my-t3code#install" >&2
+exit 127
+```
+
+A project install from a one-shot runner cache (section 14.2) writes a runner shim. The shim calls the same runner with the pinned version, so a cleared cache does not break the project. After a cache clean, the runner needs the network to download the package again:
+
+```sh
+#!/bin/sh
+# oh-my-t3code project shim
+exec npx --yes omt3@<version> "$@"
+```
+
+The last line is `exec npx --yes omt3@<version> "$@"`, `exec pnpm dlx omt3@<version> "$@"`, or `exec bunx omt3@<version> "$@"`. The cache path names the runner. When it does not, as for `<temp>/dlx-<pid>`, `npm_config_user_agent` names it: `npm/` for npx, `pnpm/` for pnpm, and `bun/` for bunx. Otherwise the runner is npx. A version that holds a character other than a letter, a digit, `.`, `+`, or `-` is refused. After a run that writes a runner shim, the install prints `note: .omt/bin/omt runs <runner command>, which needs the network again after its cache is cleared`.
+
+A shim that an earlier omt wrote, in the Node format below, still counts as managed. `install` updates it, `doctor` reads its node and CLI paths, and `uninstall` removes it:
 
 ```sh
 #!/bin/sh
@@ -1571,7 +1685,7 @@ node="<nodePath>"
 exec "$node" "<cliPath>" "$@"
 ```
 
-The second line is the signature. The shim tries the recorded node first and falls back to `node` on `PATH`, so a Node upgrade does not break it or the project hook. The shim is `create` (absent), `update` (managed, different content), `unchanged`, or `conflict` (a path without the signature). With `--force`, a conflict becomes `replace`, and the old file moves to `<root>/.omt/backups/<stamp>/bin/omt`. `--project` is refused with exit 1 and a hint when `cliPath` is in a temp directory or a package-runner cache, with the check of section 14.4. A node or CLI path that contains `"`, `$`, a backquote, a backslash, or a newline is refused too.
+The shim is `create` (absent), `update` (managed, different content), `unchanged`, or `conflict` (a path without the signature). With `--force`, a conflict becomes `replace`, and the old file moves to `<root>/.omt/backups/<stamp>/bin/omt`. The check of section 14.2 decides whether `--project` may run from a one-shot cache or a temp directory. A runtime or CLI path that contains `"`, `$`, a backquote, a backslash, or a newline is refused.
 
 `.omt/.gitignore` holds the lines `ledger.jsonl`, `evidence/`, `bin/`, `install.json`, `backups/`, `plans/`, `locks/`, and `guardrails.md`. When the file is missing, the install creates it with these lines. A dangling symlink at that path is the user's, the same as a dangling settings link: the install leaves it alone, with `keep (a dangling symlink; left alone)`, and never writes its target. With the git exclude step on, the install never edits an existing `.omt/.gitignore`, because the repository may track it. One exception upgrades an unedited file: when the previous manifest lists the file in `project.files` and the file's SHA-256 equals the recorded hash, an earlier install created it and nobody edited it. Then the install appends the missing lines, the plan shows `update` for the file, and the manifest records the new hash. With `--no-git-exclude`, a setup meant to be committed, the install appends the missing lines and never removes a line. The manifest then records the file's old content and the hash of what the install wrote, as `gitignoreRestore`, and the uninstall writes the old content back while the file still has that hash.
 
@@ -1679,7 +1793,7 @@ User scope and project scope never read or write each other's files.
     allow_implicit_invocation: false
   ```
 
-- Skills call the CLI as `omt` on `PATH`. That works after `pnpm link --global` in a clone. When `command -v omt` finds nothing, a skill uses `.omt/bin/omt` from the project root, which `omt install --project` creates. When that file is missing, as in a linked worktree, a skill uses the shim of the main checkout, `"$(git rev-parse --path-format=absolute --git-common-dir)/../.omt/bin/omt"`. Without any of them, a skill falls back to the manual steps in `roles.md` and `brief.md`. The rule lives in the section "The CLI" of `skills/omt/references/delegation.md`. Skills never use `npx`, which needs the network.
+- Skills call the CLI as `omt` on `PATH`. A global install puts it there: `npm i -g oh-my-t3code`, `pnpm add -g oh-my-t3code`, `bun add -g oh-my-t3code`, or `mise use -g github:gabimoncha/oh-my-t3code`. When `command -v omt` finds nothing, a skill uses `.omt/bin/omt` from the project root, which `omt install --project` creates, also from a dev dependency or from a one-shot run such as `npx omt3 install --project`. When that file is missing, as in a linked worktree, a skill uses the shim of the main checkout, `"$(git rev-parse --path-format=absolute --git-common-dir)/../.omt/bin/omt"`. Without any of them, a skill falls back to the manual steps in `roles.md` and `brief.md`. The rule lives in the section "The CLI" of `skills/omt/references/delegation.md`. A shim from a one-shot run calls its runner (`npx`, `pnpm dlx`, or `bunx`) with the pinned version, and the runner needs the network again after its cache is cleared. Skills never call a runner themselves.
 - Skills name T3 tools by their base names (`delegate_task`, `task_status`). The first skill text that names a tool says that harnesses may add a prefix, such as `mcp__t3-code__delegate_task`.
 - Shared reference lives in `skills/omt/references/`. Other skills link to it with relative paths such as `../omt/references/delegation.md`.
 - Every relative link in a skill must resolve to a file in the repository. A test checks this.
@@ -1816,11 +1930,47 @@ Required coverage:
 - Hook: a detection matrix (inside a code block, inside quotes, `ulwx`, `$ulw`, `ULTRAWORK`, a prompt with `<!-- omt-brief`, a prompt that starts with `Act as the `, a prompt that starts with `/omt-ulw`, a prompt that starts with `<task-notification>`, negated keywords and the two-word window, a 200,000-character negated prompt), invalid JSON, and the output shape.
 - Install: create, idempotent rerun, conflict without and with `--force`, a locally modified managed skill, backups outside the skill roots, `--dry-run` and a declined prompt write nothing, non-TTY without `--yes`, roots that resolve to the same directory, hook add and update that keep other settings, an unchanged hook writes nothing, a symlinked `settings.json` stays a symlink, `--hooks` refused for a temp `cliPath`, uninstall removes only managed paths, and `--purge`.
 - Project install: the files of section 14.8, an idempotent rerun, `--dry-run`, the exclude file for a `.git` directory and a worktree `.git` file, block replacement, no `.git`, `--no-git-exclude` (also on a reinstall, and its `.omt/.gitignore` restore), the conditional `.omt` and `settings.local.json` lines, the hook in `settings.local.json`, uninstall with a locally modified skill and `--purge`, `--targets gemini` (exit 2), a temp `cliPath`, and the shim conflict and update. Also: a copied project, a moved clone round trip, a tracked manifest with paths outside the root, a symlinked path to the root, the home directory as the root (exit 2), a dangling settings symlink, a failed scratch delete, glob characters in a package path, worktrees, a block whose root is gone, the exact bytes of the exclude file, a kept created `settings.local.json`, and a kept ledger. Also: a reinstall that appends `plans/`, `locks/`, and `guardrails.md` to an unedited `.omt/.gitignore` that an earlier install created, and one that leaves an edited file alone. Also: uninstall, reinstall, and a second uninstall after each kind of kept created file, each with an empty `git status`; an uninstall that fails midway; a symlinked exclude file and `.omt/.gitignore`; a crafted tracked manifest that names project files; a package copied inside the same repository; and the exact paths that stay after a failed install and its uninstall.
-- Doctor: each status that the table in section 14.7 defines, with `nodeVersion` injected through the context.
-- Worktree setup: `test/commands/worktree-setup.test.ts` covers the cases in section 5.12: init, `install --project --dry-run`, setup dry run and apply, check, and `doctor --project` from a linked worktree (shared `.omt`, setup files in the worktree); a Bun and a pnpm runner with controlled executables (versions, flags, environment, lockfiles, failure exit codes, a failed linker query, CI warning); existing, invalid, and partial `t3.json`, ambiguous and unsupported managers, linker settings with TOML comments, each persistent-store status with the created, kept, and incomplete `pnpm-workspace.yaml`, symlinked and dangling `.t3` folders and runners, a home-directory alias, conflicting output paths, idempotency, and a dry run that writes nothing; and `launchSpec` for Windows. Tests never start a real package manager.
+- Doctor: each status that the table in section 14.7 defines, with `runtimeName` and `runtimeVersion` injected through the context.
+- Worktree setup: `test/commands/worktree-setup.test.ts` covers the cases in section 5.12: init, `install --project --dry-run`, setup dry run and apply, check, and `doctor --project` from a linked worktree (shared `.omt`, setup files in the worktree); a Bun and a pnpm runner with controlled executables (versions, flags, environment, lockfiles, failure exit codes, a failed linker query, CI warning); existing, invalid, and partial `t3.json`, ambiguous and unsupported managers, linker settings with TOML comments, each persistent-store status with the created, kept, and incomplete `pnpm-workspace.yaml`, symlinked and dangling `.t3` folders and runners, a home-directory alias, conflicting output paths, idempotency, and a dry run that writes nothing; and `launchSpec` for Windows. Tests never start a real package manager. They start the runner with `node`, the command in `t3.json`, and with Bun when no `node` is on `PATH`. `test/e2e/binary.test.ts` (Bun project) and `test/e2e/packages.test.ts` (pnpm and Bun projects) run `worktree setup --yes` through the shim and compare the written runner with `templates/worktree-setup.mjs`, so the binary and the bundle prove that they carry the runner.
 - Skills: `test/skills/*.test.ts` replaces `test/skills.test.ts`. `common` checks frontmatter and links. `personas` checks role and result files, test policy, CRAP, and guardrails. `plan-design` checks profile selection, planned test lines, shared-build rules, budgets, review modes, and variant counts. `ulw` checks dispatch, profile reloads, check-ins, verify then qa, locks, heartbeat retention, and loop waits. `review` checks each PR step, commit-based round-1 reads, working-tree fix reviews, offers, linking, and watches.
 - Visual: spec errors with JSON paths, unknown keys, escaping of every text field (also an SVG label `<script>alert(1)</script>`), inline markup, byte-identical output, back edges, no edge that crosses a node on any fixture flow, label sides at a shared stub, row centering with and without a pinned column, the transitive reduction, the 6 layers of a plan shaped like `workflow-profiles`, non-unit dependency tokens, a plan with no `## Summary`, and the command: `--out -`, `--json`, the default paths, a plan file path, and the usage errors.
 - Schema: the committed schema equals the generated one, and it allows the same keys as the validator.
 - CLI: `--help`, `--version`, an unknown command (exit 2), and an unknown flag (exit 2), run as a child process.
 - Commands: `roles`, `route`, `brief`, and `doctor` in `test/commands/`, including the `brief --json` payload fields, the title rule, `brief --json --against` with its target and fallbacks, `route --against auto` against a ledger, and the `CROSS` column and `crossFamily` field of `omt roles`.
 - End to end: one child-process flow in a temp `HOME` (`test/e2e.test.ts`) runs `install`, `doctor`, `roles`, `route`, `init`, `plan`, `profile`, `brief`, `ledger`, `hook`, and `uninstall` in a temp git project. It runs the CLI with `process.execPath`, because a version-manager `node` shim can fail when `HOME` is a temp directory. A second flow runs `install --project --hooks --yes` in a temp git project, runs `.omt/bin/omt`, checks that `git status --porcelain` is empty, and uninstalls.
+
+## 17. Packaging and release
+
+`bun run release` runs `bun scripts/release.ts [--target <platform>]... [--outdir <dir>]`. Without `--target`, it covers every platform in the table. The default output directory is `dist/release`. The script reads the version from `package.json` and runs `scripts/build.ts --outdir <outdir>/build` with one `--target` per platform, so each output directory has its own build. An unknown platform or flag is a usage error (exit 2). The script checks the flags before it deletes or builds anything.
+
+The script owns its output directory. It writes the marker file `<outdir>/.omt-release` and then removes `<outdir>/build`, `<outdir>/npm`, and `<outdir>/github`. It exits 1 and deletes nothing in these cases:
+
+- The output directory exists, is not empty, and has no `.omt-release` marker.
+- The output directory is the filesystem root, the home directory, the repository root, or a parent of the repository root. The script resolves symbolic links before it compares the paths.
+- The output directory is the `skills/` directory or inside it, after the script resolves symbolic links. The compiled binary embeds `skills/`, so output there would ship as skill content.
+- `git ls-files --others -- skills` prints a file. These are untracked and ignored files, for example `.DS_Store`. The script lists them. The compiled binary embeds `skills/` as it is on disk, so the release starts only from a clean `skills/`.
+
+The npm packages get only the files that `git ls-files -- skills` lists.
+
+| Platform | Bun compile target |
+| --- | --- |
+| `darwin-arm64` | `bun-darwin-arm64` |
+| `darwin-x64` | `bun-darwin-x64` |
+| `linux-arm64` | `bun-linux-arm64` |
+| `linux-x64` | `bun-linux-x64` |
+| `linux-arm64-musl` | `bun-linux-arm64-musl` |
+| `linux-x64-musl` | `bun-linux-x64-musl` |
+
+The script writes these paths under `<outdir>`:
+
+- `npm/oh-my-t3code/` and `npm/omt3/`. The two directories are identical except the `name` field. Each holds `package.json`, `dist/cli.js` (mode 0755), `skills/`, `README.md`, and `LICENSE`. The `package.json` has the repository version, the description, `type: "module"`, the license, the repository, `bin: { "omt": "dist/cli.js", "omt3": "dist/cli.js", "oh-my-t3code": "dist/cli.js" }`, `files: ["dist", "skills", "README.md", "LICENSE"]`, and `engines.node: ">=22"`. It has no dependencies and no scripts. `dist/cli.js` reads `skills/` from the package root (section 5). The packages hold no `templates/`, because `dist/cli.js` inlines the worktree setup runner (section 5.12).
+- `github/oh-my-t3code-v<version>-<platform>.tar.gz` for each platform. The archive holds only `omt` (mode 0755) at its root.
+- `github/SHA256SUMS`, with one `<sha256>  <archive name>` line per archive, so `shasum -a 256 -c SHA256SUMS` checks them.
+
+The script publishes nothing. At the end it prints the owner's publish commands, in this order:
+
+1. `bun publish --access public` in `npm/oh-my-t3code`.
+2. `bun publish --access public` in `npm/omt3`.
+3. `gh release create v<version> <outdir>/github/*`.
+
+The commands use paths relative to the current directory. A path with a character other than a letter, a digit, `_`, `.`, `/`, or `-` is in single quotes. The `/*` glob stays outside the quotes, so the shell expands it.

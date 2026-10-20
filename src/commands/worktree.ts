@@ -58,7 +58,7 @@ export const run: CommandRun = async (ctx) => {
   }
 
   if (values.json === true) throw usageError("--json needs check");
-  const template = await loadRunnerTemplate(ctx.packageRoot);
+  const template = loadRunnerTemplate();
   const report = await inspectWorktree(ctx, template);
   const plan = await planSetup(report, template.text, template.module.PNPM_WORKSPACE_CONTENT);
   ctx.stdout(renderSetupPlan(plan));

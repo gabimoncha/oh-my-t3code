@@ -1,8 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { test } from "node:test";
-import type { TestContext } from "node:test";
+import { test } from "bun:test";
 import assert from "node:assert/strict";
 import { briefTitle, renderBrief } from "../../src/brief/render.ts";
 import type { BriefInput } from "../../src/brief/render.ts";
@@ -235,8 +234,8 @@ test("briefTitle follows the title rule", () => {
   assert.ok(long.startsWith("execute U1: xxx"));
 });
 
-function fixture(t: TestContext): TemplateRoots & { configDir: string } {
-  const root = tempDir(t);
+function fixture(): TemplateRoots & { configDir: string } {
+  const root = tempDir();
   const homedir = join(root, "home");
   const configDir = join(root, "config");
   mkdirSync(homedir, { recursive: true });
@@ -249,8 +248,8 @@ function fixture(t: TestContext): TemplateRoots & { configDir: string } {
   };
 }
 
-test("findRoleTemplate uses project, user, package, then the generic template", async (t) => {
-  const roots = fixture(t);
+test("findRoleTemplate uses project, user, package, then the generic template", async () => {
+  const roots = fixture();
   const generic = join(roots.packageRoot, "skills", "omt", "references", "roles", "_generic.md");
   const bundled = join(roots.packageRoot, "skills", "omt", "references", "roles", "review.md");
   const user = join(roots.configDir, "roles", "review.md");
@@ -267,21 +266,21 @@ test("findRoleTemplate uses project, user, package, then the generic template", 
   assert.deepEqual(await findRoleTemplate(roots, "custom"), { path: generic, content: "generic" });
 });
 
-test("findRoleTemplate fails when no template exists", async (t) => {
-  const roots = fixture(t);
+test("findRoleTemplate fails when no template exists", async () => {
+  const roots = fixture();
   await assert.rejects(findRoleTemplate(roots, "review"), omtExit(1));
 });
 
-test("findRoleTemplate never reads outside the roles directories for a path-like role", async (t) => {
-  const roots = fixture(t);
+test("findRoleTemplate never reads outside the roles directories for a path-like role", async () => {
+  const roots = fixture();
   writeFile(join(roots.packageRoot, "skills", "omt", "references", "roles", "_generic.md"), "generic");
   writeFile(join(roots.packageRoot, "secret.md"), "secret");
   const found = await findRoleTemplate(roots, "../../../secret");
   assert.equal(found.content, "generic");
 });
 
-test("loadResultContract reads and trims the contract for a result kind", async (t) => {
-  const roots = fixture(t);
+test("loadResultContract reads and trims the contract for a result kind", async () => {
+  const roots = fixture();
   writeFile(join(roots.packageRoot, "skills", "omt", "references", "results", "review.md"), `\n${CONTRACT}\n\n`);
   assert.equal(await loadResultContract(roots.packageRoot, "review"), CONTRACT);
   await assert.rejects(loadResultContract(roots.packageRoot, "work"), omtExit(1));
@@ -321,8 +320,8 @@ test("renderBrief gives every role its test policy, CLI, and shared-build rules"
   assert.match(renderBrief(input({ role: "qa", failureProofs: "off" }), PERSONA, CONTRACT), /^- Tests: .*failureProofs: off$/m);
 });
 
-test("brief, roles, and route apply configured, plan, and explicit profiles, including model fast settings", async (t) => {
-  const project = makeProject(t);
+test("brief, roles, and route apply configured, plan, and explicit profiles, including model fast settings", async () => {
+  const project = makeProject();
   project.projectConfig(JSON.stringify({
     version: 1,
     profile: "configured",
@@ -372,8 +371,8 @@ test("brief, roles, and route apply configured, plan, and explicit profiles, inc
   assert.match(missing.ctx.err(), /plan "review-x" not found at .*review-x\.md/);
 });
 
-test("brief child commands keep profile maxDepth and verify routing", async (t) => {
-  const project = makeProject(t);
+test("brief child commands keep profile maxDepth and verify routing", async () => {
+  const project = makeProject();
   project.projectConfig(JSON.stringify({
     version: 1,
     profiles: {
@@ -414,8 +413,8 @@ test("brief child commands keep profile maxDepth and verify routing", async (t) 
   }
 });
 
-test("fast role settings map Opus and print unsupported model notes through each CLI command", async (t) => {
-  const project = makeProject(t);
+test("fast role settings map Opus and print unsupported model notes through each CLI command", async () => {
+  const project = makeProject();
   project.projectConfig(JSON.stringify({ version: 1, roles: { execute: { fast: true }, explore: { fast: true } } }));
   const opus = await project.runOk(["brief", "execute", "--task", "x", "--json", "--capabilities", LIVE_CAPS_FILE]);
   assert.equal((JSON.parse(opus.ctx.out()) as BriefJsonOutput).delegateTask.target.options?.fastMode, true);
@@ -447,8 +446,8 @@ test("fast role settings map Opus and print unsupported model notes through each
   }
 });
 
-test("brief --save writes the full brief and returns a short task and complete ledger command", async (t) => {
-  const project = makeProject(t);
+test("brief --save writes the full brief and returns a short task and complete ledger command", async () => {
+  const project = makeProject();
   project.writeOmt("plans/p.md", "<!-- omt-plan v1 slug=p profile=prototype -->\n");
   project.writeOmt("bin/omt", "#!/bin/sh\n");
   const command = join(project.cwd, ".omt", "bin", "omt");
@@ -474,8 +473,8 @@ test("brief --save writes the full brief and returns a short task and complete l
   assert.deepEqual(readdirSync(join(project.cwd, ".omt", "evidence", "briefs")), [`${id}.md`]);
 });
 
-test("brief --save uses the brief hash without both plan and unit, and omits unset ledger values", async (t) => {
-  const project = makeProject(t);
+test("brief --save uses the brief hash without both plan and unit, and omits unset ledger values", async () => {
+  const project = makeProject();
   for (const flags of [[], ["--plan", "p"], ["--unit", "U4"]]) {
     const argv = ["brief", "execute", "--task", "x", "--json", ...flags];
     const full = JSON.parse((await project.runOk(argv)).ctx.out()) as BriefJsonOutput;
@@ -494,8 +493,8 @@ test("brief --save uses the brief hash without both plan and unit, and omits uns
   }
 });
 
-test("brief --save writes no brief for an unavailable route", async (t) => {
-  const project = makeProject(t);
+test("brief --save writes no brief for an unavailable route", async () => {
+  const project = makeProject();
   project.projectConfig(JSON.stringify({ version: 1, roles: { execute: { chain: [{ driver: "missing", model: "m" }] } } }));
   const result = await project.run(["brief", "execute", "--task", "x", "--save", "--json", "--capabilities", LIVE_CAPS_FILE]);
   assert.equal(result.code, 1);

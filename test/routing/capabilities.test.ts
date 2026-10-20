@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "bun:test";
 import { parseCapabilities } from "../../src/routing/capabilities.ts";
 import { OmtError } from "../../src/util/errors.ts";
 import { CAPS_TEXT } from "./shared.ts";

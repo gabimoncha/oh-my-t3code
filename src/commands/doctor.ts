@@ -4,7 +4,7 @@ import { parseArgs } from "../util/args.ts";
 import { formatJson } from "../util/output.ts";
 import { readCapabilities } from "./shared.ts";
 
-export const summary = "Check the Node version, config, skills, links, hooks, T3, worktree setup, and roles.";
+export const summary = "Check the runtime, config, skills, links, hooks, T3, worktree setup, and roles.";
 
 export const usage = `Usage: omt doctor [--project] [--capabilities <file>] [--json]
 

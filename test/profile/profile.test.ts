@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { test } from "node:test";
+import { test } from "bun:test";
 import { childEnv, spawnOmt, tempDir, writeFile } from "../helpers.ts";
 
-test("end to end: pick and switch a custom profile, then use its limits for the plan", (t) => {
-  const root = tempDir(t, "omt-profile-");
+test("end to end: pick and switch a custom profile, then use its limits for the plan", () => {
+  const root = tempDir("omt-profile-");
   const project = join(root, "project");
   const env = childEnv(root);
   mkdirSync(join(project, ".git"), { recursive: true });
@@ -85,8 +85,8 @@ test("end to end: pick and switch a custom profile, then use its limits for the 
   assert.deepEqual(JSON.parse(ok("ledger", "stats", "--json")).limits, { maxParallel: 8, maxTasksPerRun: 1 });
 });
 
-test("profile CLI rejects unknown selections and broken chains and prints role merge issues", (t) => {
-  const root = tempDir(t, "omt-profile-errors-");
+test("profile CLI rejects unknown selections and broken chains and prints role merge issues", () => {
+  const root = tempDir("omt-profile-errors-");
   const project = join(root, "project");
   mkdirSync(join(project, ".git"), { recursive: true });
   const configPath = join(project, ".omt", "config.jsonc");

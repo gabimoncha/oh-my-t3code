@@ -1,5 +1,4 @@
-import { test } from "node:test";
-import type { TestContext } from "node:test";
+import { test } from "bun:test";
 import assert from "node:assert/strict";
 import { mkdirSync, readFileSync, realpathSync, statSync, symlinkSync, lstatSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -14,8 +13,8 @@ import { logicalCwd } from "../../src/main.ts";
 import { findProjectRoot } from "../../src/paths.ts";
 import { OMT_GITIGNORE, fakeContext, omtExit, spawnOmt, tempDir, writeFile } from "../helpers.ts";
 
-function setup(t: TestContext) {
-  const root = tempDir(t);
+function setup() {
+  const root = tempDir();
   const project = join(root, "project");
   mkdirSync(join(project, ".git"), { recursive: true });
   const configDir = join(root, "cfg");
@@ -29,8 +28,8 @@ function setup(t: TestContext) {
   return { root, project, configDir, userPath, projectPath, ctx, write: writeFile };
 }
 
-test("config show --defaults prints the 15 default roles as JSON", async (t) => {
-  const { ctx } = setup(t);
+test("config show --defaults prints the 15 default roles as JSON", async () => {
+  const { ctx } = setup();
   const c = ctx(["show", "--defaults"]);
   assert.equal(await config(c), 0);
   const printed = JSON.parse(c.out());
@@ -39,8 +38,8 @@ test("config show --defaults prints the 15 default roles as JSON", async (t) => 
   assert.deepEqual(printed.visuals, { plan: true });
 });
 
-test("a layer with visuals.plan false turns the plan page off, and a bad value is an error", async (t) => {
-  const { ctx, write, userPath, projectPath } = setup(t);
+test("a layer with visuals.plan false turns the plan page off, and a bad value is an error", async () => {
+  const { ctx, write, userPath, projectPath } = setup();
   write(userPath, '{ "visuals": { "plan": false } }');
   let c = ctx([]);
   assert.equal(await config(c), 0);
@@ -58,8 +57,8 @@ test("a layer with visuals.plan false turns the plan page off, and a bad value i
   );
 });
 
-test("config with no subcommand shows the effective config and prints issues to stderr", async (t) => {
-  const { ctx, write, userPath } = setup(t);
+test("config with no subcommand shows the effective config and prints issues to stderr", async () => {
+  const { ctx, write, userPath } = setup();
   write(userPath, '{ "limits": { "maxParallel": 7, "maxDepth": 99 } }');
   const c = ctx([]);
   assert.equal(await config(c), 0);
@@ -67,8 +66,8 @@ test("config with no subcommand shows the effective config and prints issues to 
   assert.equal(c.err(), `error ${userPath} limits.maxDepth: must be an integer from 0 to 3, got 99\n`);
 });
 
-test("config path prints both paths with absent and present", async (t) => {
-  const { ctx, write, userPath, projectPath } = setup(t);
+test("config path prints both paths with absent and present", async () => {
+  const { ctx, write, userPath, projectPath } = setup();
   let c = ctx(["path"]);
   assert.equal(await config(c), 0);
   assert.equal(c.out(), `user: ${userPath} (absent)\nproject: ${projectPath} (absent)\n`);
@@ -79,15 +78,15 @@ test("config path prints both paths with absent and present", async (t) => {
   assert.equal(c.out(), `user: ${userPath} (present)\nproject: ${projectPath} (present)\n`);
 });
 
-test("config validate prints config ok when there is no issue", async (t) => {
-  const { ctx } = setup(t);
+test("config validate prints config ok when there is no issue", async () => {
+  const { ctx } = setup();
   const c = ctx(["validate"]);
   assert.equal(await config(c), 0);
   assert.equal(c.out(), "config ok\n");
 });
 
-test("config validate prints each issue and exits 1 on an error", async (t) => {
-  const { ctx, write, userPath, projectPath } = setup(t);
+test("config validate prints each issue and exits 1 on an error", async () => {
+  const { ctx, write, userPath, projectPath } = setup();
   write(userPath, '{ "bogus": 1 }');
   write(projectPath, "{ oops }");
   const c = ctx(["validate"]);
@@ -95,20 +94,20 @@ test("config validate prints each issue and exits 1 on an error", async (t) => {
   const lines = c.out().trimEnd().split("\n");
   assert.equal(lines.length, 2);
   assert.match(lines[0] ?? "", new RegExp(`^error ${userPath} bogus: unknown key "bogus"`));
-  assert.ok(lines[1]?.startsWith(`error ${projectPath}: 1:3: `), lines[1]);
+  assert.ok(lines[1]?.startsWith(`error ${projectPath}: 1:3: `), String(lines[1]));
   assert.equal(lines[1]?.split(projectPath).length, 2, "prints the path once");
 });
 
-test("config validate exits 0 when every issue is a warning", async (t) => {
-  const { ctx, write, userPath } = setup(t);
+test("config validate exits 0 when every issue is a warning", async () => {
+  const { ctx, write, userPath } = setup();
   write(userPath, '{ "roles": { "nope": null } }');
   const c = ctx(["validate"]);
   assert.equal(await config(c), 0);
   assert.match(c.out(), /^warning .* roles\.nope: /);
 });
 
-test("config validate --json prints ok and the issues", async (t) => {
-  const { ctx, write, userPath } = setup(t);
+test("config validate --json prints ok and the issues", async () => {
+  const { ctx, write, userPath } = setup();
   let c = ctx(["validate", "--json"]);
   assert.equal(await config(c), 0);
   assert.deepEqual(JSON.parse(c.out()), { ok: true, issues: [] });
@@ -122,8 +121,8 @@ test("config validate --json prints ok and the issues", async (t) => {
   ]);
 });
 
-test("config init writes the user starter, which loads with no issues", async (t) => {
-  const { ctx, userPath } = setup(t);
+test("config init writes the user starter, which loads with no issues", async () => {
+  const { ctx, userPath } = setup();
   const c = ctx(["init"]);
   assert.equal(await config(c), 0);
   assert.equal(c.out(), `create ${userPath}\n`);
@@ -133,8 +132,8 @@ test("config init writes the user starter, which loads with no issues", async (t
   assert.equal(v.out(), "config ok\n");
 });
 
-test("config init refuses to overwrite without --force", async (t) => {
-  const { ctx, write, userPath } = setup(t);
+test("config init refuses to overwrite without --force", async () => {
+  const { ctx, write, userPath } = setup();
   write(userPath, "{ }");
   await assert.rejects(config(ctx(["init"])), (error: unknown) => {
     assert.ok(error instanceof OmtError);
@@ -149,8 +148,8 @@ test("config init refuses to overwrite without --force", async (t) => {
   assert.equal(readFileSync(userPath, "utf8"), USER_STARTER_CONFIG);
 });
 
-test("config init --force keeps a symlinked config a symlink", async (t) => {
-  const { root, ctx, configDir, userPath } = setup(t);
+test("config init --force keeps a symlinked config a symlink", async () => {
+  const { root, ctx, configDir, userPath } = setup();
   const real = join(root, "dotfiles", "omt.jsonc");
   mkdirSync(join(root, "dotfiles"), { recursive: true });
   mkdirSync(configDir, { recursive: true });
@@ -161,8 +160,8 @@ test("config init --force keeps a symlinked config a symlink", async (t) => {
   assert.equal(readFileSync(real, "utf8"), USER_STARTER_CONFIG);
 });
 
-test("config rejects an unknown subcommand, an extra argument, and an unknown flag", async (t) => {
-  const { ctx } = setup(t);
+test("config rejects an unknown subcommand, an extra argument, and an unknown flag", async () => {
+  const { ctx } = setup();
   await assert.rejects(config(ctx(["edit"])), omtExit(2));
   await assert.rejects(config(ctx(["show", "extra"])), omtExit(2));
   await assert.rejects(config(ctx(["show", "--yaml"])), omtExit(2));
@@ -179,8 +178,8 @@ function pathLines(text: string): string {
   return text.replace(/^worktree setup: .*\n/m, "");
 }
 
-test("init creates the config, plans dir, and .gitignore in the project root", async (t) => {
-  const { project, ctx } = setup(t);
+test("init creates the config, plans dir, and .gitignore in the project root", async () => {
+  const { project, ctx } = setup();
   const nested = join(project, "a", "b");
   mkdirSync(nested, { recursive: true });
   const c = { ...ctx([]), cwd: nested };
@@ -199,8 +198,8 @@ test("init creates the config, plans dir, and .gitignore in the project root", a
   assert.equal(readFileSync(join(omt, ".gitignore"), "utf8"), OMT_GITIGNORE);
 });
 
-test("init creates only what is missing and never overwrites the config", async (t) => {
-  const { project, ctx, write, projectPath } = setup(t);
+test("init creates only what is missing and never overwrites the config", async () => {
+  const { project, ctx, write, projectPath } = setup();
   write(projectPath, "{ /* mine */ }");
   const omt = join(project, ".omt");
   const c = ctx([]);
@@ -218,8 +217,8 @@ test("init creates only what is missing and never overwrites the config", async 
   );
 });
 
-test("init adds the missing lines to an existing .gitignore and keeps the user's lines", async (t) => {
-  const { project, ctx, write, projectPath } = setup(t);
+test("init adds the missing lines to an existing .gitignore and keeps the user's lines", async () => {
+  const { project, ctx, write, projectPath } = setup();
   const ignore = join(project, ".omt", ".gitignore");
   write(ignore, "ledger.jsonl\nevidence/\nbin/\ninstall.json\nbackups/\n# mine\nscratch/");
   const c = ctx([]);
@@ -237,8 +236,8 @@ test("init adds the missing lines to an existing .gitignore and keeps the user's
   assert.match(again.out(), new RegExp(`^exists ${ignore.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "m"));
 });
 
-test("init updates a symlinked .gitignore through its target and leaves a dangling one alone", async (t) => {
-  const { root, project, ctx, write } = setup(t);
+test("init updates a symlinked .gitignore through its target and leaves a dangling one alone", async () => {
+  const { root, project, ctx, write } = setup();
   const ignore = join(project, ".omt", ".gitignore");
   const target = join(root, "dotfiles", "omt-gitignore");
   write(target, "ledger.jsonl\n");
@@ -248,7 +247,7 @@ test("init updates a symlinked .gitignore through its target and leaves a dangli
   assert.ok(lstatSync(ignore).isSymbolicLink());
   assert.equal(readFileSync(target, "utf8"), OMT_GITIGNORE);
 
-  const other = setup(t);
+  const other = setup();
   const dangling = join(other.project, ".omt", ".gitignore");
   mkdirSync(join(other.project, ".omt"), { recursive: true });
   symlinkSync(join(other.root, "missing"), dangling);
@@ -258,14 +257,14 @@ test("init updates a symlinked .gitignore through its target and leaves a dangli
   assert.ok(lstatSync(dangling).isSymbolicLink());
 });
 
-test("init rejects arguments", async (t) => {
-  const { ctx } = setup(t);
+test("init rejects arguments", async () => {
+  const { ctx } = setup();
   await assert.rejects(init(ctx(["now"])), omtExit(2));
   await assert.rejects(init(ctx(["--force"])), omtExit(2));
 });
 
-test("config init --force writes through a dangling symlink to its target", async (t) => {
-  const { root, ctx, configDir, userPath } = setup(t);
+test("config init --force writes through a dangling symlink to its target", async () => {
+  const { root, ctx, configDir, userPath } = setup();
   const real = join(root, "dotfiles", "omt.jsonc");
   mkdirSync(configDir, { recursive: true });
   symlinkSync(real, userPath);
@@ -274,8 +273,8 @@ test("config init --force writes through a dangling symlink to its target", asyn
   assert.equal(readFileSync(real, "utf8"), USER_STARTER_CONFIG);
 });
 
-test("logicalCwd keeps $PWD when it names the same directory as the real cwd", (t) => {
-  const root = tempDir(t);
+test("logicalCwd keeps $PWD when it names the same directory as the real cwd", () => {
+  const root = tempDir();
   const real = join(root, "real");
   const link = join(root, "link");
   mkdirSync(real);
@@ -287,8 +286,8 @@ test("logicalCwd keeps $PWD when it names the same directory as the real cwd", (
   assert.equal(logicalCwd({}, physical), physical);
 });
 
-test("logicalCwd drops $PWD when a symlink into a subdirectory hides the project root", (t) => {
-  const root = tempDir(t);
+test("logicalCwd drops $PWD when a symlink into a subdirectory hides the project root", () => {
+  const root = tempDir();
   const repo = join(root, "real", "repo");
   const pkg = join(repo, "pkg");
   const link = join(root, "pkglink");
@@ -305,8 +304,8 @@ test("logicalCwd drops $PWD when a symlink into a subdirectory hides the project
   assert.equal(logicalCwd({ PWD: join(repoLink, "pkg") }, physical), join(repoLink, "pkg"));
 });
 
-test("config path prints the user and project paths unresolved", (t) => {
-  const root = tempDir(t);
+test("config path prints the user and project paths unresolved", () => {
+  const root = tempDir();
   const real = join(root, "real");
   const link = join(root, "link");
   mkdirSync(join(real, ".git"), { recursive: true });
@@ -320,8 +319,8 @@ test("config path prints the user and project paths unresolved", (t) => {
   );
 });
 
-test("with $PWD on a symlink into a subdirectory, the CLI uses the real project root", (t) => {
-  const root = tempDir(t);
+test("with $PWD on a symlink into a subdirectory, the CLI uses the real project root", () => {
+  const root = tempDir();
   const repo = join(root, "real", "repo");
   const link = join(root, "pkglink");
   mkdirSync(join(repo, ".git"), { recursive: true });

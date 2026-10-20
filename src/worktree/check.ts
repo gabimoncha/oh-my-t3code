@@ -252,7 +252,7 @@ function worst(checks: WorktreeCheck[]): WorktreeCheck["status"] {
 // Reads the checkout of ctx.cwd: package manager, lockfile, linker settings, t3.json, and the runner.
 // It starts no process and writes nothing.
 export async function inspectWorktree(ctx: CliContext, template?: RunnerTemplate): Promise<WorktreeReport> {
-  const runner = template ?? (await loadRunnerTemplate(ctx.packageRoot));
+  const runner = template ?? loadRunnerTemplate();
   const checkoutRoot = findCheckoutRoot(ctx.cwd);
   const root = checkoutRoot ?? findProjectRoot(ctx.cwd);
   const main = checkoutRoot === undefined ? undefined : mainCheckoutOf(checkoutRoot);

@@ -12,7 +12,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
-import { test } from "node:test";
+import { test } from "bun:test";
 import assert from "node:assert/strict";
 import { USER_STARTER_CONFIG } from "../../src/config/starter.ts";
 import { MANAGED_MARKER, hashDir } from "../../src/util/fs.ts";
@@ -34,8 +34,8 @@ function assertNoSkillRootBackups(f: Fixture): void {
   }
 }
 
-test("install creates managed skills, relative links, the starter config, and the manifest", async (t) => {
-  const f = makeFixture(t);
+test("install creates managed skills, relative links, the starter config, and the manifest", async () => {
+  const f = makeFixture();
   const { ctx } = await f.runOk(["install", "--yes"]);
   assert.match(ctx.out(), /create {3}alpha/);
   assert.match(ctx.out(), /create {3}beta/);
@@ -78,8 +78,8 @@ test("install creates managed skills, relative links, the starter config, and th
   assert.match(ctx.out(), /\$omt-ulw <task>/);
 });
 
-test("a second install shows only unchanged and writes nothing but the manifest timestamp", async (t) => {
-  const f = makeFixture(t);
+test("a second install shows only unchanged and writes nothing but the manifest timestamp", async () => {
+  const f = makeFixture();
   await f.runOk(["install", "--yes", "--hooks"]);
   const before = snapshot(f.home);
   const { ctx } = await f.runOk(["install", "--yes", "--hooks"], {
@@ -95,8 +95,8 @@ test("a second install shows only unchanged and writes nothing but the manifest 
   assert.deepEqual(manifest.config, { path: join(f.configDir, "config.jsonc"), created: true });
 });
 
-test("a changed bundled skill is an update", async (t) => {
-  const f = makeFixture(t);
+test("a changed bundled skill is an update", async () => {
+  const f = makeFixture();
   await f.runOk(["install", "--yes"]);
   writeSkill(f.packageRoot, "alpha", { "SKILL.md": "---\nname: alpha\n---\nAlpha v2.\n" });
   const { ctx } = await f.runOk(["install", "--yes"]);
@@ -108,8 +108,8 @@ test("a changed bundled skill is an update", async (t) => {
   assertNoSkillRootBackups(f);
 });
 
-test("an unmanaged skill directory is a conflict, and nothing is written without --force", async (t) => {
-  const f = makeFixture(t);
+test("an unmanaged skill directory is a conflict, and nothing is written without --force", async () => {
+  const f = makeFixture();
   mkdirSync(join(f.agents, "alpha"), { recursive: true });
   writeFileSync(join(f.agents, "alpha", "SKILL.md"), "user skill\n");
   const before = snapshot(f.home);
@@ -120,8 +120,8 @@ test("an unmanaged skill directory is a conflict, and nothing is written without
   assert.deepEqual(snapshot(f.home), before);
 });
 
-test("--force backs up a conflicting skill outside the skill roots, then installs", async (t) => {
-  const f = makeFixture(t);
+test("--force backs up a conflicting skill outside the skill roots, then installs", async () => {
+  const f = makeFixture();
   mkdirSync(join(f.agents, "alpha"), { recursive: true });
   writeFileSync(join(f.agents, "alpha", "SKILL.md"), "user skill\n");
   const { ctx } = await f.runOk(["install", "--yes", "--force"]);
@@ -133,8 +133,8 @@ test("--force backs up a conflicting skill outside the skill roots, then install
   assertNoSkillRootBackups(f);
 });
 
-test("a locally modified managed skill is a conflict; --force backs it up", async (t) => {
-  const f = makeFixture(t);
+test("a locally modified managed skill is a conflict; --force backs it up", async () => {
+  const f = makeFixture();
   await f.runOk(["install", "--yes"]);
   writeFileSync(join(f.agents, "beta", "references", "notes.md"), "my edit\n");
   const before = snapshot(f.home);
@@ -149,8 +149,8 @@ test("a locally modified managed skill is a conflict; --force backs it up", asyn
   assertNoSkillRootBackups(f);
 });
 
-test("a conflicting link is reported and --force backs it up under the root name", async (t) => {
-  const f = makeFixture(t);
+test("a conflicting link is reported and --force backs it up under the root name", async () => {
+  const f = makeFixture();
   mkdirSync(join(f.claudeSkills, "alpha"), { recursive: true });
   writeFileSync(join(f.claudeSkills, "alpha", "SKILL.md"), "user claude skill\n");
   mkdirSync(join(f.root, "elsewhere"), { recursive: true });
@@ -168,8 +168,8 @@ test("a conflicting link is reported and --force backs it up under the root name
   assert.ok(existsSync(join(f.root, "elsewhere")));
 });
 
-test("--dry-run prints the plan and writes nothing", async (t) => {
-  const f = makeFixture(t);
+test("--dry-run prints the plan and writes nothing", async () => {
+  const f = makeFixture();
   const before = snapshot(f.home);
   const { ctx } = await f.runOk(["install", "--dry-run", "--hooks"]);
   assert.match(ctx.out(), /create {3}alpha/);
@@ -177,8 +177,8 @@ test("--dry-run prints the plan and writes nothing", async (t) => {
   assert.deepEqual(snapshot(f.home), before);
 });
 
-test("a declined prompt writes nothing; an accepted prompt applies", async (t) => {
-  const f = makeFixture(t);
+test("a declined prompt writes nothing; an accepted prompt applies", async () => {
+  const f = makeFixture();
   const before = snapshot(f.home);
   for (const answer of ["", "n", "no", "nope"]) {
     const { code, ctx } = await f.run(["install"], { isTTY: true, answer });
@@ -190,8 +190,8 @@ test("a declined prompt writes nothing; an accepted prompt applies", async (t) =
   assert.ok(existsSync(join(f.agents, "alpha", MANAGED_MARKER)));
 });
 
-test("without a TTY and without --yes, install refuses and writes nothing", async (t) => {
-  const f = makeFixture(t);
+test("without a TTY and without --yes, install refuses and writes nothing", async () => {
+  const f = makeFixture();
   const before = snapshot(f.home);
   const { code, ctx } = await f.run(["install"], { isTTY: false });
   assert.equal(code, 1);
@@ -200,8 +200,8 @@ test("without a TTY and without --yes, install refuses and writes nothing", asyn
   assert.deepEqual(snapshot(f.home), before);
 });
 
-test("a link root that is the same directory as the agents root gets no links", async (t) => {
-  const f = makeFixture(t);
+test("a link root that is the same directory as the agents root gets no links", async () => {
+  const f = makeFixture();
   mkdirSync(f.agents, { recursive: true });
   mkdirSync(dirname(f.claudeSkills), { recursive: true });
   symlinkSync(f.agents, f.claudeSkills);
@@ -212,8 +212,8 @@ test("a link root that is the same directory as the agents root gets no links", 
   assert.deepEqual(readJson(f.manifest).links, []);
 });
 
-test("a dangling link root that points at the missing agents root gets no links", async (t) => {
-  const f = makeFixture(t);
+test("a dangling link root that points at the missing agents root gets no links", async () => {
+  const f = makeFixture();
   mkdirSync(dirname(f.claudeSkills), { recursive: true });
   symlinkSync(f.agents, f.claudeSkills);
   const { ctx } = await f.runOk(["install", "--yes"]);
@@ -221,8 +221,8 @@ test("a dangling link root that points at the missing agents root gets no links"
   assert.ok(existsSync(join(f.agents, "alpha", MANAGED_MARKER)));
 });
 
-test("gemini is a default target when ~/.gemini exists, and --targets selects roots", async (t) => {
-  const f = makeFixture(t);
+test("gemini is a default target when ~/.gemini exists, and --targets selects roots", async () => {
+  const f = makeFixture();
   mkdirSync(join(f.home, ".gemini"));
   const dry = await f.run(["install", "--dry-run"]);
   assert.match(dry.ctx.out(), new RegExp(`create .*${join(".gemini", "config", "skills", "alpha")}`));
@@ -241,15 +241,15 @@ test("gemini is a default target when ~/.gemini exists, and --targets selects ro
   assert.match(bad.ctx.err(), /unknown target "cursor"/);
 });
 
-test("unknown flags and positionals are usage errors", async (t) => {
-  const f = makeFixture(t);
+test("unknown flags and positionals are usage errors", async () => {
+  const f = makeFixture();
   assert.equal((await f.run(["install", "--nope"])).code, 2);
   assert.equal((await f.run(["install", "extra"])).code, 2);
   assert.equal((await f.run(["uninstall", "--nope"])).code, 2);
 });
 
-test("--hooks adds the entry and keeps every other setting", async (t) => {
-  const f = makeFixture(t);
+test("--hooks adds the entry and keeps every other setting", async () => {
+  const f = makeFixture();
   const original = {
     model: "opus",
     permissions: { allow: ["Bash(ls)"] },
@@ -283,16 +283,16 @@ test("--hooks adds the entry and keeps every other setting", async (t) => {
   assert.deepEqual(manifest.backups, [backup]);
 });
 
-test("--hooks creates settings.json when it is missing, without a backup", async (t) => {
-  const f = makeFixture(t);
+test("--hooks creates settings.json when it is missing, without a backup", async () => {
+  const f = makeFixture();
   await f.runOk(["install", "--yes", "--hooks"]);
   const settings = readJson(f.settings) as { hooks: { UserPromptSubmit: unknown[] } };
   assert.equal(settings.hooks.UserPromptSubmit.length, 1);
   assert.ok(!existsSync(f.backups));
 });
 
-test("--hooks updates the command of an existing managed entry", async (t) => {
-  const f = makeFixture(t);
+test("--hooks updates the command of an existing managed entry", async () => {
+  const f = makeFixture();
   const old = '"/old/node" "/old/cli.js" hook user-prompt-submit # oh-my-t3code';
   writeFile(
     f.settings,
@@ -312,8 +312,8 @@ test("--hooks updates the command of an existing managed entry", async (t) => {
   );
 });
 
-test("an unchanged hook writes nothing to settings.json and makes no backup", async (t) => {
-  const f = makeFixture(t);
+test("an unchanged hook writes nothing to settings.json and makes no backup", async () => {
+  const f = makeFixture();
   await f.runOk(["install", "--yes", "--hooks"]);
   const before = snapshot(dirname(f.settings));
   const { ctx } = await f.runOk(["install", "--yes", "--hooks"], { now: () => new Date("2026-03-01T00:00:00Z") });
@@ -322,8 +322,8 @@ test("an unchanged hook writes nothing to settings.json and makes no backup", as
   assert.ok(!existsSync(f.backups));
 });
 
-test("a symlinked settings.json stays a symlink and its real file is updated", async (t) => {
-  const f = makeFixture(t);
+test("a symlinked settings.json stays a symlink and its real file is updated", async () => {
+  const f = makeFixture();
   const real = join(f.root, "dotfiles", "claude-settings.json");
   mkdirSync(dirname(real), { recursive: true });
   writeFileSync(real, '{ "theme": "light" }\n');
@@ -341,8 +341,8 @@ test("a symlinked settings.json stays a symlink and its real file is updated", a
   assert.deepEqual(readJson(real), { theme: "light" });
 });
 
-test("settings.json that is not valid JSON is an error and nothing changes", async (t) => {
-  const f = makeFixture(t);
+test("settings.json that is not valid JSON is an error and nothing changes", async () => {
+  const f = makeFixture();
   writeFile(f.settings, "{ not json");
   const before = snapshot(f.home);
   const { code, ctx } = await f.run(["install", "--yes", "--hooks"]);
@@ -351,20 +351,23 @@ test("settings.json that is not valid JSON is an error and nothing changes", asy
   assert.deepEqual(snapshot(f.home), before);
 });
 
-test("--hooks is refused for a temp or npx cliPath", async (t) => {
-  const f = makeFixture(t);
+test("--hooks is refused for a temp or npx cliPath", async () => {
+  const f = makeFixture();
   const before = snapshot(f.home);
   for (const cliPath of [join(tmpdir(), "omt-x", "cli.js"), "/home/u/.npm/_npx/abc/node_modules/oh-my-t3code/dist/cli.js"]) {
     const { code, ctx } = await f.run(["install", "--yes", "--hooks"], { cliPath });
     assert.equal(code, 1);
-    assert.match(ctx.err(), /temporary path/);
-    assert.match(ctx.err(), /hint: run it from a clone and add it to PATH with pnpm link --global/);
+    assert.match(ctx.err(), /refusing the user install: the omt CLI runs from (a temporary path|a one-shot npx cache)/);
+    assert.match(
+      ctx.err(),
+      /hint: install omt with one of: npm i -g oh-my-t3code, pnpm add -g oh-my-t3code, bun add -g oh-my-t3code, mise use -g github:gabimoncha\/oh-my-t3code; .*npx omt3 install --project/,
+    );
   }
   assert.deepEqual(snapshot(f.home), before);
 });
 
-test("--hooks keeps the mode of a 0600 settings.json and writes the backup as 0600", async (t) => {
-  const f = makeFixture(t);
+test("--hooks keeps the mode of a 0600 settings.json and writes the backup as 0600", async () => {
+  const f = makeFixture();
   writeFile(f.settings, '{ "env": { "API_KEY": "secret" } }\n');
   chmodSync(f.settings, 0o600);
   await f.runOk(["install", "--yes", "--hooks"]);
@@ -372,12 +375,9 @@ test("--hooks keeps the mode of a 0600 settings.json and writes the backup as 06
   assert.equal(statSync(join(f.backups, STAMP, "claude-settings.json")).mode & 0o777, 0o600);
 });
 
-test("a failed skill swap removes the temp copy and leaves the installed skill in place", async (t) => {
-  if (process.getuid?.() === 0) {
-    t.skip("root ignores directory permissions");
-    return;
-  }
-  const f = makeFixture(t);
+// Root ignores directory permissions.
+test.skipIf(process.getuid?.() === 0)("a failed skill swap removes the temp copy and leaves the installed skill in place", async () => {
+  const f = makeFixture();
   await f.runOk(["install", "--yes"]);
   const before = readFileSync(join(f.agents, "alpha", "SKILL.md"), "utf8");
   writeSkill(f.packageRoot, "alpha", { "SKILL.md": "---\nname: alpha\n---\nAlpha v2.\n" });

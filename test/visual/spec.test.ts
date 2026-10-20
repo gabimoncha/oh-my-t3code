@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { test } from "bun:test";
 import assert from "node:assert/strict";
 import { validateSpec } from "../../src/visual/spec.ts";
 import { OmtError } from "../../src/util/errors.ts";

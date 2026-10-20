@@ -1,6 +1,5 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import type { TestContext } from "node:test";
 import { tempDir, writeFile } from "../helpers.ts";
 import { runMain, runOk } from "../run.ts";
 
@@ -17,8 +16,8 @@ export interface Project {
 }
 
 // A temp home and a temp git project; `run` calls main() with a fake context rooted there.
-export function makeProject(t: TestContext): Project {
-  const root = tempDir(t, "omt-cmd-");
+export function makeProject(): Project {
+  const root = tempDir("omt-cmd-");
   const home = join(root, "home");
   const cwd = join(root, "project");
   mkdirSync(join(cwd, ".git"), { recursive: true });

@@ -1,6 +1,6 @@
 import { chmodSync, mkdirSync, readFileSync, readdirSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { test } from "node:test";
+import { test } from "bun:test";
 import assert from "node:assert/strict";
 import { parseArgs } from "../src/util/args.ts";
 import { OmtError } from "../src/util/errors.ts";
@@ -31,8 +31,8 @@ test("OmtError defaults to exit code 1 and keeps code, hint, and cause", () => {
   assert.equal(new OmtError("x", "y").hint, undefined);
 });
 
-test("writeFileAtomic creates parent directories and leaves no temp file", async (t) => {
-  const root = tempDir(t);
+test("writeFileAtomic creates parent directories and leaves no temp file", async () => {
+  const root = tempDir();
   const target = join(root, "a", "b", "file.txt");
   await writeFileAtomic(target, "one");
   assert.equal(readFileSync(target, "utf8"), "one");
@@ -41,8 +41,8 @@ test("writeFileAtomic creates parent directories and leaves no temp file", async
   assert.deepEqual(readdirSync(join(root, "a", "b")), ["file.txt"]);
 });
 
-test("readFileIfExists, pathExists, and isSymlink handle missing paths", async (t) => {
-  const root = tempDir(t);
+test("readFileIfExists, pathExists, and isSymlink handle missing paths", async () => {
+  const root = tempDir();
   const file = join(root, "f.txt");
   assert.equal(await readFileIfExists(file), undefined);
   assert.equal(await pathExists(file), false);
@@ -57,8 +57,8 @@ test("readFileIfExists, pathExists, and isSymlink handle missing paths", async (
   assert.equal(await isSymlink(link), true);
 });
 
-test("lstatIfExists rejects a path under a regular file with ENOTDIR", async (t) => {
-  const root = tempDir(t);
+test("lstatIfExists rejects a path under a regular file with ENOTDIR", async () => {
+  const root = tempDir();
   const file = join(root, "file");
   writeFileSync(file, "content");
   await assert.rejects(lstatIfExists(join(file, "child")), { code: "ENOTDIR" });
@@ -85,8 +85,8 @@ test("parseArgs turns a parse error into an OmtError with exit code 2", () => {
   );
 });
 
-test("copyDir copies a tree and hashDir ignores the marker file and .DS_Store", async (t) => {
-  const root = tempDir(t);
+test("copyDir copies a tree and hashDir ignores the marker file and .DS_Store", async () => {
+  const root = tempDir();
   const source = join(root, "skill");
   mkdirSync(join(source, "references"), { recursive: true });
   writeFileSync(join(source, "SKILL.md"), "# skill\n");
@@ -110,8 +110,8 @@ test("copyDir copies a tree and hashDir ignores the marker file and .DS_Store", 
   assert.notEqual(await hashDir(copy), before);
 });
 
-test("hashDir changes when a file is renamed or added", async (t) => {
-  const root = tempDir(t);
+test("hashDir changes when a file is renamed or added", async () => {
+  const root = tempDir();
   const dir = join(root, "d");
   await ensureDir(dir);
   writeFileSync(join(dir, "x.md"), "same");
@@ -136,8 +136,8 @@ test("renderTable pads columns and trims trailing space", () => {
   assert.equal(table, "ROLE     STATUS    MODE\nexecute  resolved  default\nqa                 plan\n");
 });
 
-test("writeFileAtomic keeps the mode of the file it replaces and applies a mode to a new file", async (t) => {
-  const dir = tempDir(t);
+test("writeFileAtomic keeps the mode of the file it replaces and applies a mode to a new file", async () => {
+  const dir = tempDir();
   const path = join(dir, "secret.json");
   writeFileSync(path, "old");
   chmodSync(path, 0o600);

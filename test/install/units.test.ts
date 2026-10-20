@@ -1,10 +1,9 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test } from "node:test";
+import { test } from "bun:test";
 import assert from "node:assert/strict";
 import {
-  assertStableCliPath,
   hookCommand,
   isManagedCommand,
   parseSettings,
@@ -14,6 +13,7 @@ import {
 import { backupStamp } from "../../src/install/fsops.ts";
 import { mergeManifest } from "../../src/install/manifest.ts";
 import type { Manifest } from "../../src/install/manifest.ts";
+import { assertInstallSource } from "../../src/install/project.ts";
 import { classifySkill, listBundledSkills, writeMarker } from "../../src/install/skills.ts";
 import { OmtError } from "../../src/util/errors.ts";
 import { hashDir } from "../../src/util/fs.ts";
@@ -28,16 +28,23 @@ test("hookCommand quotes both paths and ends with the signature", () => {
   assert.throws(() => hookCommand("/usr/bin/node", "/a$HOME/cli.js"), OmtError);
 });
 
-test("assertStableCliPath refuses temp, npx, and pnpm dlx paths only", () => {
-  assert.throws(() => assertStableCliPath(join(tmpdir(), "x", "cli.js")), OmtError);
-  assert.throws(() => assertStableCliPath("/opt/t/cli.js", "/opt/t"), OmtError);
-  assert.throws(() => assertStableCliPath("/u/.npm/_npx/1/node_modules/oh-my-t3code/dist/cli.js", "/tmpx"), OmtError);
+test("assertInstallSource refuses temp paths, and one-shot caches except for a project install", () => {
+  const user = (cliPath: string, tempRoot = "/tmpx") => () => assertInstallSource(cliPath, {}, "user", tempRoot);
+  const project = (cliPath: string, tempRoot = "/tmpx") => assertInstallSource(cliPath, {}, "project", tempRoot);
+  assert.throws(user(join(tmpdir(), "x", "cli.js"), tmpdir()), OmtError);
+  assert.throws(() => project(join(tmpdir(), "x", "cli.js"), tmpdir()), OmtError);
+  assert.throws(user("/opt/t/cli.js", "/opt/t"), OmtError);
+  const npx = "/u/.npm/_npx/1/node_modules/oh-my-t3code/dist/cli.js";
+  assert.throws(user(npx), OmtError);
+  assert.equal(project(npx), "npx");
   const dlx = "/Users/u/Library/Caches/pnpm/dlx/abc123/198f-1a2b/node_modules/oh-my-t3code/src/cli.ts";
-  assert.throws(() => assertStableCliPath(dlx, "/tmpx"), OmtError);
-  assert.throws(() => assertStableCliPath("/home/u/.cache/pnpm/dlx/x/node_modules/oh-my-t3code/cli.js", "/tmpx"), OmtError);
-  assert.doesNotThrow(() => assertStableCliPath("/home/u/.local/share/pnpm/global/5/node_modules/oh-my-t3code/cli.js", "/tmpx"));
-  assert.doesNotThrow(() => assertStableCliPath("/usr/local/lib/node_modules/oh-my-t3code/dist/cli.js", "/tmpx"));
-  assert.doesNotThrow(() => assertStableCliPath("/opt/tmpx-other/cli.js", "/opt/tmpx"));
+  assert.throws(user(dlx), OmtError);
+  assert.equal(project(dlx), "pnpm");
+  assert.throws(user("/home/u/.cache/pnpm/dlx/x/node_modules/oh-my-t3code/cli.js"), OmtError);
+  assert.equal(project("/tmpx/bunx-501-omt3@0.1.0/node_modules/omt3/dist/cli.js"), "bunx");
+  assert.doesNotThrow(user("/home/u/.local/share/pnpm/global/5/node_modules/oh-my-t3code/cli.js"));
+  assert.doesNotThrow(user("/usr/local/lib/node_modules/oh-my-t3code/dist/cli.js"));
+  assert.doesNotThrow(user("/opt/tmpx-other/cli.js", "/opt/tmpx"));
 });
 
 test("withHook and withoutHook keep unrelated entries", () => {
@@ -67,8 +74,8 @@ test("parseSettings rejects settings with the wrong shape", () => {
   assert.throws(() => parseSettings('{"hooks": {"UserPromptSubmit": {}}}', "s"), /is not an array/);
 });
 
-test("classifySkill covers create, unchanged, update, and each conflict", async (t) => {
-  const root = tempDir(t);
+test("classifySkill covers create, unchanged, update, and each conflict", async () => {
+  const root = tempDir();
   const source = join(root, "source");
   const target = join(root, "target");
   mkdirSync(source);
@@ -97,8 +104,8 @@ test("classifySkill covers create, unchanged, update, and each conflict", async 
   assert.equal((await classifySkill(source, target)).reason, "locally modified");
 });
 
-test("listBundledSkills returns sorted directories that hold SKILL.md", async (t) => {
-  const root = tempDir(t);
+test("listBundledSkills returns sorted directories that hold SKILL.md", async () => {
+  const root = tempDir();
   for (const name of ["zeta", "alpha", "empty"]) mkdirSync(join(root, "skills", name), { recursive: true });
   writeFileSync(join(root, "skills", "zeta", "SKILL.md"), "z");
   writeFileSync(join(root, "skills", "alpha", "SKILL.md"), "a");

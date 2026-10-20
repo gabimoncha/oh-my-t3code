@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import { test } from "node:test";
+import { test } from "bun:test";
 import { DEFAULT_CONFIG } from "../../src/config/defaults.ts";
 import { loadConfig } from "../../src/config/load.ts";
 import { mergeLayer } from "../../src/config/merge.ts";
@@ -124,8 +124,8 @@ test("profile errors name unknown names, cycles, and chains deeper than eight", 
   });
 });
 
-test("effectiveConfig selects argument, plan, project, user, then default without changing loaded config", async (t) => {
-  const ctx = projectContext(t);
+test("effectiveConfig selects argument, plan, project, user, then default without changing loaded config", async () => {
+  const ctx = projectContext();
   const user = userConfigPath(ctx.env, ctx.homedir);
   const project = join(ctx.cwd, ".omt", "config.jsonc");
   assert.equal(effectiveConfig(await loadConfig(ctx)).profile.source, "default");

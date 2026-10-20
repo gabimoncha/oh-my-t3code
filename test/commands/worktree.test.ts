@@ -1,14 +1,13 @@
 import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { test } from "node:test";
-import type { TestContext } from "node:test";
+import { test } from "bun:test";
 import assert from "node:assert/strict";
 import { gitRepo, tempDir } from "../helpers.ts";
 import { runMain, runOk } from "../run.ts";
 
 // A main checkout with one commit and a linked worktree; `run` calls main() with the cwd in the worktree.
-function worktreeProject(t: TestContext) {
-  const root = tempDir(t, "omt-wt-");
+function worktreeProject() {
+  const root = tempDir("omt-wt-");
   const project = join(root, "project");
   const worktree = join(root, "wt");
   gitRepo(root, project)(["worktree", "add", "-q", worktree]);
@@ -19,8 +18,8 @@ function worktreeProject(t: TestContext) {
 
 const WARNING = /^warning: .*[/\\]wt[/\\]\.omt holds plans or a ledger that omt no longer reads; move them to .*[/\\]project[/\\]\.omt$/;
 
-test("init, plan new, and ledger add from a worktree write under the main checkout's .omt", async (t) => {
-  const p = worktreeProject(t);
+test("init, plan new, and ledger add from a worktree write under the main checkout's .omt", async () => {
+  const p = worktreeProject();
   for (const argv of [["init"], ["plan", "new", "w1"], ["ledger", "add", "--plan", "w1", "--role", "explore", "--status", "completed"]]) {
     const { ctx } = await p.runOk(argv);
     assert.doesNotMatch(ctx.err(), /warning/, `${argv.join(" ")} prints no warning`);
@@ -33,8 +32,8 @@ test("init, plan new, and ledger add from a worktree write under the main checko
   await p.runOk(["plan", "status", "w1"], p.project);
 });
 
-test("omt paths prints the main checkout's paths from a worktree", async (t) => {
-  const p = worktreeProject(t);
+test("omt paths prints the main checkout's paths from a worktree", async () => {
+  const p = worktreeProject();
   const evidence = await p.runOk(["paths", "--evidence"]);
   assert.equal(evidence.ctx.out(), `${join(p.project, ".omt", "evidence")}\n`);
 
@@ -54,8 +53,8 @@ test("omt paths prints the main checkout's paths from a worktree", async (t) => 
   });
 });
 
-test("omt paths prints text lines, JSON, or one path per flag", async (t) => {
-  const p = worktreeProject(t);
+test("omt paths prints text lines, JSON, or one path per flag", async () => {
+  const p = worktreeProject();
   const omt = join(p.project, ".omt");
   const expected: Record<string, string> = {
     root: p.project,
@@ -77,8 +76,8 @@ test("omt paths prints text lines, JSON, or one path per flag", async (t) => {
   assert.equal((await p.run(["paths", "extra"])).code, 2);
 });
 
-test("a worktree .omt with plans gives one shadowed-state warning and a hint; other state gives none", async (t) => {
-  const p = worktreeProject(t);
+test("a worktree .omt with plans gives one shadowed-state warning and a hint; other state gives none", async () => {
+  const p = worktreeProject();
   mkdirSync(join(p.worktree, ".omt", "plans"), { recursive: true });
   writeFileSync(join(p.worktree, ".omt", "config.jsonc"), "{}\n");
   mkdirSync(join(p.worktree, ".omt", "plans", "dir.md"));
@@ -99,8 +98,8 @@ test("a worktree .omt with plans gives one shadowed-state warning and a hint; ot
   assert.equal((await p.run(["plan", "list"], p.project)).ctx.err(), "", "no warning from the main checkout");
 });
 
-test("init from a worktree of a bare repository at <repo>/.git writes the worktree's .omt", async (t) => {
-  const root = tempDir(t, "omt-wt-");
+test("init from a worktree of a bare repository at <repo>/.git writes the worktree's .omt", async () => {
+  const root = tempDir("omt-wt-");
   const seed = join(root, "seed");
   const git = gitRepo(root, seed);
   const repo = join(root, "repo");

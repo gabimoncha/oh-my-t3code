@@ -1,7 +1,14 @@
 import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
-import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 export type Env = Record<string, string | undefined>;
+
+// True when child is parent or a path inside it. A name that starts with two dots, such as `..x`, is
+// a child, not a parent segment.
+export function isWithin(parent: string, child: string): boolean {
+  const rel = relative(parent, child);
+  return rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
+}
 
 export interface SkillRoots {
   agents: string;
@@ -96,8 +103,8 @@ function underLogicalAncestor(worktree: string, main: string): string {
   let dir = worktree;
   for (;;) {
     try {
-      const rel = relative(realpathSync(dir), main);
-      if (rel === "" || (!rel.startsWith("..") && !isAbsolute(rel))) return join(dir, rel);
+      const real = realpathSync(dir);
+      if (isWithin(real, main)) return join(dir, relative(real, main));
     } catch {
       return main;
     }
@@ -137,10 +144,6 @@ export function worktreeRunnerPath(root: string): string {
 
 export function pnpmWorkspacePath(root: string): string {
   return join(root, "pnpm-workspace.yaml");
-}
-
-export function runnerTemplatePath(packageRoot: string): string {
-  return join(packageRoot, "templates", "worktree-setup.mjs");
 }
 
 // A linked worktree whose own .omt holds plans or a ledger that omt no longer reads.

@@ -689,8 +689,10 @@ function realOrSelf(path) {
   }
 }
 
+// The omt CLI bundles this file, so in dist/cli.js or a binary, `self` is the CLI itself. Only the
+// .mjs runner file runs the setup.
 const self = fileURLToPath(import.meta.url);
-if (process.argv[1] !== undefined && existsSync(process.argv[1]) && realOrSelf(process.argv[1]) === realOrSelf(self)) {
+if (self.endsWith(".mjs") && process.argv[1] !== undefined && existsSync(process.argv[1]) && realOrSelf(process.argv[1]) === realOrSelf(self)) {
   // Node resolves symlinks in the script path, so a linked .t3 folder or runner moves `self`
   // out of the checkout that started it. Stop instead of installing in the wrong folder.
   const root = dirname(dirname(self));

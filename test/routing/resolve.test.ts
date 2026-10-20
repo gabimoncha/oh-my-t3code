@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test } from "bun:test";
 import { DEFAULT_CONFIG } from "../../src/config/defaults.ts";
 import { resolveAll, resolveRole, toRouteOutput } from "../../src/routing/resolve.ts";
 import type { Capabilities, ProviderCapability, RoleConfig, Rung } from "../../src/types.ts";

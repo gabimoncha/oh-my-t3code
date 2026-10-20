@@ -1,6 +1,6 @@
 import { appendFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { test } from "node:test";
+import { test } from "bun:test";
 import assert from "node:assert/strict";
 import { run } from "../../src/commands/ledger.ts";
 import { appendLedger, ledgerStats, readLedger, requestId } from "../../src/ledger/ledger.ts";
@@ -13,8 +13,8 @@ function entry(fields: Partial<LedgerEntry>): LedgerEntry {
   return { ts: TS, role: "execute", status: "dispatched", ...fields };
 }
 
-test("appendLedger creates .omt and writes one JSON line per entry", async (t) => {
-  const path = join(tempDir(t), "project", ".omt", "ledger.jsonl");
+test("appendLedger creates .omt and writes one JSON line per entry", async () => {
+  const path = join(tempDir(), "project", ".omt", "ledger.jsonl");
   await appendLedger(path, entry({ taskId: "t1" }));
   await appendLedger(path, entry({ taskId: "t1", status: "completed", verdict: "DONE" }));
   const lines = readFileSync(path, "utf8").split("\n");
@@ -23,16 +23,16 @@ test("appendLedger creates .omt and writes one JSON line per entry", async (t) =
   assert.deepEqual(JSON.parse(lines[1] ?? ""), entry({ taskId: "t1", status: "completed", verdict: "DONE" }));
 });
 
-test("concurrent appends keep every entry", async (t) => {
-  const path = join(tempDir(t), ".omt", "ledger.jsonl");
+test("concurrent appends keep every entry", async () => {
+  const path = join(tempDir(), ".omt", "ledger.jsonl");
   await Promise.all(Array.from({ length: 50 }, (_, i) => appendLedger(path, entry({ taskId: `t${i}` }))));
   const { entries, warnings } = await readLedger(path);
   assert.equal(entries.length, 50);
   assert.deepEqual(warnings, []);
 });
 
-test("readLedger skips malformed lines with a warning and handles a missing file", async (t) => {
-  const dir = tempDir(t);
+test("readLedger skips malformed lines with a warning and handles a missing file", async () => {
+  const dir = tempDir();
   const path = join(dir, "ledger.jsonl");
   assert.deepEqual(await readLedger(path), { entries: [], warnings: [] });
   appendFileSync(path, `${JSON.stringify(entry({}))}\nnot json\n\n{"ts":"x","role":"r","status":"bogus"}\n[1]\n`);
@@ -80,8 +80,8 @@ test("requestId builds the canonical id with defaults, sanitizing, and per-part 
   assert.notEqual(long, requestId("p".repeat(300), "u".repeat(300), "r".repeat(300), 12, 35));
 });
 
-test("ledger add appends an entry and prints it as JSON", async (t) => {
-  const ctx = projectContext(t, [
+test("ledger add appends an entry and prints it as JSON", async () => {
+  const ctx = projectContext([
     "add",
     "--role",
     "review",
@@ -126,7 +126,7 @@ test("ledger add appends an entry and prints it as JSON", async (t) => {
   assert.deepEqual(entries, [expected]);
 });
 
-test("ledger add rejects bad input with exit code 2", async (t) => {
+test("ledger add rejects bad input with exit code 2", async () => {
   const cases = [
     ["add", "--status", "dispatched"],
     ["add", "--role", "x"],
@@ -139,13 +139,13 @@ test("ledger add rejects bad input with exit code 2", async (t) => {
     [],
   ];
   for (const argv of cases) {
-    const ctx = projectContext(t, argv);
+    const ctx = projectContext(argv);
     await assert.rejects(run(ctx), omtExit(2), argv.join(" "));
   }
 });
 
-test("ledger list prints a table, filters by plan, and warns on malformed lines", async (t) => {
-  const ctx = projectContext(t, ["list"]);
+test("ledger list prints a table, filters by plan, and warns on malformed lines", async () => {
+  const ctx = projectContext(["list"]);
   const path = join(ctx.cwd, ".omt", "ledger.jsonl");
   await appendLedger(path, entry({ plan: "auth", unit: "U3", role: "review", round: 2, taskId: "task-0123456789abcdef" }));
   appendFileSync(path, "{broken\n");
@@ -165,8 +165,8 @@ test("ledger list prints a table, filters by plan, and warns on malformed lines"
   assert.equal(parsed[0].unit, "U3");
 });
 
-test("ledger stats prints LedgerStats as text and JSON", async (t) => {
-  const ctx = projectContext(t, ["stats"]);
+test("ledger stats prints LedgerStats as text and JSON", async () => {
+  const ctx = projectContext(["stats"]);
   const path = join(ctx.cwd, ".omt", "ledger.jsonl");
   await appendLedger(path, entry({ plan: "auth", taskId: "t1" }));
   await appendLedger(path, entry({ plan: "auth", taskId: "t2" }));
@@ -190,8 +190,8 @@ test("ledger stats prints LedgerStats as text and JSON", async (t) => {
   });
 });
 
-test("ledger stats reads the limits from the project config", async (t) => {
-  const ctx = projectContext(t, ["stats", "--plan", "auth"]);
+test("ledger stats reads the limits from the project config", async () => {
+  const ctx = projectContext(["stats", "--plan", "auth"]);
   writeFile(join(ctx.cwd, ".omt", "config.jsonc"), '{ "version": 1, "limits": { "maxParallel": 1 } }\n');
   await appendLedger(join(ctx.cwd, ".omt", "ledger.jsonl"), entry({ plan: "auth", taskId: "t1" }));
   assert.equal(await run(ctx), 0);
@@ -199,8 +199,8 @@ test("ledger stats reads the limits from the project config", async (t) => {
   assert.match(ctx.out(), /^can dispatch: no$/m);
 });
 
-test("ledger stats --plan uses the lower of the plan and config max parallel", async (t) => {
-  const ctx = projectContext(t, ["stats", "--plan", "auth"]);
+test("ledger stats --plan uses the lower of the plan and config max parallel", async () => {
+  const ctx = projectContext(["stats", "--plan", "auth"]);
   writeFile(join(ctx.cwd, ".omt", "config.jsonc"), '{ "version": 1, "limits": { "maxParallel": 4 } }\n');
   writeFile(
     join(ctx.cwd, ".omt", "plans", "auth.md"),
@@ -230,8 +230,8 @@ test("ledger stats --plan uses the lower of the plan and config max parallel", a
   });
 });
 
-test("ledger stats --plan ignores a max-parallel key quoted in the plan body", async (t) => {
-  const ctx = projectContext(t, ["stats", "--plan", "auth"]);
+test("ledger stats --plan ignores a max-parallel key quoted in the plan body", async () => {
+  const ctx = projectContext(["stats", "--plan", "auth"]);
   writeFile(join(ctx.cwd, ".omt", "config.jsonc"), '{ "version": 1, "limits": { "maxParallel": 4 } }\n');
   writeFile(
     join(ctx.cwd, ".omt", "plans", "auth.md"),
@@ -243,8 +243,8 @@ test("ledger stats --plan ignores a max-parallel key quoted in the plan body", a
   assert.match(ctx.out(), /^max parallel: 4$/m);
 });
 
-test("ledger stats --plan uses the plan max-tasks also when it is above the config value", async (t) => {
-  const ctx = projectContext(t, ["stats", "--plan", "auth"]);
+test("ledger stats --plan uses the plan max-tasks also when it is above the config value", async () => {
+  const ctx = projectContext(["stats", "--plan", "auth"]);
   writeFile(join(ctx.cwd, ".omt", "config.jsonc"), '{ "version": 1, "limits": { "maxTasksPerRun": 1 } }\n');
   writeFile(
     join(ctx.cwd, ".omt", "plans", "auth.md"),
@@ -262,9 +262,9 @@ test("ledger stats --plan uses the plan max-tasks also when it is above the conf
   assert.equal(parsed.planMaxTasks, 80);
 });
 
-test("ledger add accepts any role name, such as swarm and loop", async (t) => {
+test("ledger add accepts any role name, such as swarm and loop", async () => {
   for (const role of ["swarm", "loop", "Not A Config Role"]) {
-    const ctx = projectContext(t, ["add", "--role", role, "--status", "dispatched", "--unit", "U1"]);
+    const ctx = projectContext(["add", "--role", role, "--status", "dispatched", "--unit", "U1"]);
     assert.equal(await run(ctx), 0, role);
     assert.equal(JSON.parse(ctx.out()).role, role);
     const { entries } = await readLedger(join(ctx.cwd, ".omt", "ledger.jsonl"));
@@ -272,16 +272,16 @@ test("ledger add accepts any role name, such as swarm and loop", async (t) => {
   }
 });
 
-test("ledger request-id prints the id and requires plan, unit, and role", async (t) => {
-  const ctx = projectContext(t, ["request-id", "--plan", "auth", "--unit", "U3", "--role", "review", "--round", "2"]);
+test("ledger request-id prints the id and requires plan, unit, and role", async () => {
+  const ctx = projectContext(["request-id", "--plan", "auth", "--unit", "U3", "--role", "review", "--round", "2"]);
   assert.equal(await run(ctx), 0);
   assert.equal(ctx.out(), "omt:auth:U3:review:r2:a1\n");
 
-  const withAttempt = projectContext(t, ["request-id", "--plan", "a", "--unit", "U1", "--role", "r", "--attempt", "4"]);
+  const withAttempt = projectContext(["request-id", "--plan", "a", "--unit", "U1", "--role", "r", "--attempt", "4"]);
   assert.equal(await run(withAttempt), 0);
   assert.equal(withAttempt.out(), "omt:a:U1:r:r1:a4\n");
 
-  const missing = projectContext(t, ["request-id", "--plan", "auth", "--role", "review"]);
+  const missing = projectContext(["request-id", "--plan", "auth", "--role", "review"]);
   await assert.rejects(run(missing), omtExit(2));
 });
 
@@ -307,8 +307,8 @@ test("a terminal entry with neither a task id nor a unit closes nothing", () => 
   assert.equal(active([withUnit, entry({ plan: "p", role: "execute", status: "completed" })]), 1);
 });
 
-test("ledger add without --task-id or --unit warns that it closed nothing", async (t) => {
-  const base = projectContext(t, []);
+test("ledger add without --task-id or --unit warns that it closed nothing", async () => {
+  const base = projectContext([]);
   assert.equal(await run(base.at(["add", "--plan", "demo", "--role", "execute", "--status", "dispatched", "--task-id", "t1"])), 0);
   const done = base.at(["add", "--plan", "demo", "--role", "execute", "--status", "completed"]);
   assert.equal(await run(done), 0);
@@ -324,27 +324,27 @@ test("interrupted, verified, and rejected are terminal and close by task id", ()
   }
 });
 
-test("ledger add --status dispatched needs --task-id or --unit", async (t) => {
-  const ctx = projectContext(t, ["add", "--role", "execute", "--status", "dispatched"]);
+test("ledger add --status dispatched needs --task-id or --unit", async () => {
+  const ctx = projectContext(["add", "--role", "execute", "--status", "dispatched"]);
   await assert.rejects(run(ctx), omtExit(2));
-  const withId = projectContext(t, ["add", "--role", "execute", "--status", "dispatched", "--task-id", "t1"]);
+  const withId = projectContext(["add", "--role", "execute", "--status", "dispatched", "--task-id", "t1"]);
   assert.equal(await run(withId), 0);
   assert.equal(withId.err(), "");
-  const noId = projectContext(t, ["add", "--role", "execute", "--status", "dispatched", "--unit", "U1"]);
+  const noId = projectContext(["add", "--role", "execute", "--status", "dispatched", "--unit", "U1"]);
   assert.equal(await run(noId), 0);
   assert.match(noId.err(), /^warning: this dispatched entry has no --task-id/);
 });
 
-test("ledger add with a terminal status that closes nothing still appends and warns", async (t) => {
-  const ctx = projectContext(t, ["add", "--role", "execute", "--status", "completed", "--plan", "demo", "--unit", "U1"]);
+test("ledger add with a terminal status that closes nothing still appends and warns", async () => {
+  const ctx = projectContext(["add", "--role", "execute", "--status", "completed", "--plan", "demo", "--unit", "U1"]);
   assert.equal(await run(ctx), 0);
   assert.equal(ctx.err(), "omt: no dispatched entry matches; nothing was closed\n");
   const { entries } = await readLedger(join(ctx.cwd, ".omt", "ledger.jsonl"));
   assert.equal(entries.length, 1);
 });
 
-test("ledger add, then a terminal add without a task id, leaves no active task", async (t) => {
-  const base = projectContext(t, []);
+test("ledger add, then a terminal add without a task id, leaves no active task", async () => {
+  const base = projectContext([]);
   const common = ["--plan", "demo", "--unit", "U1", "--role", "execute"];
   assert.equal(await run(base.at(["add", ...common, "--status", "dispatched", "--task-id", "t1"])), 0);
   const done = base.at(["add", ...common, "--status", "completed"]);
@@ -355,7 +355,7 @@ test("ledger add, then a terminal add without a task id, leaves no active task",
   assert.match(stats.out(), /^active: 0$/m);
 });
 
-test("ledger rejects an invalid --plan or --unit with exit code 2", async (t) => {
+test("ledger rejects an invalid --plan or --unit with exit code 2", async () => {
   const cases = [
     ["add", "--role", "x", "--status", "failed", "--plan", "a -->"],
     ["add", "--role", "x", "--status", "failed", "--plan", "a b"],
@@ -366,7 +366,7 @@ test("ledger rejects an invalid --plan or --unit with exit code 2", async (t) =>
   ];
   for (const argv of cases) {
     await assert.rejects(
-      run(projectContext(t, argv)),
+      run(projectContext(argv)),
       omtExit(2),
       argv.join(" "),
     );

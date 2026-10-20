@@ -273,6 +273,9 @@ export interface LedgerStats {
   canDispatch: boolean; // active < maxParallel && dispatched < maxTasksPerRun
 }
 
+// How the CLI runs: the TypeScript sources with Bun, the JavaScript bundle dist/cli.js, or a compiled binary.
+export type CliBuild = "source" | "bundle" | "binary";
+
 export interface CliContext {
   argv: string[]; // arguments after the command name
   cwd: string;
@@ -284,10 +287,12 @@ export interface CliContext {
   isTTY: boolean; // true when stdin is a terminal
   prompt: (question: string) => Promise<string>;
   now: () => Date;
-  packageRoot: string; // directory that holds package.json, skills/, schema/
-  cliPath: string; // absolute path of the running entry file
-  nodePath: string; // process.execPath
-  nodeVersion: string; // process.versions.node, injectable for tests
+  packageRoot: string; // directory that holds skills/: the package root, or the embedded root of a binary
+  cliPath: string; // absolute path of src/cli.ts, dist/cli.js, or the binary
+  build: CliBuild; // set at build time; "source" when the sources run
+  runtimePath?: string; // process.execPath in source and bundle mode; unset in binary mode
+  runtimeName: "node" | "bun";
+  runtimeVersion: string; // process.versions.bun or process.versions.node, injectable for tests
   version: string; // package.json version
 }
 

@@ -2,12 +2,11 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
-import { test } from "node:test";
-import type { TestContext } from "node:test";
-import { CLI_PATH, PACKAGE_ROOT, childEnv, gitRepo, tempDir, writeFile } from "../helpers.ts";
+import { test } from "bun:test";
+import { CLI_PATH, NODE, PACKAGE_ROOT, childEnv, gitRepo, tempDir, writeFile } from "../helpers.ts";
 
-function fixture(t: TestContext, manager = "pnpm", version: string | undefined = "12.13.0", lock = "pnpm-lock.yaml") {
-  const root = tempDir(t, "omt-setup-");
+function fixture(manager = "pnpm", version: string | undefined = "12.13.0", lock = "pnpm-lock.yaml") {
+  const root = tempDir("omt-setup-");
   const project = join(root, "project");
   const git = gitRepo(root, project, {
     "package.json": JSON.stringify(version === undefined ? {} : { packageManager: `${manager}@${version}` }),
@@ -33,7 +32,8 @@ function fixture(t: TestContext, manager = "pnpm", version: string | undefined =
   };
   const cli = (args: string[], cwd = project) => run(process.execPath, [CLI_PATH, ...args], cwd);
   const setup = (dry = false) => cli(["worktree", "setup", dry ? "--dry-run" : "--yes"]);
-  const runner = () => run(process.execPath, [join(project, ".t3", "omt-worktree-setup.mjs")], root);
+  // T3 starts the generated runner with `node`, the command in t3.json.
+  const runner = () => run(NODE, [join(project, ".t3", "omt-worktree-setup.mjs")], root);
   const record = join(root, "calls.jsonl");
   const tool = (actual = version ?? "12.13.0", exit = 0, query = "isolated", queryExit = 0) => {
     const path = join(bin, manager);
@@ -68,8 +68,8 @@ function bytes(root: string): Record<string, string> {
 }
 
 // e2e U1: pnpm init, install dry run, setup, check, and doctor in a linked checkout.
-test("U1 pnpm linked checkout keeps shared state and local setup files", (t) => {
-  const f = fixture(t);
+test("U1 pnpm linked checkout keeps shared state and local setup files", () => {
+  const f = fixture();
   const linked = join(f.root, "linked");
   f.git(["worktree", "add", "-q", linked]);
   ok(f.cli(["init"], linked));
@@ -99,8 +99,8 @@ test("U1 pnpm linked checkout keeps shared state and local setup files", (t) => 
 });
 
 // e2e U1: Bun generation and the standalone runner with a controlled executable.
-test("U1 Bun generated runner installs frozen dependencies in its own checkout", (t) => {
-  const f = fixture(t, "bun", "1.3.14", "bun.lock");
+test("U1 Bun generated runner installs frozen dependencies in its own checkout", () => {
+  const f = fixture("bun", "1.3.14", "bun.lock");
   ok(f.setup());
   f.tool();
   assert.match(ok(f.runner()).out, /dependencies installed/);
@@ -112,7 +112,7 @@ test("U1 Bun generated runner installs frozen dependencies in its own checkout",
   assert.ok(!existsSync(join(f.project, "pnpm-workspace.yaml")));
 });
 
-test("U2 repository setup blocks until its current manager finishes and adapts to a manager change", (t) => {
+test("U2 repository setup blocks until its current manager finishes and adapts to a manager change", () => {
   const config = JSON.parse(readFileSync(join(PACKAGE_ROOT, "t3.json"), "utf8"));
   const setup = config.scripts.find((script: { runOnWorktreeCreate?: boolean }) => script.runOnWorktreeCreate === true);
   assert.ok(setup, "repository selects a worktree setup script");
@@ -134,7 +134,7 @@ test("U2 repository setup blocks until its current manager finishes and adapts t
   assert.ok(locks[expected].some((file) => existsSync(join(PACKAGE_ROOT, file))), "current manager has a lockfile");
   const versions: Record<string, string> = { pnpm: "12.13.0", bun: "1.3.14" };
   versions[expected] = pin?.[2] ?? engine?.version ?? versions[expected]!;
-  const f = fixture(t, expected, versions[expected], locks[expected][0]);
+  const f = fixture(expected, versions[expected], locks[expected][0]);
   writeFile(join(f.project, "package.json"), manifest);
   for (const file of Object.values(locks).flat()) {
     rmSync(join(f.project, file), { force: true });
@@ -182,9 +182,9 @@ else if (args[0] === "config") console.log("isolated");
 });
 
 // integration U1: Bun lockfiles, versions, environment, frozen arguments, and failures.
-test("U1 Bun runner validates lockfiles and versions and propagates install failures", (t) => {
+test("U1 Bun runner validates lockfiles and versions and propagates install failures", () => {
   for (const lock of ["bun.lock", "bun.lockb"]) {
-    const f = fixture(t, "bun", undefined, lock);
+    const f = fixture("bun", undefined, lock);
     writeFile(join(f.project, "package.json"), "{}");
     ok(f.setup());
     f.tool("1.3.14");
@@ -206,13 +206,13 @@ test("U1 Bun runner validates lockfiles and versions and propagates install fail
     assert.match(f.runner().err, /hoisted/);
     assert.equal(f.calls().length, count);
   }
-  const missing = fixture(t, "bun", "1.3.14", "unrelated.lock");
+  const missing = fixture("bun", "1.3.14", "unrelated.lock");
   assert.equal(missing.setup().code, 1);
   assert.match(missing.setup().err, /bun.lock or bun.lockb is missing/);
 });
 
 // integration U1: configuration, refusals, byte preservation, and dry runs.
-test("U1 setup preserves configuration and refuses unsafe or unsupported inputs", (t) => {
+test("U1 setup preserves configuration and refuses unsafe or unsupported inputs", () => {
   const managed = '{ // keep comments\n "unknown": 1, "scripts": [{"name":"Setup","command":"node .t3/omt-worktree-setup.mjs","runOnWorktreeCreate":true,"async":false}]\n}\n';
   for (const [content, code, diagnostic] of [
     [managed, 0, /created/],
@@ -221,7 +221,7 @@ test("U1 setup preserves configuration and refuses unsafe or unsupported inputs"
     ['{"scripts": [}', 1, /not valid JSONC/],
     ['{"scripts":[{"name":"Bad","command":"x","async":"false"}]}', 1, /async must be true or false/],
   ] as const) {
-    const f = fixture(t);
+    const f = fixture();
     writeFile(join(f.project, "t3.json"), content);
     const before = bytes(f.project);
     const dry = f.setup(true);
@@ -239,7 +239,7 @@ test("U1 setup preserves configuration and refuses unsafe or unsupported inputs"
     [{ packageManager: "pnpm@^12.0.0" }, "pnpm-lock.yaml", /not an exact version/],
     [{ packageManager: "pnpm@10.12.0" }, "pnpm-lock.yaml", /needs pnpm 10.12.1/],
   ] as const) {
-    const f = fixture(t);
+    const f = fixture();
     writeFile(join(f.project, "package.json"), JSON.stringify(pkg));
     writeFile(join(f.project, lock), "");
     const before = bytes(f.project);
@@ -249,7 +249,7 @@ test("U1 setup preserves configuration and refuses unsafe or unsupported inputs"
     assert.deepEqual(bytes(f.project), before);
   }
   for (const conflict of ["runner", "folder", "symlink", "config-read"]) {
-    const f = fixture(t);
+    const f = fixture();
     const outside = join(f.root, "outside");
     mkdirSync(outside);
     if (conflict === "runner") writeFile(join(f.project, ".t3", "omt-worktree-setup.mjs"), "edited\n");
@@ -276,7 +276,7 @@ test("U1 setup preserves configuration and refuses unsafe or unsupported inputs"
     ["12.13.0", "enableGlobalVirtualStore: false\n", "off"],
     ["12.13.0", "packages:\n  - packages/*\n", "missing"],
   ] as const) {
-    const f = fixture(t, "pnpm", version);
+    const f = fixture("pnpm", version);
     // An omitted version selects the lockfile without a packageManager pin.
     if (version === undefined) writeFile(join(f.project, "package.json"), "{}");
     writeFile(join(f.project, "pnpm-workspace.yaml"), workspace);
@@ -300,9 +300,9 @@ test("U1 setup preserves configuration and refuses unsafe or unsupported inputs"
 });
 
 // integration U1: pnpm runner processes and Windows command construction.
-test("U1 pnpm runner selects version flags and handles process and configuration failures", (t) => {
+test("U1 pnpm runner selects version flags and handles process and configuration failures", () => {
   for (const version of ["10.12.1", "11.10.0", "11.23.0", "12.13.0"]) {
-    const f = fixture(t, "pnpm", version);
+    const f = fixture("pnpm", version);
     ok(f.setup());
     f.tool();
     f.env.CI = "1";
@@ -332,12 +332,12 @@ test("U1 pnpm runner selects version flags and handles process and configuration
     f.tool(version, 0, "hoisted");
     assert.match(f.runner().err, /effective pnpm config selects the hoisted linker/);
   }
-  const missing = fixture(t);
+  const missing = fixture();
   ok(missing.setup());
   assert.equal(missing.runner().code, 1);
   assert.match(missing.runner().err, /not found on PATH/);
   for (const version of ["11.0.0", "11.23.0"]) {
-    const f = fixture(t);
+    const f = fixture();
     writeFile(join(f.project, "package.json"), "{}");
     writeFile(join(f.project, "pnpm-workspace.yaml"), "virtualStoreType: global\n");
     assert.equal(f.setup().code, 1);
@@ -345,7 +345,7 @@ test("U1 pnpm runner selects version flags and handles process and configuration
     assert.equal(f.runner().code, version === "11.23.0" ? 0 : 1);
     if (version === "11.0.0") assert.ok(f.calls().every((call) => call.args[0] !== "install"));
   }
-  const f = fixture(t);
+  const f = fixture();
   ok(f.setup());
   const script = join(f.root, "windows.mjs");
   writeFile(script, `import assert from "node:assert/strict";

@@ -23,7 +23,7 @@ import type { CliContext } from "../types.ts";
 import { usageError } from "../util/errors.ts";
 import { errorCode, hashDir, isSymlink, pathExists, readFileIfExists, realOrSelf } from "../util/fs.ts";
 import { plural } from "../util/output.ts";
-import { assertStableCliPath, hookCommand, planHookInstall, planHookRemoval, shimHookCommand } from "./claudeHook.ts";
+import { hookCommand, planHookInstall, planHookRemoval, shimHookCommand } from "./claudeHook.ts";
 import type { HookChange } from "./claudeHook.ts";
 import { resolveReal } from "./fsops.ts";
 import { planLinks } from "./links.ts";
@@ -31,18 +31,22 @@ import type { LinkRoot, LinkRootName, SkippedRoot } from "./links.ts";
 import { manifestText, readManifest, rebaseManifest } from "./manifest.ts";
 import type { Manifest, ManifestExcludeFile, ManifestExisting, ManifestFile } from "./manifest.ts";
 import {
+  assertInstallSource,
   excludeBlockLines,
   excludeBlockRoots,
   excludePattern,
   findGitExclude,
   isManagedShim,
+  runtimeOf,
   SCRATCH_NAME,
   scratchPattern,
   shimContent,
+  shimTarget,
   withExcludeBlock,
   withGitignoreLines,
   withoutExcludeBlocks,
 } from "./project.ts";
+import type { Runner } from "./project.ts";
 import { classifySkill, isManagedDir, listBundledSkills, readMarker } from "./skills.ts";
 
 export type TargetName = "agents" | LinkRootName;
@@ -397,6 +401,7 @@ async function planProjectInstall(
   root: string,
   gitExclude: boolean,
   from: string | undefined,
+  runner: Runner | undefined,
 ): Promise<ProjectInstallSteps> {
   const previous = plan.previous?.project;
   const previousDirs = new Set(previous?.dirs ?? []);
@@ -432,7 +437,7 @@ async function planProjectInstall(
   const shimPath = projectShimPath(root);
   const shimIsFile = await isRegularFile(shimPath);
   const shimBefore = shimIsFile ? await readFileIfExists(shimPath) : undefined;
-  const shimAfter = shimContent(ctx.nodePath, ctx.cliPath);
+  const shimAfter = shimContent(shimTarget(ctx, runner));
   const shim: FileStep = { path: shimPath, before: shimBefore, after: shimAfter, action: fileAction(shimBefore, shimAfter) };
   if (!shimIsFile && (await pathExists(shimPath))) {
     shim.action = "conflict";
@@ -491,11 +496,13 @@ async function planProjectInstall(
 export async function buildInstallPlan(ctx: CliContext, options: InstallOptions): Promise<InstallPlan> {
   const scope = options.scope ?? "user";
   const paths = scopePaths(ctx, scope);
-  if (scope === "project") assertStableCliPath(ctx.cliPath, undefined, "--project");
+  const runner = assertInstallSource(ctx.cliPath, ctx.env, scope);
   let command: string | undefined;
   if (options.hooks) {
-    assertStableCliPath(ctx.cliPath);
-    command = paths.root === undefined ? hookCommand(ctx.nodePath, ctx.cliPath) : shimHookCommand(projectShimPath(paths.root));
+    command =
+      paths.root === undefined
+        ? hookCommand(ctx.build === "binary" ? undefined : runtimeOf(ctx), ctx.cliPath)
+        : shimHookCommand(projectShimPath(paths.root));
   }
   const bundled = await listBundledSkills(ctx.packageRoot);
   const skills: SkillStep[] = [];
@@ -532,7 +539,7 @@ export async function buildInstallPlan(ctx: CliContext, options: InstallOptions)
   const { manifest: previous, from } = await loadScopeManifest(paths);
   if (previous !== undefined) plan.previous = previous;
   if (command !== undefined) plan.hook = await planHookInstall(paths.settingsPath, command);
-  if (paths.root !== undefined) plan.project = await planProjectInstall(ctx, plan, paths.root, options.gitExclude !== false, from);
+  if (paths.root !== undefined) plan.project = await planProjectInstall(ctx, plan, paths.root, options.gitExclude !== false, from, runner);
   if (options.force) {
     for (const step of replaceableSteps(plan)) {
       if (step.action === "conflict") step.action = "replace";

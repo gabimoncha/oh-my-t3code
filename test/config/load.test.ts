@@ -1,5 +1,4 @@
-import { test } from "node:test";
-import type { TestContext } from "node:test";
+import { test } from "bun:test";
 import assert from "node:assert/strict";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
@@ -7,8 +6,8 @@ import { DEFAULT_CONFIG } from "../../src/config/defaults.ts";
 import { loadConfig } from "../../src/config/load.ts";
 import { tempDir, writeFile } from "../helpers.ts";
 
-function setup(t: TestContext) {
-  const root = tempDir(t);
+function setup() {
+  const root = tempDir();
   const home = join(root, "home");
   const project = join(root, "project");
   const cwd = join(project, "src", "deep");
@@ -22,8 +21,8 @@ function setup(t: TestContext) {
   return { userPath, projectPath, write: writeFile, load };
 }
 
-test("with no files the result is the defaults, and every source is listed", async (t) => {
-  const { userPath, projectPath, load } = setup(t);
+test("with no files the result is the defaults, and every source is listed", async () => {
+  const { userPath, projectPath, load } = setup();
   const loaded = await load();
   assert.deepEqual(loaded.config, DEFAULT_CONFIG);
   assert.deepEqual(loaded.issues, []);
@@ -34,8 +33,8 @@ test("with no files the result is the defaults, and every source is listed", asy
   ]);
 });
 
-test("layers apply in order: defaults, then user, then project", async (t) => {
-  const { userPath, projectPath, write, load } = setup(t);
+test("layers apply in order: defaults, then user, then project", async () => {
+  const { userPath, projectPath, write, load } = setup();
   write(userPath, '// user\n{ "limits": { "maxParallel": 8, "maxDepth": 2, }, "roles": { "quick": null } }');
   write(projectPath, '{ "limits": { "maxParallel": 2 }, "roles": { "review": { "runtimeMode": "auto" } } }');
   const loaded = await load();
@@ -49,8 +48,8 @@ test("layers apply in order: defaults, then user, then project", async (t) => {
   );
 });
 
-test("a JSONC syntax error is one error issue, and only that file is skipped", async (t) => {
-  const { userPath, projectPath, write, load } = setup(t);
+test("a JSONC syntax error is one error issue, and only that file is skipped", async () => {
+  const { userPath, projectPath, write, load } = setup();
   write(userPath, '{ "limits": { "maxParallel": 8 } }');
   write(projectPath, '{\n  "limits": { "maxParallel": 2 }\n  "roles": {}\n}');
   const loaded = await load();
@@ -64,8 +63,8 @@ test("a JSONC syntax error is one error issue, and only that file is skipped", a
   assert.equal(loaded.sources[2]?.present, true);
 });
 
-test("validation and merge issues carry the file path as source", async (t) => {
-  const { userPath, write, load } = setup(t);
+test("validation and merge issues carry the file path as source", async () => {
+  const { userPath, write, load } = setup();
   write(userPath, '{ "version": 2, "roles": { "new-one": { "access": "edit" } }, "limits": { "maxDepth": 9 } }');
   const loaded = await load();
   assert.deepEqual(
@@ -79,14 +78,14 @@ test("validation and merge issues carry the file path as source", async (t) => {
   assert.deepEqual(loaded.config, DEFAULT_CONFIG);
 });
 
-test("the project config is found from a nested working directory", async (t) => {
-  const { projectPath, write, load } = setup(t);
+test("the project config is found from a nested working directory", async () => {
+  const { projectPath, write, load } = setup();
   write(projectPath, '{ "roles": { "explore": null } }');
   assert.equal((await load()).config.roles.explore, undefined);
 });
 
-test("an I/O error other than a missing file throws", async (t) => {
-  const { userPath, load } = setup(t);
+test("an I/O error other than a missing file throws", async () => {
+  const { userPath, load } = setup();
   mkdirSync(userPath, { recursive: true });
   await assert.rejects(load());
 });

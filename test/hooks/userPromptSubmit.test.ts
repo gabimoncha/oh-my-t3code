@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { test } from "bun:test";
 import assert from "node:assert/strict";
 import { run } from "../../src/commands/hook.ts";
 import { detectUltrawork, runUserPromptSubmitHook, ultraworkContext } from "../../src/hooks/userPromptSubmit.ts";
@@ -99,8 +99,8 @@ test("ultraworkContext points at omt-ulw step 1, the full loop, and evidence, wi
   assert.match(text, /edit no code/);
 });
 
-test("the hook prints one JSON line on a match", async (t) => {
-  const ctx = fakeContext({ root: tempDir(t), stdin: JSON.stringify({ prompt: "ulw add a flag", session_id: "s" }) });
+test("the hook prints one JSON line on a match", async () => {
+  const ctx = fakeContext({ root: tempDir(), stdin: JSON.stringify({ prompt: "ulw add a flag", session_id: "s" }) });
   assert.equal(await runUserPromptSubmitHook(ctx), 0);
   const out = ctx.out();
   assert.ok(out.endsWith("\n"));
@@ -111,8 +111,8 @@ test("the hook prints one JSON line on a match", async (t) => {
   assert.equal(ctx.err(), "");
 });
 
-test("the hook prints nothing and exits 0 on no match, empty input, or bad input", async (t) => {
-  const root = tempDir(t);
+test("the hook prints nothing and exits 0 on no match, empty input, or bad input", async () => {
+  const root = tempDir();
   for (const stdin of ["", "  \n", "not json", "null", "[]", "42", "{}", '{"prompt":3}', '{"prompt":"add a flag"}']) {
     const ctx = fakeContext({ root, stdin });
     assert.equal(await runUserPromptSubmitHook(ctx), 0, stdin);
@@ -128,16 +128,16 @@ test("the hook prints nothing and exits 0 on no match, empty input, or bad input
   assert.equal(failing.out(), "");
 });
 
-test("hook rejects a missing or unknown hook name with exit code 2", async (t) => {
-  const root = tempDir(t);
+test("hook rejects a missing or unknown hook name with exit code 2", async () => {
+  const root = tempDir();
   for (const argv of [[], ["pre-tool-use"], ["--bogus"]]) {
     const ctx = fakeContext({ root, argv });
     await assert.rejects(run(ctx), omtExit(2));
   }
 });
 
-test("hook user-prompt-submit ignores extra arguments and exits 0", async (t) => {
-  const root = tempDir(t);
+test("hook user-prompt-submit ignores extra arguments and exits 0", async () => {
+  const root = tempDir();
   for (const argv of [["user-prompt-submit", "--bogus"], ["user-prompt-submit", "extra", "-x"]]) {
     const ctx = fakeContext({ root, argv, stdin: JSON.stringify({ prompt: "ulw fix it" }) });
     assert.equal(await run(ctx), 0, argv.join(" "));
@@ -145,8 +145,8 @@ test("hook user-prompt-submit ignores extra arguments and exits 0", async (t) =>
   }
 });
 
-test("omt hook user-prompt-submit works as a child process", (t) => {
-  const root = tempDir(t);
+test("omt hook user-prompt-submit works as a child process", () => {
+  const root = tempDir();
   const spawn = (input: string) => spawnOmt(["hook", "user-prompt-submit"], { root, input });
   const hit = spawn('{"prompt":"ulw add a flag"}');
   assert.equal(hit.code, 0);
