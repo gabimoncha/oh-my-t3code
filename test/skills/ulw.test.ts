@@ -128,7 +128,7 @@ test("omt-ulw drops a finding only when its case cannot happen, and reopens done
   assert.match(fix, /A cycle starts at the unit's first dispatch, or at a reopen/);
   assert.match(fix, /the table and `maxReviewRounds` use the round within the cycle/);
   assert.match(fix, /It is round 1 of a new cycle, with the next `--round` value after the unit's last round\./);
-  assert.match(fix, /\| `maxReviewRounds` \(default 3\) \| a fix \| stop \|/);
+  assert.match(fix, /\| `maxReviewRounds` \(default 4\) \| a fix \| stop \|/);
   assert.match(section(readSkill("omt-ulw"), "### 10. "), /A failing final check reopens the unit that owns the code/);
 });
 
@@ -312,7 +312,7 @@ test("delegation pins saved dispatch, fast mode, device routing, locks, and stal
   assert.match(text, /With `fast: false`, the CLI adds no fast option\./);
   assert.match(text, /If fast mode is unavailable, keep the target and report the CLI note\./);
   assert.match(text, /See \[roles\.md\]\(roles\.md#fast-mode\) for capability and manual routing rules\./);
-  assert.match(text, /The omt config sets the limits \(defaults in parentheses\): `maxParallel` \(6\), `maxTasksPerRun` \(24\), `maxDepth` \(1\), `maxReviewRounds` \(3\)\./);
+  assert.match(text, /The omt config sets the limits \(defaults in parentheses\): `maxParallel` \(6\), `maxTasksPerRun` \(24\), `maxDepth` \(1\), `maxReviewRounds` \(4\)\./);
   assert.match(text, /Read the profile's limits with `omt profile show --plan <slug> --json`\./);
   assert.match(text, /A plan header's `max-parallel` can only lower the profile's `maxParallel`\./);
   assert.match(text, /Read the selected profile's values as above\./);

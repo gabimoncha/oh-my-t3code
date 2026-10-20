@@ -28,6 +28,8 @@ function findTool(name: string, fallback: string): string {
 }
 
 export const GIT = findTool("git", "/usr/bin/git");
+// The generated worktree setup runner runs with `node`. Without Node, the tests run it with Bun.
+export const NODE = findTool("node", process.execPath);
 
 // Creates a temp directory that the test runner removes after the test, even when it fails.
 export function tempDir(prefix = "omt-test-"): string {

@@ -34,7 +34,7 @@ test("compiled host binary installs matching skills and hooks, passes doctor, an
   });
   mkdirSync(env.HOME!, { recursive: true });
   const project = join(root, "project");
-  gitRepo(homeRoot, project);
+  gitRepo(homeRoot, project, { "package.json": JSON.stringify({ packageManager: "bun@1.4.3" }), "bun.lock": "" });
 
   function run(command: string, args: string[], cwd = project, timeout = 30_000): string {
     const result = spawnSync(command, args, { cwd, env, encoding: "utf8", timeout });
@@ -72,4 +72,9 @@ test("compiled host binary installs matching skills and hooks, passes doctor, an
   const roles = run(shim, ["roles"]);
   assert.match(roles, /^ROLE\s+STATUS\s+TARGET\s+ACCESS\s+MODE\s+CROSS$/m);
   assert.match(roles, /^execute\s+unverified\s+/m);
+
+  // The binary embeds the worktree setup runner, so setup writes its exact bytes with no templates/ folder.
+  run(shim, ["worktree", "setup", "--yes"]);
+  assert.deepEqual(readFileSync(join(project, ".t3", "omt-worktree-setup.mjs")), readFileSync(join(PACKAGE_ROOT, "templates", "worktree-setup.mjs")));
+  assert.match(run(shim, ["worktree", "check"]), /^PASS\s+setup\s/m);
 }, 120_000);

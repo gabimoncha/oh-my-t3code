@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "bun:test";
-import { gitRepo } from "../helpers.ts";
+import { gitRepo, PACKAGE_ROOT } from "../helpers.ts";
 import { releaseRegistry, run, tools } from "./registry.ts";
 
 test("npm, pnpm, and bun install the release as a dev dependency and run install and doctor", async () => {
@@ -33,5 +33,11 @@ test("npm, pnpm, and bun install the release as a dev dependency and run install
     assert.doesNotMatch(install, /^FAIL\b/m);
     const doctor = await run(join(project, ".omt", "bin", "omt"), ["doctor", "--project"], project, env);
     assert.doesNotMatch(doctor, /^FAIL\b/m);
+    if (manager !== "npm") {
+      // The bundle inlines the worktree setup runner, so setup writes its exact bytes with no templates/ folder.
+      await run(join(project, ".omt", "bin", "omt"), ["worktree", "setup", "--yes"], project, env);
+      const runnerFile = readFileSync(join(project, ".t3", "omt-worktree-setup.mjs"), "utf8");
+      assert.equal(runnerFile, readFileSync(join(PACKAGE_ROOT, "templates", "worktree-setup.mjs"), "utf8"), `${manager} must write the bundled runner`);
+    }
   }
 }, 240_000);

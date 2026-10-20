@@ -49,6 +49,10 @@ Step 0 checks whether the current branch is behind the default branch. A worktre
    - In `plan` mode, only report the count.
    - In `default` mode, when `git status --porcelain` prints nothing and `git merge-base --is-ancestor HEAD <default>` succeeds, run `git merge --ff-only <default>` and report it. Otherwise report the count and ask the user how to continue.
 
+## Worktree setup
+
+A worktree thread needs the project's T3 setup script to install dependencies. On the first run in a project, check it with `omt worktree check` and follow [worktrees.md](worktrees.md). A `t3.json` file is not proof that T3 runs it.
+
 ## `delegate_task`
 
 | Field | Value |
@@ -95,7 +99,7 @@ After a lost response, call `t3_thread_list` with `includeSubagents` and look fo
 
 ## Limits
 
-T3 sets no limit on concurrent tasks or nesting depth, and children can delegate again. The omt config sets the limits (defaults in parentheses): `maxParallel` (6), `maxTasksPerRun` (24), `maxDepth` (1), `maxReviewRounds` (3). Read the profile's limits with `omt profile show --plan <slug> --json`. A plan header's `max-parallel` can only lower the profile's `maxParallel`.
+T3 sets no limit on concurrent tasks or nesting depth, and children can delegate again. The omt config sets the limits (defaults in parentheses): `maxParallel` (6), `maxTasksPerRun` (24), `maxDepth` (1), `maxReviewRounds` (4). Read the profile's limits with `omt profile show --plan <slug> --json`. A plan header's `max-parallel` can only lower the profile's `maxParallel`.
 
 Before each dispatch, run `omt ledger stats --plan <slug>`. Dispatch only while it reports `can dispatch: yes`. The command compares `active` with `maxParallel` and `dispatched` with `maxTasksPerRun` for you. With `--plan`, a `max-tasks` key in the plan header replaces `maxTasksPerRun` for that plan. `active` counts dispatched entries that no terminal entry has closed yet, so record every result ([results.md](results.md#recording)). Without the CLI, count the open task ids in the plan's log and compare the counts with the limits yourself. Every brief states the child's depth; at `maxDepth` the child does the work itself.
 

@@ -17,7 +17,7 @@ This page is the reference for the code, the skills, and the tests. [`design.md`
 - Comments: only for a non-obvious reason that the code cannot show.
 - File writes: atomic, except the ledger and lock metadata (section 5.11). Write a temp file in the same directory, then rename. Create parent directories as needed. When the target exists, the temp file gets the target's mode before the rename, so a 0600 file stays 0600. Each ledger entry is one `appendFile` call, so concurrent appends do not overwrite each other.
 - When the target of a write is a symlink, write next to its real path (`fs.realpath`) and rename onto the real path, so the symlink stays a symlink.
-- The omt CLI makes no network calls and sends no telemetry. Build scripts may download Bun cross-compile runtimes.
+- The omt CLI makes no network calls and sends no telemetry. Build scripts may download Bun cross-compile runtimes. The CLI starts no package manager. Only the generated worktree setup runner (section 5.12) starts one, when T3 runs it.
 
 `package.json` scripts:
 
@@ -56,8 +56,10 @@ src/
   lock/                  lock.ts
   install/               skills.ts, links.ts, claudeHook.ts, manifest.ts, plan.ts, apply.ts, doctor.ts, confirm.ts, fsops.ts, project.ts
   hooks/                 userPromptSubmit.ts
+  worktree/              runner.ts, runnerText.ts, check.ts, setup.ts (section 5.12)
   commands/              one file per command, each exports `run: CommandRun`
                          profile.ts and lock.ts add profile and lock commands
+                         worktree.ts adds the worktree command
                          shared.ts holds the helpers that commands share and exports no `run`
 scripts/
   build-schema.ts        writes schema/omt.schema.json from src/config/schema.ts
@@ -65,6 +67,9 @@ scripts/
   release.ts             writes the npm packages, archives, and SHA256SUMS (section 17)
 schema/
   omt.schema.json        JSON Schema for config files
+templates/
+  worktree-setup.mjs     the standalone worktree setup runner (section 5.12)
+  worktree-setup.d.mts   its types for src/worktree/runner.ts
 skills/
   omt/                   router skill and shared references
   omt-ulw/ omt-plan/ omt-design/ omt-review/ omt-research/ omt-swarm/ omt-loop/ omt-show/
@@ -383,6 +388,8 @@ Section 5 says how `createContext()` sets `build`, `packageRoot`, `cliPath`, and
 
 Code that lists the result kinds uses `RESULT_KINDS`.
 
+`src/types.ts` also holds the worktree report types of section 5.12: `PackageManagerName`, `WorktreeManager`, `WorktreeLinker`, `WorktreeStore`, `WorktreeSetupStatus`, `WorktreeSetup`, `WorktreeCheck`, and `WorktreeReport`. `omt worktree check --json` prints a `WorktreeReport`.
+
 `src/util/errors.ts` defines the one error class:
 
 ```ts
@@ -408,6 +415,7 @@ export class OmtError extends Error {
 | `userRolesDir(env, homedir)` | `<configDir>/roles` |
 | `mainCheckoutOf(root)` | the main checkout of a linked worktree. When `<root>/.git` is a file whose first line is `gitdir: <path>`, it resolves `<path>` against `root`, reads `<gitdir>/commondir` (relative or absolute, resolved against `<gitdir>`), and returns `dirname(<common dir>)` when `basename(<common dir>)` is `.git` and the repository is not bare; `undefined` for a normal checkout (`.git` is a directory), a submodule, a bare or unknown layout, or any read error. It reads `core.bare` in the plain form that git writes: the repository is bare when the `[core]` section of `<common dir>/config` sets `bare` to true (`true`, `yes`, `on`, `1`, or no value). Hand-edited forms, such as quoted values, repeated keys, or an entry on the section line, are not supported. A missing `config` counts as not bare. So a bare repository stored at `<repo>/.git` gives `undefined` |
 | `findProjectRoot(cwd)` | the nearest ancestor of `cwd` (or `cwd` itself) that contains `.omt` or `.git` (a directory or a file); when that directory has a `.git` file and `mainCheckoutOf` returns a main checkout, the main checkout, whether or not it has `.omt` yet; `cwd` when none exists |
+| `findCheckoutRoot(cwd)` | the nearest ancestor of `cwd` (or `cwd` itself) that contains `.git` (a directory or a file); `undefined` when none exists. Unlike `findProjectRoot`, a linked worktree stays itself, because worktree setup files belong to the checkout's branch |
 | `shadowedWorktreeState(cwd)` | `{ worktree, main }` when the directory that `findProjectRoot` stops at is a linked worktree whose own `.omt/plans` holds a regular file whose name ends in `.md`, or whose own `.omt/ledger.jsonl` is a regular file; else `undefined` |
 | `omtDir(root)` | `<root>/.omt` |
 | `projectConfigPath(root)` | `<root>/.omt/config.jsonc` |
@@ -426,8 +434,11 @@ export class OmtError extends Error {
 | `claudeSettingsPath(env, homedir)` | `<claudeConfigDir>/settings.json` |
 | `t3HomeDir(env, homedir)` | `$T3CODE_HOME`, else `<home>/.t3` |
 | `t3SettingsPath(env, homedir)` | `<t3HomeDir>/userdata/settings.json` |
+| `t3ProjectFilePath(root)` | `<root>/t3.json` |
+| `worktreeRunnerPath(root)` | `<root>/.t3/omt-worktree-setup.mjs` |
+| `pnpmWorkspacePath(root)` | `<root>/pnpm-workspace.yaml` |
 
-`mainCheckoutOf`, `findProjectRoot`, and `shadowedWorktreeState` are the only functions that read the file system. None of them starts a `git` process.
+`mainCheckoutOf`, `findProjectRoot`, `findCheckoutRoot`, and `shadowedWorktreeState` are the only functions that read the file system. None of them starts a `git` process.
 
 All worktrees of one repository share one `.omt` in the main checkout. It holds the config, the plans, the ledger, the evidence, and the shim. So a build thread in one worktree finds the plan that a planning thread wrote in another. A worktree's own `.omt` never wins. Git writes `gitdir:` as a real path. `findProjectRoot` rebuilds the main checkout under the nearest ancestor of the worktree whose real path holds it, so a cwd in a worktree and a cwd in the main checkout give the same root string, such as `/var/...` and not `/private/var/...`.
 
@@ -457,6 +468,7 @@ Argument parsing uses `node:util` `parseArgs` with `strict: true` and `allowPosi
 | `lock` | `omt lock run <name> [--wait <seconds>] -- <command> [args...]`, `omt lock list` |
 | `paths` | `omt paths [--json] [--root \| --plans \| --ledger \| --evidence \| --config \| --shim]` |
 | `visual` | `omt visual [--plan <slug\|file.md>] [--spec <file\|->] [--out <path\|->] [--json]` |
+| `worktree` | `omt worktree [check] [--json]`, `omt worktree setup [--dry-run] [--yes]` |
 | `hook` | `omt hook user-prompt-submit` |
 
 In every flag that takes a file, `-` means standard input.
@@ -482,6 +494,8 @@ Build. `bun run build` runs `bun scripts/build.ts [--bundle] [--binary] [--targe
 - `<outdir>/cli.js` comes from `bun build --target=node --define OMT_BUILD='"bundle"' src/cli.ts`. `bun build` keeps the source shebang, `#!/usr/bin/env bun`, so the script replaces the first line with `#!/usr/bin/env node`. The file then has exactly one shebang. The script sets its mode to 0755.
 - `<outdir>/bin/omt` comes from `bun build --compile --minify --asset ./skills --define OMT_BUILD='"binary"' src/cli.ts`. The skills land at `/$bunfs/root/skills`. With `--target`, each target goes to `<outdir>/bin/<target>/omt`, and a cross-compile downloads the Bun runtime of that target.
 
+Both outputs inline the worktree setup runner, its module and its text (section 5.12), so neither needs a `templates/` folder.
+
 ### 5.1 `omt config`
 
 - `show` (the default subcommand) prints the merged config as JSON, before the selected profile is applied (section 6.7). `--defaults` prints the built-in defaults instead. Config issues go to stderr, and the command still exits 0.
@@ -499,7 +513,7 @@ Creates, in the project root, only what is missing:
 
 When `.omt/.gitignore` exists and lacks some of these lines, `init` appends the missing lines and keeps every other line. An older omt wrote fewer lines, so this brings an existing project up to date. A symlinked `.gitignore` is updated through its target, and a dangling symlink is left alone.
 
-It prints one line per path: `create <path>`, `update <path>`, or `exists <path>`. It never overwrites the config, and it never removes a line.
+It prints one line per path: `create <path>`, `update <path>`, or `exists <path>`. It never overwrites the config, and it never removes a line. Then it prints one line about the worktree setup of the current checkout, `worktree setup: <status> <message>`, from the `summary` of section 5.12. A read error in that check gives a `WARN` line and does not fail `init`.
 
 ### 5.3 `omt roles` and `omt route`
 
@@ -740,6 +754,106 @@ Each lock folder gets a `.gitignore` with `*`. `omt init` also adds `locks/` to 
 
 `omt lock list` opens each regular `*.lock` file in name order and tries a zero-second lock on that new open file. It prints `<file> free` or `<file> held <holder JSON>`. Missing holder data leaves out the JSON. An absent lock folder gives no output and exits 0. With an existing folder and neither lock tool, it exits 1 with `no flock or lockf on PATH; cannot list locks`. There is no clear or takeover command.
 
+### 5.12 `omt worktree`
+
+`omt worktree` checks and creates the T3 setup script that installs a checkout's dependencies when T3 creates a worktree. It supports Bun and pnpm, and it selects a global virtual store, so the worktrees of one machine share installed package directories. Each checkout keeps its own `node_modules` links.
+
+Root. The command works on `findCheckoutRoot(cwd)`, the checkout of the current directory, not on `findProjectRoot(cwd)`. In a linked worktree the setup files go into that worktree, while `.omt` stays in the main checkout (section 4). Without `.git` above `cwd`, the report inspects `findProjectRoot(cwd)` and setup refuses.
+
+Shared code. `templates/worktree-setup.mjs` is the runner that setup copies to `<root>/.t3/omt-worktree-setup.mjs`. It uses only Node built-ins and runs without omt. `src/worktree/runner.ts` imports the same file as a module and uses its exports, `detectManager(root)`, `checkLinker(root, manager, { env, home })`, `persistentGlobalStore(root)`, and `PNPM_WORKSPACE_CONTENT`, so a check and a runner agree. It declares those exports as `RunnerModule`, and `templates/worktree-setup.d.mts` types them. It gets the runner's text from the Bun macro `runnerText()` in `src/worktree/runnerText.ts`, imported `with { type: "macro" }`: Bun reads the file when it transpiles or bundles `runner.ts` and inlines the text. So in every run mode of section 5 the module and the text come from the build, the npm bundle and the binary carry the runner, and no mode reads a `templates/` folder at run time. The runner starts the install only when its own file name ends in `.mjs` and its path is `process.argv[1]`. In `dist/cli.js` or a binary, the inlined runner's file is the CLI itself, so the CLI never starts a setup. `node --check templates/worktree-setup.mjs` must pass, because `bun check` does not check it.
+
+Package manager detection (`detectManager`):
+
+- It reads `package.json` (a byte order mark is allowed). Invalid JSON or a value that is not an object blocks with `fix package.json`.
+- Declarations: `packageManager` (`<name>@<version>`, with an optional `+<integrity>` suffix) and `devEngines.packageManager` (an object, or a list with one entry, with `name` and an optional `version`). Two declarations must name the same manager, and two exact versions must be equal.
+- A declared `npm`, `yarn`, or other manager is unsupported; omt never replaces it. A declared version must be exact (`<major>.<minor>.<patch>`). A range or a tag blocks generation with a manual-setup hint. omt has no semver implementation.
+- An exact declared version below the minimum blocks: Bun 1.3.14, pnpm 10.12.1.
+- The lockfile of the selected manager must exist: `pnpm-lock.yaml` for pnpm, `bun.lock` or `bun.lockb` for Bun. The two Bun formats are one manager.
+- Without a declaration, the lockfiles decide. One supported manager selects it. Both pnpm and Bun lockfiles block as ambiguous. Only `package-lock.json`, `npm-shrinkwrap.json`, or `yarn.lock` is unsupported. A `package.json` without a lockfile blocks. No `package.json` and no lockfile gives `status: "none"`: there is nothing to install.
+
+Linker check (`checkLinker`). A global virtual store needs the isolated linker. The check reads explicit settings in their ordinary scalar forms, plain or quoted, with comments:
+
+- pnpm: the `npm_config_node_linker` and `pnpm_config_node_linker` environment variables (any case), `node-linker` in `<root>/.npmrc` outside any section, and a top-level `nodeLinker:` in `<root>/pnpm-workspace.yaml`.
+- Bun: `linker` in the `[install]` table of `<root>/bunfig.toml`, or a top-level `install.linker`. Without a project setting, the global bunfig, `$XDG_CONFIG_HOME/.bunfig.toml` then `<home>/.bunfig.toml`.
+- Comments: in `.npmrc` and `pnpm-workspace.yaml` a `#` (and in `.npmrc` a `;`) starts a comment only at the line start or after whitespace. In `bunfig.toml` a `#` outside a string always starts a comment, so `[install]# note` and `linker = "hoisted"#note` are read. A table header that names `install` in another form, such as `[[install]]`, is `unverified`.
+- `isolated` passes. No setting passes, and the setup selects `isolated`. Another value is `incompatible`. A setting that the check cannot read, such as a flow mapping, an inline table, an environment reference, or a multi-line value, is `unverified`. A config file that exists but cannot be read (for example `EACCES`), `.npmrc` and `pnpm-workspace.yaml` for pnpm or the local or global bunfig for Bun, is also `unverified`, with the action to make the file readable. `checkLinker` returns this result and never throws, so the check still prints its report and the runner exits 1 before the install. Both block generation and execution. omt never changes a config file. It does not claim to read arbitrary TOML or YAML.
+
+Persistent store (`persistentGlobalStore`, pnpm only). pnpm checks `node_modules` before `pnpm run` and `pnpm exec` and re-installs it when its settings differ from the install. pnpm 12.13.0 was observed to turn a global-store install from command-line flags back into a local store this way. A top-level setting in `pnpm-workspace.yaml` keeps the global store. pnpm 10.12.1 and later read `enableGlobalVirtualStore: true`. pnpm 11.23.0 and later also read `virtualStoreType: global`, and when both keys are set, `virtualStoreType` wins (pnpm 12.13.0 was observed to resolve `virtualStoreType: project` with `enableGlobalVirtualStore: true` to a project store). pnpm below 11.23.0 ignores `virtualStoreType`. So `persistentGlobalStore(root, version)` judges the file for an exact pnpm version: the check passes the exact declared version, and the runner passes the installed version after its probe. The result (`WorktreeStore`) has a `status`:
+
+| Status | Meaning |
+| --- | --- |
+| `set` | the file selects the global store |
+| `no-file` | there is no `pnpm-workspace.yaml`; `omt worktree setup` creates it with the one line `enableGlobalVirtualStore: true` (`PNPM_WORKSPACE_CONTENT`), which every supported pnpm version reads |
+| `missing` | the file has no setting that this pnpm version reads, for example only `virtualStoreType` for pnpm below 11.23.0 |
+| `off` | the key that this pnpm version uses selects another store: `virtualStoreType` other than `global` from 11.23.0, else `enableGlobalVirtualStore` other than `true` |
+| `version-dependent` | there is no exact declared version, and exactly one of pnpm below 11.23.0 and pnpm 11.23.0 or later selects the global store, for example only `virtualStoreType: global`, or two keys that disagree. When neither selects it, for example only `virtualStoreType: project`, the status is `off` (or `missing` when neither result is `off`), and the action is a configuration change, not a version pin |
+| `unverified` | the file cannot be read, is a dangling symlink, or sets the value in a form that the check cannot read |
+
+`missing`, `off`, and `unverified` keep the file and give the manual action: add the top-level line `enableGlobalVirtualStore: true`, or `virtualStoreType: global` with pnpm 11.23.0 or later (for a version below 11.23.0, only `enableGlobalVirtualStore: true`). `version-dependent` gives the action to pin an exact pnpm version, or to set `enableGlobalVirtualStore: true` with no `virtualStoreType` or `virtualStoreType: global`. Any status but `set` is `WARN store` in the check (`INFO` for a custom setup, which omt does not judge), so the check never reports a version-dependent key as verified. The runner stops before the install on any status but `set`, and decides a `version-dependent` file from the installed version.
+
+`t3.json` validation follows the T3 project file schema (`packages/contracts/src/t3ProjectFile.ts`): `$schema` a string; `iconPath` a non-empty string of at most 512 characters; `defaultThreadEnvMode` `local` or `worktree`; `worktreeSubmodules` `recursive`, `top-level`, or `none`; `scripts` a list of at most 50 objects, each with a non-empty `name` and `command`, an optional `icon` from `play`, `test`, `lint`, `configure`, `build`, `debug`, booleans `runOnWorktreeCreate`, `runOnSettle`, `async`, `autoOpenPreview`, and a non-empty `previewUrl`. Unknown keys are allowed. The file is parsed with the JSONC parser (section 7). The setup script is the first script with `runOnWorktreeCreate: true`. `async: false` makes T3 wait for it before the agent starts. A missing or `true` `async` gives a warning.
+
+Setup states (`WorktreeSetup.status`):
+
+| Status | Meaning |
+| --- | --- |
+| `not-needed` | no `t3.json`, and `detectManager` found nothing to install |
+| `missing` | no `t3.json`: the repository has no setup script. A saved or inherited T3 setup can still exist, so the message says that activation is unverified, not that worktrees get no install. `runner` is set as for `managed` |
+| `invalid` | `t3.json` cannot be read or parsed, or breaks the schema; `issues` lists each problem |
+| `no-setup` | `t3.json` has no `runOnWorktreeCreate` script |
+| `managed` | the setup command is `node .t3/omt-worktree-setup.mjs`; `runner` is `current` (equal to the bundled runner), `different` (outdated or edited), `missing`, `linked` (the runner or `.t3` is a symlink, also one inside the checkout or a dangling one), or `occupied` (`.t3` exists and is not a folder; the check inspects `.t3` before the runner, so it reports this and does not fail) |
+| `custom` | any other setup command. omt keeps it and cannot verify that it installs dependencies or uses a global store |
+
+`omt worktree check [--json]` (the default subcommand) prints one line per check, `<STATUS>  <id>  <message>`, then `next: <action>` when there is one. The ids are `checkout` (the root, and whether it is a main checkout or a linked worktree of `<main>`), `manager`, `linker` and `store` (when they apply), `setup`, and `activation`. The statuses are those of `omt doctor`. Problems are `WARN`; nothing in this command is `FAIL`. It exits 0. `--json` prints the `WorktreeReport`. Its `complete` is true when the setup is `managed`, the runner is `current`, and for pnpm the store is `set`. Its `summary` is one `worktree` check: `INFO` when no setup is needed or a custom setup waits for completion, `PASS` when the managed setup is current, waits, and every check passes, else `WARN` with the next action. When the pnpm store is not `set` (and the setup is not custom or not needed), the summary message also holds the store message, so `init`, `install --project`, and `doctor --project` show it after the setup line. The next action names the store step: create the file with `omt worktree setup`, or the manual line to add. `--dry-run` or `--yes` with `check` is a usage error (exit 2), and so is an unknown subcommand.
+
+The check starts no process. It reads no T3 database or settings. `activation` always says: T3 runs a setup script only from the project's saved scripts, not from `t3.json` at worktree creation; commit `t3.json` and `.t3/` (and `pnpm-workspace.yaml` for pnpm) on the branch that new worktrees start from, then import Setup in T3 Project Settings; activation is unverified here.
+
+`omt worktree setup [--dry-run] [--yes]` plans, prints, and asks with the install confirmation flow (section 14.3, steps 3 and 4). `--json` with `setup` is a usage error. The plan:
+
+- No `.git` at or above `cwd`: exit 1. The root is the home directory: exit 2. The check compares the real paths of the root and the home directory, so a symlinked alias of the home directory is refused too.
+- `invalid`: exit 1 with the issues; `no-setup`: exit 1 with a hint that holds the script to add. omt never rewrites an existing `t3.json`, so comments and unknown keys stay.
+- `custom`: the plan shows `keep <t3.json>  (custom setup script "<command>")`, prints the setup message and the activation note, and exits 0.
+- A `different` runner: exit 1 with a hint to compare and update it by hand, or delete it and run again. omt never replaces it.
+- A `linked` runner: exit 1. Node resolves symlinks in a script path, so a runner reached through a symlinked `.t3` or runner file computes its checkout root from the link target and installs in another folder. The hint says to replace the link with a real folder and file.
+- An `occupied` runner: exit 1 with `<.t3> exists and is not a folder` and a hint to move it away. Nothing is written, also with `--dry-run`.
+- Otherwise `t3.json` is `create` (with no `t3.json`) or `keep` (`managed`), and the runner is `create` (absent) or `unchanged` (current). A missing runner is created also when a hand-edited `t3.json` runs the managed command, because that write changes no existing file.
+- For pnpm, `pnpm-workspace.yaml` is a third step: `create` for `no-file` (with the reason `keeps the global virtual store after pnpm run and pnpm exec`), `unchanged` for `set`, and `keep  (omt never changes an existing file)` for `missing`, `off`, or `unverified`. The last case makes the plan incomplete: the command prints `Setup is incomplete: <store message>; <action>` and the other steps still apply.
+- When the plan creates a file and a blocker exists (no checkout, the home directory, a blocked manager, or an incompatible or unverified linker), exit 1 with the blockers. Preflight, before any write: for every new file, each folder between the checkout root and the file is absent or a real folder. A symlink there, also a dangling one or one that stays inside the checkout, or a non-folder, exits 1. The new file's own path must be free. A refusal leaves every file unchanged.
+- With no `create`, it prints `Everything is up to date.` and the activation note, and exits 0. When the plan is incomplete, it prints the `Setup is incomplete` line instead of `Everything is up to date.`, then the activation note, and exits 1. A custom setup prints its setup message instead. `--dry-run` prints the `Setup is incomplete` line when it applies, then `Dry run: nothing was written.`, and exits 0. This includes a plan with no `create` that is incomplete: the dry run prints the plan, the `Setup is incomplete` line, the activation note, and the dry-run line, and exits 0. A complete plan with no `create` prints `Everything is up to date.` with or without `--dry-run`.
+- Apply: first the whole preflight runs again, because a folder can become a symlink after the plan. Then each file is written atomically (section 1), each after another check of its folders and that its path is still free. It prints `created  <path>` per file, the `Setup is incomplete` line when it applies, and the numbered next steps: when incomplete, first make the `pnpm-workspace.yaml` change; commit `t3.json`, the runner, and for pnpm `pnpm-workspace.yaml` on the branch that new worktrees start from; import Setup in T3 Project Settings while keeping inherited scripts; and run `omt worktree check` in a new worktree. It exits 1 when the plan is incomplete, else 0.
+
+The generated `t3.json`:
+
+```json
+{
+  "$schema": "https://t3.codes/schema/t3.json",
+  "scripts": [
+    {
+      "name": "Setup",
+      "command": "node .t3/omt-worktree-setup.mjs",
+      "icon": "configure",
+      "runOnWorktreeCreate": true,
+      "async": false
+    }
+  ]
+}
+```
+
+The runner. T3 starts it in the new worktree. It works on the checkout two levels above its own file, not on the caller's cwd, and detects the manager again on each run, so an intentional manager switch never runs a stale choice. Node gives the runner its real path, so when the real path of the folder two levels above `process.argv[1]` differs from that checkout (a symlinked `.t3` or runner), it exits 1 before any step and installs nothing:
+
+1. `detectManager`. `none` prints `nothing to do` and exits 0. A blocked result exits 1 with its action.
+2. `checkLinker` with the process environment and home directory. `incompatible` or `unverified` exits 1. For pnpm, `persistentGlobalStore` with the exact declared version too: any status but `set` or `version-dependent` exits 1 with `nothing was installed` and the action, before the probe.
+3. Layout. When `node_modules` holds entries and its layout needs a conversion, it exits 1 and asks the user to review and remove that checkout's `node_modules`. For pnpm: no `node_modules/.modules.yaml`, a `nodeLinker` other than `isolated`, or a `virtualStoreDir` inside `node_modules`. For Bun: no `node_modules/.bun`. It never purges `node_modules`, never sets `CI` to skip a prompt, and never waits for input.
+4. Environment for every child: `COREPACK_ENABLE_NETWORK=0`, `npm_config_manage_package_manager_versions=false`, `npm_config_package_manager_strict_version=true`, and `pnpm_config_pm_on_fail=error`, so neither Corepack nor pnpm downloads or switches a version. A shim outside these tools can have its own policy.
+5. Probe: `<manager> --version` in the checkout, stdin closed, a 60-second limit. A launch failure or a non-zero exit stops with the output. The version must be at least the minimum, and equal to an exact declared version. The runner never installs or upgrades a tool.
+6. pnpm only: `pnpm config get node-linker`, with the probe's limits. A launch failure, a timeout, or a non-zero exit stops with its output, because the effective linker is then unknown. A value other than empty, `undefined`, or `isolated` stops. Then `persistentGlobalStore` with the installed version: any status but `set` exits 1 with `nothing was installed` and the action. With `CI` set and pnpm below 11.23.0, a warning says that this pnpm can turn off the global store in CI.
+7. Install, with stdin closed and stdout and stderr inherited, so pnpm refuses a purge that needs a terminal:
+   - Bun: `BUN_INSTALL_GLOBAL_STORE=1 bun install --linker isolated --frozen-lockfile`.
+   - pnpm: `pnpm install --frozen-lockfile --config.node-linker=isolated`, plus `--config.virtual-store-type=global` from 11.23.0 or `--config.enable-global-virtual-store=true` below it, plus `--pm-on-fail=error` from 11.0.0 or `--config.manage-package-manager-versions=false --config.package-manager-strict-version=true` below it.
+8. A launch error or a signal exits 1. A non-zero install exit returns that code. Success prints `dependencies installed`.
+
+The runner sets no global configuration and no store or cache path, so the user's store and cache settings apply. Package managers may keep patched, trusted, or local packages out of the global store. On Windows, a `.exe` on `PATH` runs directly, and a `.cmd` or `.bat` shim runs through `%ComSpec% /d /s /c` with `windowsVerbatimArguments`. The arguments are fixed strings from the runner, never text from `package.json`, and a path or argument with a quote, `%`, `!`, `^`, or a line break is refused. `launchSpec(name, args, { platform, env, exists })` and `installCommand(manager, version)` are exported for tests.
+
 ## 6. Config
 
 ### 6.1 Files and layering
@@ -849,7 +963,7 @@ Role descriptions (shown to agents in `omt roles` and in skills):
 - `design`: Design screens and flows in Paper, and write a design spec that UI units cite.
 - `ui`: Implement one UI unit from its design spec, inside its scope.
 
-Default limits: `maxParallel` 6, `maxTasksPerRun` 24, `maxDepth` 1, `maxReviewRounds` 3.
+Default limits: `maxParallel` 6, `maxTasksPerRun` 24, `maxDepth` 1, `maxReviewRounds` 4.
 
 Default profile: `normal`. Default models: `{ "gpt-6.1-sol": { "fast": true } }`. No default role or rung sets `fast`.
 
@@ -1378,6 +1492,8 @@ The hash is SHA-256 over the sorted relative paths and the contents of a skill d
    - Create the links, write the starter user config, add the hook, and write the manifest.
 6. Print a summary and the next steps: restart agent sessions in T3 so they load the new skills, then try `$omt-ulw <task>`.
 
+With `--project`, right after the plan in step 1, the install prints one line about the current checkout's worktree setup, `Worktree setup: <status> <message>`, from the `summary` of section 5.12. It prints it also with `--dry-run`. The line has no indent, so it is not a plan action. It changes no exit code.
+
 A second run on an unchanged system shows only `unchanged` actions and writes nothing except the manifest timestamp.
 
 ### 14.4 Claude hook entry
@@ -1461,12 +1577,13 @@ The plan lists the user config and the manifest only when they exist. Two names 
 | `homes` | every T3 `claudeAgent` instance that sets `config.homePath` has the skills linked in `<homePath>/skills` | an instance with a `homePath` that lacks the skills | | no instance sets a `homePath` |
 | `roles` | every role resolves (only with `--capabilities`) | some roles are unavailable | the `execute` role is unavailable | |
 
-With `--project`, doctor checks the project scope (section 14.8). It runs `runtime` and `config` as above, and `skills`, `links`, and `hooks` against the project paths. It replaces `path` and `homes` with these checks, and keeps `t3` and `roles`:
+With `--project`, doctor checks the project scope (section 14.8). It runs `runtime` and `config` as above, and `skills`, `links`, and `hooks` against the project paths. It replaces `path` and `homes` with these checks, keeps `t3` and `roles`, and adds `worktree` after `t3`. `worktree` checks the checkout of the current directory, which can be a linked worktree, while the other project checks use the main checkout:
 
 | Id | PASS | WARN | FAIL | INFO |
 | --- | --- | --- | --- | --- |
 | `shim` | `.omt/bin/omt` is present, carries the signature, is executable, and its recorded runtime and CLI paths exist; for a runner shim, the message names the runner command | the shim is missing or not managed, or its recorded runtime does not exist (the shim falls back to `bun` or `node` on `PATH`) | the shim's recorded CLI path does not exist, or the shim is not executable | |
 | `exclude` | the exclude file holds the block of this root | the exclude file has no block for this root, or it holds a block for a root that no longer exists | | no `.git` in the root or a parent directory, or the last install ran with `--no-git-exclude` and there is no block |
+| `worktree` | the current checkout's managed setup is current, waits for completion, and every worktree check passes (section 5.12) | setup is missing, invalid, incomplete, blocked, does not wait, or the pnpm store is not `set` (the message then holds the store problem); also a read error | | no setup is needed, or a custom setup waits for completion |
 
 In project scope, every install hint names the running CLI, because `omt` may not be on `PATH` and the shim may be broken. The hint is `"<cliPath>" install --project` in binary mode, `node "<cliPath>" install --project` or `bun "<cliPath>" install --project` in bundle mode, after the runtime that runs the bundle (`runtimeName`), so the hint works with no `node` on `PATH` under Bun, and `bun "<cliPath>" install --project` in source mode. When the CLI runs from a one-shot cache, as it does through a runner shim, the hint is `npx --yes omt3@<version> install --project`, or the `pnpm dlx` or `bunx` form of the shim.
 
@@ -1707,6 +1824,7 @@ Rules that the skills must carry:
 - A read-only role's brief carries the plan-mode line (section 9.2). When a summary is `Child task completed without an assistant result.`, the conductor reads the child with `t3_thread_read` (view `messages`, which includes proposed plans) before it re-dispatches.
 - The conductor keeps its own turn short: dispatch async work, then end the turn and let the wake start the next one. When the turn cannot end (a goal or a stop hook keeps it running), it uses `delegate_task` with `mode: "wait"` and a `timeoutMs` of at most 3,600,000 for one blocking task. For parallel tasks, it uses `t3_thread_wait` on each child thread, then `task_status` for each. A later wake that names tasks it already read needs no action.
 - The conductor settles each child that it started with `delegate_task` right after it reads the final result with `task_status` and records it. In `plan` interaction mode it records nothing and settles all the same; after `task_cancel` it settles after the `cancelled` or `interrupted` entry; after a `mode: "wait"` return it calls `task_status` first. It calls `t3_thread_organize` with `action: "settle"` and `threadId` set to the `childThreadId`, never the `taskId`, when `status` is `completed`, `failed`, `cancelled`, or `interrupted`, `hasPendingChildRuns` and `hasPendingQuestion` are `false`, and it will not send that child a message with `t3_thread_send` (a new task for the same unit is not such a message). When a condition is false or the settle returns an error, it does not cancel the child. A settle error never stops the run and never triggers a Failure codes action. Before the first settle of a run, the conductor runs `git rev-parse --git-dir --git-common-dir`; when it prints two different paths, the conductor works in a git worktree and settles no child in that run. T3 runs the project's settle script, also one inherited from T3 settings, in a settled thread's worktree, a non-isolated child shares the conductor's worktree, and a thread in the main checkout runs no settle script (`ThreadSettlementService` `cleanUpSettledThread`). A settle sweep catches what the per-result settle missed. The conductor runs it at its next wake after a skipped or failed settle, after each `task_cancel`, before it stops the run to ask the owner, and before its final report; a skill that another skill called leaves the sweep to the caller. The sweep starts from tasks, not threads: it reads its task ids from `omt ledger list --plan <slug> --json`, or the ids it kept in `plan` mode, calls `task_status` for each, and skips an id that returns `task_not_found` (another thread's task, not a lost task). A child is done when the per-result condition holds; a thread that shows `completed` can still wait for its own children, so the thread status alone is not enough. Then it pages `t3_thread_list` with `includeSubagents: true`, following `nextCursor` until it is `null`, settles each done child whose thread shows `settled: false`, and settles each finished thread below a done child, linked by `relationshipToParent: "subagent"`, that shows `settled: false`. Starting from task ids keeps forks and other threads out. When the stall check accepts a result block from a thread that still runs, the conductor calls `task_cancel` for it after it records the result, with no further ledger entry, and the sweep after that cancel settles it. The conductor settles only its children and their children: never its own thread, a top-level thread, or any other thread, and never with `archive`. A child that may start children gets the brief's children line and settles its own children; the sweep covers the children of a cancelled or failed child. A later task neither uses processes that an earlier child left running nor counts on them being gone, because a settle ends them only when the provider closes the thread (Codex after its unload delay). `omt-plan` explore and `plan` tasks, `omt-loop` ticks, and both `omt-loop` stop paths follow the same rules. Measured on 2026-10-17: T3 sent `thread/unsubscribe` 3 ms after the settle of a delegated Codex child, and a settle unsubscribed a Codex thread and its native subagents within 4 ms; a delegated child settled its own Codex child, which was unsubscribed 2 ms later; a settled Claude child's process and a settled Cursor child's MCP servers exited within 10 seconds. Without a settle, each finished child stayed loaded for 30 idle minutes, a Codex thread then for the Codex unload delay, and the Codex native subagents of an idle parent until the app-server stopped.
+- The `omt` router lists `omt worktree check` and `omt worktree setup` and links `worktrees.md`. `omt-ulw` step 0 and the section "Worktree setup" of `delegation.md` point to `worktrees.md` for the first run in a project. No skill runs the worktree check before every CLI command. `docs/agents/quickstart.md` runs the check before it reports the install as complete.
 - `interaction_mode_escalation_denied` and `runtime_mode_escalation_denied` are stop codes: report them and do not fall back. `provider_unavailable`, `model_unavailable`, and an `invalid_request` about options move to the next rung with the next attempt number.
 - On `provider_unavailable` for a target that names only `driverKind`, the skill first retries that target once, with the next attempt number and `providerInstanceId` in place of `driverKind`, set to the same value. The target is the one that failed, rung 1 or a fallback, so the skill keeps it until the retry is sent. Observed T3 behavior is the reason. T3 checks a named provider instance again before it refuses it, but it takes a `driverKind`-only target from a cached provider snapshot that can be stale.
 - `omt-swarm` tracks are top-level threads, not delegated children. Their launch message does not use `omt brief`. It tells the track to run `omt-ulw`, to commit each verified unit on its own branch, to push, and to open a PR against its base. Before it launches, the skill checks with `t3_thread_configuration` that the caller runs in `full-access` runtime mode and `default` interaction mode, which `t3_thread_launch` requires. It launches at most `maxParallel` tracks. Each track uses the plan slug `<slug>-<track>` and, after its plan exists, runs `omt plan limit <slug>-<track> <k>` with a lower `<k>`. The track does not change `limits` in the config, because all worktrees share one `.omt/`. Top-level threads never wake the caller, so the skill monitors them with a `schedule_task` heartbeat bound to the caller's thread. The heartbeat prompt is complete on its own, and the skill deletes the heartbeat when every track has a PR or a blocker.
@@ -1744,6 +1862,7 @@ Rules that the skills must carry:
 - `results.md`: how the parent reads each result block, records it, settles the child, and reads qa test lists and guardrail proposals. A done claim stays unverified until the parent or verify checks it.
 - `roles/<role>.md`: one persona file per default role, plus `_generic.md`.
 - `results/<kind>.md`: the contracts from section 11.
+- `worktrees.md`: the T3 worktree setup on first use. Run `omt worktree check`. Work out the effective saved scripts in the order of T3's `resolveProjectScripts`: `projectSettingsOverrides[projectId].defaultProjectScripts` first (an explicit empty list wins), then `defaultProjectScripts` when `projectSettingsFolded` is true, then the legacy `projectScriptOverrides`, the project's `scripts`, and `defaultProjectScripts`. A project read alone never proves activation. Keep a compatible setup and verify a custom command (frozen install, `async: false`, store reuse across two checkouts). Generate a missing setup only with the owner's yes. Import it only after `t3.json`, `.t3/`, and for pnpm `pnpm-workspace.yaml` are committed on the base branch of new worktrees and the owner's yes covers activation, through T3 Project Settings or a tool that writes the same project override, with the inherited scripts copied in. Never change `defaultProjectScripts`. Read the effective scripts back, or report activation as unverified.
 
 ### 15.4 Pull request review
 
@@ -1812,6 +1931,7 @@ Required coverage:
 - Install: create, idempotent rerun, conflict without and with `--force`, a locally modified managed skill, backups outside the skill roots, `--dry-run` and a declined prompt write nothing, non-TTY without `--yes`, roots that resolve to the same directory, hook add and update that keep other settings, an unchanged hook writes nothing, a symlinked `settings.json` stays a symlink, `--hooks` refused for a temp `cliPath`, uninstall removes only managed paths, and `--purge`.
 - Project install: the files of section 14.8, an idempotent rerun, `--dry-run`, the exclude file for a `.git` directory and a worktree `.git` file, block replacement, no `.git`, `--no-git-exclude` (also on a reinstall, and its `.omt/.gitignore` restore), the conditional `.omt` and `settings.local.json` lines, the hook in `settings.local.json`, uninstall with a locally modified skill and `--purge`, `--targets gemini` (exit 2), a temp `cliPath`, and the shim conflict and update. Also: a copied project, a moved clone round trip, a tracked manifest with paths outside the root, a symlinked path to the root, the home directory as the root (exit 2), a dangling settings symlink, a failed scratch delete, glob characters in a package path, worktrees, a block whose root is gone, the exact bytes of the exclude file, a kept created `settings.local.json`, and a kept ledger. Also: a reinstall that appends `plans/`, `locks/`, and `guardrails.md` to an unedited `.omt/.gitignore` that an earlier install created, and one that leaves an edited file alone. Also: uninstall, reinstall, and a second uninstall after each kind of kept created file, each with an empty `git status`; an uninstall that fails midway; a symlinked exclude file and `.omt/.gitignore`; a crafted tracked manifest that names project files; a package copied inside the same repository; and the exact paths that stay after a failed install and its uninstall.
 - Doctor: each status that the table in section 14.7 defines, with `runtimeName` and `runtimeVersion` injected through the context.
+- Worktree setup: `test/commands/worktree-setup.test.ts` covers the cases in section 5.12: init, `install --project --dry-run`, setup dry run and apply, check, and `doctor --project` from a linked worktree (shared `.omt`, setup files in the worktree); a Bun and a pnpm runner with controlled executables (versions, flags, environment, lockfiles, failure exit codes, a failed linker query, CI warning); existing, invalid, and partial `t3.json`, ambiguous and unsupported managers, linker settings with TOML comments, each persistent-store status with the created, kept, and incomplete `pnpm-workspace.yaml`, symlinked and dangling `.t3` folders and runners, a home-directory alias, conflicting output paths, idempotency, and a dry run that writes nothing; and `launchSpec` for Windows. Tests never start a real package manager. They start the runner with `node`, the command in `t3.json`, and with Bun when no `node` is on `PATH`. `test/e2e/binary.test.ts` (Bun project) and `test/e2e/packages.test.ts` (pnpm and Bun projects) run `worktree setup --yes` through the shim and compare the written runner with `templates/worktree-setup.mjs`, so the binary and the bundle prove that they carry the runner.
 - Skills: `test/skills/*.test.ts` replaces `test/skills.test.ts`. `common` checks frontmatter and links. `personas` checks role and result files, test policy, CRAP, and guardrails. `plan-design` checks profile selection, planned test lines, shared-build rules, budgets, review modes, and variant counts. `ulw` checks dispatch, profile reloads, check-ins, verify then qa, locks, heartbeat retention, and loop waits. `review` checks each PR step, commit-based round-1 reads, working-tree fix reviews, offers, linking, and watches.
 - Visual: spec errors with JSON paths, unknown keys, escaping of every text field (also an SVG label `<script>alert(1)</script>`), inline markup, byte-identical output, back edges, no edge that crosses a node on any fixture flow, label sides at a shared stub, row centering with and without a pinned column, the transitive reduction, the 6 layers of a plan shaped like `workflow-profiles`, non-unit dependency tokens, a plan with no `## Summary`, and the command: `--out -`, `--json`, the default paths, a plan file path, and the usage errors.
 - Schema: the committed schema equals the generated one, and it allows the same keys as the validator.
@@ -1843,7 +1963,7 @@ The npm packages get only the files that `git ls-files -- skills` lists.
 
 The script writes these paths under `<outdir>`:
 
-- `npm/oh-my-t3code/` and `npm/omt3/`. The two directories are identical except the `name` field. Each holds `package.json`, `dist/cli.js` (mode 0755), `skills/`, `README.md`, and `LICENSE`. The `package.json` has the repository version, the description, `type: "module"`, the license, the repository, `bin: { "omt": "dist/cli.js", "omt3": "dist/cli.js", "oh-my-t3code": "dist/cli.js" }`, `files: ["dist", "skills", "README.md", "LICENSE"]`, and `engines.node: ">=22"`. It has no dependencies and no scripts. `dist/cli.js` reads `skills/` from the package root (section 5).
+- `npm/oh-my-t3code/` and `npm/omt3/`. The two directories are identical except the `name` field. Each holds `package.json`, `dist/cli.js` (mode 0755), `skills/`, `README.md`, and `LICENSE`. The `package.json` has the repository version, the description, `type: "module"`, the license, the repository, `bin: { "omt": "dist/cli.js", "omt3": "dist/cli.js", "oh-my-t3code": "dist/cli.js" }`, `files: ["dist", "skills", "README.md", "LICENSE"]`, and `engines.node: ">=22"`. It has no dependencies and no scripts. `dist/cli.js` reads `skills/` from the package root (section 5). The packages hold no `templates/`, because `dist/cli.js` inlines the worktree setup runner (section 5.12).
 - `github/oh-my-t3code-v<version>-<platform>.tar.gz` for each platform. The archive holds only `omt` (mode 0755) at its root.
 - `github/SHA256SUMS`, with one `<sha256>  <archive name>` line per archive, so `shasum -a 256 -c SHA256SUMS` checks them.
 

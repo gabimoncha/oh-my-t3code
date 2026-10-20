@@ -19,6 +19,7 @@ import * as roles from "./commands/roles.ts";
 import * as route from "./commands/route.ts";
 import * as uninstall from "./commands/uninstall.ts";
 import * as visual from "./commands/visual.ts";
+import * as worktree from "./commands/worktree.ts";
 import type { CliBuild, CliContext, CommandRun } from "./types.ts";
 import { findProjectRoot, hasProjectMarker, omtDir, shadowedWorktreeState } from "./paths.ts";
 import { errorMessage, OmtError } from "./util/errors.ts";
@@ -43,6 +44,7 @@ export const COMMANDS: Readonly<Record<string, CommandModule>> = {
   ledger,
   lock,
   visual,
+  worktree,
   paths,
   hook,
 };

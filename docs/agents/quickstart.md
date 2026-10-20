@@ -139,9 +139,12 @@ PASS  hooks    Claude UserPromptSubmit hook in <project>/.claude/settings.local.
 PASS  shim     <project>/.omt/bin/omt
 PASS  exclude  omt block in <project>/.git/info/exclude
 PASS  t3       <home>/.t3/userdata/settings.json
+PASS  worktree <project>: the setup script "Setup" runs node .t3/omt-worktree-setup.mjs; ...
 ```
 
 `<runtime>` names what runs omt: `omt 0.1.0 binary` for the release binary, or the runtime and its version, such as `node 22.21.1` or `bun 1.4.3`. After a one-shot install, the `shim` line names the runner, such as `<project>/.omt/bin/omt runs npx --yes omt3@0.1.0`.
+
+The `worktree` line is often `WARN` or `INFO` on the first install. The worktree setup step below covers it.
 
 Without `--hooks`, the `hooks` line is `INFO  hooks  no hook installed; ...`. That is correct for Codex.
 
@@ -156,6 +159,16 @@ Check: this command prints the `PASS  skills` line:
 ```
 
 Also check that doctor prints no `FAIL` line, and that `git status --short` shows no new files from the install. A dev-dependency install shows `package.json` and the lockfile as changed. These changes come from step 3, not from the project install.
+
+### Check the worktree setup
+
+T3 runs a setup script in each new worktree before the agent starts. Without a setup script, saved in T3 or inherited, a worktree thread has no dependencies installed. Check the setup before you report the install as complete:
+
+1. Run `.omt/bin/omt worktree check` and read the `setup` and `next:` lines.
+2. Follow [the worktree setup reference](../../skills/omt/references/worktrees.md): read the effective setup in T3, keep a compatible one, and generate a missing one for Bun or pnpm with `.omt/bin/omt worktree setup --dry-run`, then `--yes`, only when the user agrees.
+3. A `t3.json` file does not activate anything. T3 runs the setup only after the user commits `t3.json`, `.t3/`, and for pnpm `pnpm-workspace.yaml` on the branch that new worktrees start from, and imports Setup in T3 Project Settings. Tell the user these steps. Do not import a setup that the base branch lacks.
+
+Check: the effective T3 setup runs a dependency install, or you told the user that activation is pending and what remains. Report each part that you could not verify as unverified.
 
 ## 5. Restart the agent sessions
 

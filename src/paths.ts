@@ -122,6 +122,30 @@ export function findProjectRoot(cwd: string): string {
   return main === undefined ? dir : underLogicalAncestor(dir, main);
 }
 
+// The nearest directory at or above cwd that holds .git. Unlike findProjectRoot, a linked worktree stays
+// itself, because worktree setup files belong to the checkout's branch.
+export function findCheckoutRoot(cwd: string): string | undefined {
+  let dir = resolve(cwd);
+  for (;;) {
+    if (existsSync(join(dir, ".git"))) return dir;
+    const parent = dirname(dir);
+    if (parent === dir) return undefined;
+    dir = parent;
+  }
+}
+
+export function t3ProjectFilePath(root: string): string {
+  return join(root, "t3.json");
+}
+
+export function worktreeRunnerPath(root: string): string {
+  return join(root, ".t3", "omt-worktree-setup.mjs");
+}
+
+export function pnpmWorkspacePath(root: string): string {
+  return join(root, "pnpm-workspace.yaml");
+}
+
 // A linked worktree whose own .omt holds plans or a ledger that omt no longer reads.
 export function shadowedWorktreeState(cwd: string): { worktree: string; main: string } | undefined {
   const worktree = nearestMarker(cwd);

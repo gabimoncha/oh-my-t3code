@@ -137,7 +137,7 @@ test("omt-plan selects review rounds from plan.review and passes the effective t
   assert.match(rounds, /Run `omt profile show --plan <slug> --json` before each round\./);
   assert.match(rounds, /Before the plan file exists, use `omt profile show <name> --json` instead\./);
   assert.match(rounds, /Read `workflow\.plan\.review` as `plan\.review` and `limits\.maxReviewRounds` as `maxReviewRounds`\./);
-  assert.match(rounds, /For `two-families` or `one`, run up to `maxReviewRounds` rounds \(default 3\)\./);
+  assert.match(rounds, /For `two-families` or `one`, run up to `maxReviewRounds` rounds \(default 4\)\./);
   assert.match(rounds, /Name the effective `plan\.testLayers` value in every `plan-review` task\./);
   assert.match(rounds, /With `plan\.review=two-families`, round 1 has two tasks, one per family:/);
   assert.match(rounds, /With `plan\.review=one`, round 1 has one task: `--unit plan --against <the plan author's provider>`\./);

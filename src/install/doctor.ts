@@ -25,6 +25,7 @@ import {
   runnerCommand,
   shimPaths,
 } from "./project.ts";
+import { worktreeSummary } from "../worktree/check.ts";
 import { classifySkill, isManagedDir, listBundledSkills } from "./skills.ts";
 import type { BundledSkill } from "./skills.ts";
 
@@ -349,7 +350,12 @@ export async function runDoctor(ctx: CliContext, caps?: Capabilities, scope: Ins
   }
   checks.push(await checkHooks(ctx, paths, loaded));
   if (scope === "project") {
-    checks.push(await checkShim(ctx, paths, loaded), await checkExclude(ctx, paths, loaded), await checkT3(ctx));
+    checks.push(
+      await checkShim(ctx, paths, loaded),
+      await checkExclude(ctx, paths, loaded),
+      await checkT3(ctx),
+      await worktreeSummary(ctx),
+    );
   } else {
     checks.push(await checkPath(ctx), await checkT3(ctx), await checkHomes(ctx, names));
   }

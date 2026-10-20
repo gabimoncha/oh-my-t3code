@@ -297,3 +297,68 @@ export interface CliContext {
 }
 
 export type CommandRun = (ctx: CliContext) => Promise<number>;
+
+export type PackageManagerName = "pnpm" | "bun";
+
+export interface WorktreeManager {
+  status: "ok" | "none" | "blocked";
+  manager?: PackageManagerName; // set when status is "ok"
+  lockfile?: string; // file name in the checkout, set when status is "ok"
+  version?: string; // the exact declared version, when package.json pins one
+  declaredBy?: string; // "packageManager" or "devEngines.packageManager"
+  message?: string;
+  action?: string;
+}
+
+export interface WorktreeLinker {
+  status: "default" | "isolated" | "incompatible" | "unverified";
+  message: string;
+  source?: string;
+  action?: string;
+}
+
+// The pnpm setting in pnpm-workspace.yaml that keeps the global virtual store after a later
+// pnpm run or pnpm exec. "no-file": omt worktree setup creates the file.
+// "version-dependent": the result depends on a pnpm version that package.json does not pin.
+export interface WorktreeStore {
+  status: "set" | "no-file" | "missing" | "off" | "version-dependent" | "unverified";
+  message: string;
+  action?: string;
+}
+
+export type WorktreeSetupStatus = "not-needed" | "missing" | "invalid" | "no-setup" | "managed" | "custom";
+
+export interface WorktreeSetup {
+  status: WorktreeSetupStatus;
+  message: string;
+  command?: string; // the first runOnWorktreeCreate script's command
+  async?: boolean; // that script's async value; undefined when it is not set
+  runner?: "current" | "different" | "missing" | "linked" | "occupied"; // for "managed" and "missing": the state of the runner file; "linked": it or .t3 is a symlink; "occupied": .t3 is not a folder
+  issues?: string[]; // for "invalid": each schema or syntax problem
+}
+
+export interface WorktreeCheck {
+  id: string;
+  status: "PASS" | "WARN" | "FAIL" | "INFO";
+  message: string;
+}
+
+export interface WorktreeReport {
+  root: string; // the checkout that was inspected; never redirected to the main checkout
+  checkout: boolean; // true when root holds .git
+  mainCheckout?: string; // set when root is a linked worktree
+  t3File: string;
+  runnerFile: string;
+  manager: WorktreeManager;
+  linker?: WorktreeLinker; // set when a manager was found
+  workspaceFile: string; // <root>/pnpm-workspace.yaml
+  store?: WorktreeStore; // set for pnpm
+  complete: boolean; // the managed setup needs no further file change in the checkout
+  setup: WorktreeSetup;
+  canGenerate: boolean; // omt worktree setup may write the missing files
+  blockers: string[]; // why it may not
+  activation: string;
+  next?: string;
+  checks: WorktreeCheck[];
+  summary: WorktreeCheck; // one line for init, install --project, and doctor --project
+}

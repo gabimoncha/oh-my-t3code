@@ -4,7 +4,7 @@ import { parseArgs } from "../util/args.ts";
 import { formatJson } from "../util/output.ts";
 import { readCapabilities } from "./shared.ts";
 
-export const summary = "Check the runtime, config, skills, links, hooks, T3, and roles.";
+export const summary = "Check the runtime, config, skills, links, hooks, T3, worktree setup, and roles.";
 
 export const usage = `Usage: omt doctor [--project] [--capabilities <file>] [--json]
 
@@ -13,7 +13,8 @@ Exits 1 when any check fails.
 
 Options:
   --project              check the project install of the current project
-                         (shim and git exclude instead of path and homes)
+                         (shim, git exclude, and the worktree setup of the
+                         current checkout instead of path and homes)
   --capabilities <file>  orchestrator_capabilities output (- for stdin);
                          also checks that every role resolves
   --json                 print { ok, checks } as JSON
