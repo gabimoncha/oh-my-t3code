@@ -9,8 +9,8 @@ This page is the reference for the code, the skills, and the tests. [`design.md`
 - Language: TypeScript, ESM (`"type": "module"`). Use erasable syntax only. That means no `enum`, no `namespace`, no parameter properties, and no decorators. Use `import type` for type-only imports. Relative imports end in `.ts`.
 - Runtime dependencies: none.
 - `src/` uses only `node:` built-in modules, because the npm bundle runs on Node. Scripts in `scripts/` and tests may use Bun APIs.
-- Dev dependencies: `@types/bun` only.
-- Type check: `bun check` with `tsconfig.json` (`types: ["bun"]`, `resolveJsonModule`, `allowImportingTsExtensions`, `noEmit`). The package has no script named `check`, because `bun check` would run that script instead of the type checker.
+- Dev dependencies: `@types/bun` and `tsrs`, pinned to an exact version. `tsrs` has native builds for macOS arm64 and for Linux arm64 and x64, with glibc or musl.
+- Type check: `sh scripts/tsrs.sh -p tsconfig.json` (`types: ["bun"]`, `resolveJsonModule`, `allowImportingTsExtensions`, `noEmit`). `tsrs` is the Rust port of the TypeScript 7 compiler. `scripts/tsrs.sh` runs the native binary from the `@tsrs/<platform>` package directly, and skips the npm launcher `node_modules/.bin/tsrs`, which starts Node first. It picks the package from `uname -sm`, and on Linux it picks `-musl` or `-gnu` the way `tsrs/lib/platform.js` does. `TSRS_BINARY` overrides the binary. When no native binary fits the machine, it runs the launcher, which prints the reason.
 - Tests: `bun test` runs `test/**/*.test.ts`. The tests use `bun:test` and `node:assert/strict`.
 - Strict TypeScript: `strict`, `noUncheckedIndexedAccess`, `verbatimModuleSyntax`, `erasableSyntaxOnly`.
 - Formatting: 2-space indentation, double quotes, semicolons, trailing commas in multi-line literals.
@@ -25,7 +25,7 @@ This page is the reference for the code, the skills, and the tests. [`design.md`
 | --- | --- |
 | `omt` | `bun src/cli.ts` |
 | `test` | `bun test` |
-| `typecheck` | `bun check` |
+| `typecheck` | `sh scripts/tsrs.sh -p tsconfig.json` |
 | `schema` | `bun scripts/build-schema.ts` |
 | `build` | `bun scripts/build.ts` (section 5) |
 | `release` | `bun scripts/release.ts` (section 17) |
@@ -39,9 +39,9 @@ The package is named `oh-my-t3code` and is `private`, so nobody publishes the re
 .github/
   workflows/             ci.yml (CI) and release.yml (release on a v* tag) (section 17.1)
 mise.toml                pins bun = "1.4.3"
-package.json             scripts (section 1), packageManager bun@1.4.3, dev dependency @types/bun
+package.json             scripts (section 1), packageManager bun@1.4.3, dev dependencies @types/bun and tsrs
 bun.lock                 Bun lockfile
-tsconfig.json            compiler options for bun check
+tsconfig.json            compiler options for tsrs
 src/
   cli.ts                 entry: shebang, calls main(process.argv.slice(2)), sets process.exitCode
   main.ts                main(), createContext(), command registry, help text
@@ -67,6 +67,7 @@ scripts/
   build-schema.ts        writes schema/omt.schema.json from src/config/schema.ts
   build.ts               builds dist/cli.js and the omt binaries (section 5)
   release.ts             writes the npm packages, archives, and SHA256SUMS (section 17)
+  tsrs.sh                runs the native tsrs binary for the type check (section 1)
 schema/
   omt.schema.json        JSON Schema for config files
 templates/
@@ -762,7 +763,7 @@ Each lock folder gets a `.gitignore` with `*`. `omt init` also adds `locks/` to 
 
 Root. The command works on `findCheckoutRoot(cwd)`, the checkout of the current directory, not on `findProjectRoot(cwd)`. In a linked worktree the setup files go into that worktree, while `.omt` stays in the main checkout (section 4). Without `.git` above `cwd`, the report inspects `findProjectRoot(cwd)` and setup refuses.
 
-Shared code. `templates/worktree-setup.mjs` is the runner that setup copies to `<root>/.t3/omt-worktree-setup.mjs`. It uses only Node built-ins and runs without omt. `src/worktree/runner.ts` imports the same file as a module and uses its exports, `detectManager(root)`, `checkLinker(root, manager, { env, home })`, `persistentGlobalStore(root)`, and `PNPM_WORKSPACE_CONTENT`, so a check and a runner agree. It declares those exports as `RunnerModule`, and `templates/worktree-setup.d.mts` types them. It gets the runner's text from the Bun macro `runnerText()` in `src/worktree/runnerText.ts`, imported `with { type: "macro" }`: Bun reads the file when it transpiles or bundles `runner.ts` and inlines the text. So in every run mode of section 5 the module and the text come from the build, the npm bundle and the binary carry the runner, and no mode reads a `templates/` folder at run time. The runner starts the install only when its own file name ends in `.mjs` and its path is `process.argv[1]`. In `dist/cli.js` or a binary, the inlined runner's file is the CLI itself, so the CLI never starts a setup. `node --check templates/worktree-setup.mjs` must pass, because `bun check` does not check it.
+Shared code. `templates/worktree-setup.mjs` is the runner that setup copies to `<root>/.t3/omt-worktree-setup.mjs`. It uses only Node built-ins and runs without omt. `src/worktree/runner.ts` imports the same file as a module and uses its exports, `detectManager(root)`, `checkLinker(root, manager, { env, home })`, `persistentGlobalStore(root)`, and `PNPM_WORKSPACE_CONTENT`, so a check and a runner agree. It declares those exports as `RunnerModule`, and `templates/worktree-setup.d.mts` types them. It gets the runner's text from the Bun macro `runnerText()` in `src/worktree/runnerText.ts`, imported `with { type: "macro" }`: Bun reads the file when it transpiles or bundles `runner.ts` and inlines the text. So in every run mode of section 5 the module and the text come from the build, the npm bundle and the binary carry the runner, and no mode reads a `templates/` folder at run time. The runner starts the install only when its own file name ends in `.mjs` and its path is `process.argv[1]`. In `dist/cli.js` or a binary, the inlined runner's file is the CLI itself, so the CLI never starts a setup. `node --check templates/worktree-setup.mjs` must pass, because `tsrs` does not check it.
 
 Package manager detection (`detectManager`):
 

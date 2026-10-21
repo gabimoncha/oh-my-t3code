@@ -24,13 +24,14 @@
   "scripts": {
     "omt": "bun src/cli.ts",
     "test": "bun test",
-    "typecheck": "bun check",
+    "typecheck": "sh scripts/tsrs.sh -p tsconfig.json",
     "schema": "bun scripts/build-schema.ts",
     "build": "bun scripts/build.ts",
     "release": "bun scripts/release.ts",
     "verify": "bun run typecheck && bun test"
   },
   "devDependencies": {
-    "@types/bun": "^1.4.3"
+    "@types/bun": "^1.4.3",
+    "tsrs": "0.18.0-ts7.1.0-dev.20260929"
   }
 }
