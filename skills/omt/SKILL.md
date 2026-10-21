@@ -20,6 +20,8 @@ omt turns this T3 thread into a conductor: it plans, delegates each unit to a ro
 | `omt-swarm` | The user asks for separate threads: independent tracks in their own worktrees, each ending in a PR. |
 | `omt-loop` | The user wants the work to keep going across turns until a condition holds. |
 | `omt-show` | The user wants to see a plan, a flow, or a status as a page with flowcharts and tables. `omt-plan` runs it when it hands off a plan. |
+| `omt-help` | The user asks for help, what omt can do, what to do next, how to do something, which skill to use, or what a command means, or wants a tour. It only reads, and hands changes to `omt-setup`. |
+| `omt-setup` | The user wants omt set up, configured, or updated: harnesses, the default set, models, roles, profiles, or worktree setup. It asks before each write. |
 
 For a pull request review, load `omt-review` with `omt-review --profile pr-review <number>`.
 
@@ -47,6 +49,10 @@ To find the CLI (`omt`, `.omt/bin/omt`, or the manual steps), follow [The CLI](r
 | `omt ledger stats --plan <slug>` | `dispatched` and `active` counts, the limits, and `can dispatch: yes` or `no` |
 | `omt ledger request-id --plan <slug> --unit <id> --role <r> --round <n> --attempt <n>` | the `clientRequestId` |
 | `omt config show` | the merged config before profile selection, including limits and `visuals` |
+| `omt defaults list` | each default set, with the `latest` mark and the `selected (<source>)` mark |
+| `omt defaults diff [<from>] [<to>]` | one `<path>: <from> -> <to>` line per change, with ` (overridden by <file>)` when a config file sets that value; `no changes` when none. `<from>` defaults to the selected set, `<to>` to `latest` |
+| `omt defaults use <set\|latest> [--user\|--project] [--dry-run] [--yes]` | `<file>: defaults <old\|none> -> <new>`; changes only the `defaults` key; without a flag, the project config when it exists, else the user config |
+| `omt detect [--capabilities <file>] [--json] [--write] [--user\|--project] [--dry-run] [--yes]` | one line per driver (`claudeAgent`, `codex`) with its T3 status and executable, then the recommended `harnesses` value and its effect; `--write` adds, changes, or removes the `harnesses` key |
 | `omt lock run <name> [--wait <seconds>] -- <command>` | runs a command under a shared build lock and returns its exit code |
 | `omt lock list` | each lock's state and the holder of a held lock |
 | `omt visual [--plan <slug>] --spec - --json` | path of a self-contained HTML page: the plan's summary, units by dependency layer, and checks, plus the tabs of the spec ([page-spec.md](../omt-show/references/page-spec.md)) |

@@ -53,10 +53,12 @@ test("the bundled skills are all present", () => {
   assert.deepEqual(skillDirs().sort(), [
     "omt",
     "omt-design",
+    "omt-help",
     "omt-loop",
     "omt-plan",
     "omt-research",
     "omt-review",
+    "omt-setup",
     "omt-show",
     "omt-swarm",
     "omt-ulw",
