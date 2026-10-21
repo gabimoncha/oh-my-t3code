@@ -43,7 +43,7 @@ omt install --project --hooks
 omt doctor --project
 ```
 
-The install lists the files that it will write and asks before it writes them. It hides these files from git. `--hooks` adds the `ulw` keyword to Claude Code. If you use only Codex, leave `--hooks` out. `doctor` must print no `FAIL` line.
+The install lists the files that it will write and asks before it writes them. It hides these files from git. It also checks which harnesses you can run, Claude Code and Codex. When one is missing, the new config gets a `"harnesses"` key that skips the models of the missing harness. `--hooks` adds the `ulw` keyword to Claude Code. If you use only Codex, leave `--hooks` out. `doctor` must print no `FAIL` line.
 
 Restart the T3 agent sessions of the project. A running session does not load new skills.
 
@@ -88,6 +88,8 @@ The agent reads the code, writes a plan in `.omt/plans/`, and sends each unit to
 
 After an install for all projects, run `omt init` in the project first.
 
+If you do not know what to do next, type `$omt-help`. To change the setup, type `$omt-setup`.
+
 ## Skills
 
 | Skill | Use it when |
@@ -98,13 +100,15 @@ After an install for all projects, run `omt init` in the project first.
 | `omt-review` | You want a review of uncommitted changes, a branch, a commit, or a pull request. |
 | `omt-research` | You need an answer with sources from the repository, library docs, or the web. |
 | `omt-show` | You want to see a plan or a status as a page with flowcharts and tables. |
+| `omt-help` | You want to know what omt can do, what to do next, or how to do something. It only reads and changes nothing. |
+| `omt-setup` | You want omt set up, configured, or updated: the harnesses, the default set, models, roles, or profiles. It asks before each write. |
 | `omt-swarm` | You have independent tracks, and each needs its own worktree thread and pull request. |
 | `omt-loop` | Work must continue across turns until a check passes. |
 | `omt` | You want the list of workflows and CLI commands. |
 
-The agent can start the first six skills itself. You start `omt-swarm`, `omt-loop`, and `omt` by name.
+The agent can start the first eight skills itself. You start `omt-swarm`, `omt-loop`, and `omt` by name.
 
-A plan and its ledger stay in `.omt/` after context compaction and across sessions, so one plan can run for days. A profile in `.omt/config.jsonc` can change the models, the checks, and the limits. See [Configure roles and profiles](docs/configuration.md).
+A plan and its ledger stay in `.omt/` after context compaction and across sessions, so one plan can run for days. A profile in `.omt/config.jsonc` can change the models, the checks, and the limits. See [Configure roles and profiles](docs/configuration.md), or ask `$omt-setup` to make the change.
 
 ## Worktree setup
 

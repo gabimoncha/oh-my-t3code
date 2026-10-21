@@ -5,7 +5,7 @@ You install omt in two parts. First, install the `omt` CLI from a package regist
 - The project install puts omt into one repository. It does not change `~/.agents/skills`, `~/.claude`, or your `PATH`. Start here.
 - The global install installs the skills for your user, so every project gets them.
 
-Both modes install the same nine skills. After either install, restart your agent sessions in T3 Code. A running session does not load new skills.
+Both modes install the same 11 skills, including `omt-help`, which answers questions about omt, and `omt-setup`, which changes the setup for you. After either install, restart your agent sessions in T3 Code. A running session does not load new skills.
 
 If you are a coding agent, follow the [agent quick start](agents/quickstart.md) instead. It has the same project install as steps with checks.
 
@@ -105,6 +105,29 @@ After a dev-dependency install, run `npx omt install --project`, `pnpm exec omt 
 
 The install shows its plan first and asks before it writes. Add `--yes` to skip the question. Add `--dry-run` to print the plan and write nothing. `--hooks` adds the Claude Code hook that arms ultrawork with the `ulw` keyword. Leave it out if you use only Codex.
 
+### Harness detection
+
+The install detects the harnesses that can run omt's child tasks: Claude Code (the `claudeAgent` driver) and Codex (the `codex` driver). A harness counts when T3 does not disable it in its settings and its executable, `claude` or `codex`, is on `PATH`. The plan shows the result in a `Harnesses` section, before the install asks:
+
+```text
+Harnesses (T3 settings and PATH):
+    claudeAgent  not detected  T3 disabled, claude not on PATH
+    codex        detected  T3 enabled, /usr/local/bin/codex
+    the starter config gets "harnesses": ["codex"]
+    design and ui: unavailable without claudeAgent
+    cross-family review: the same family reviews
+```
+
+When the install creates the config and one harness is missing, the new config gets the `"harnesses"` key with the harnesses that it found. omt then skips the models of the missing harness. The install writes the key only when you confirm the plan. When the config already exists, the install does not change it. It prints the result and, when the config does not match it, the hint `run omt detect --write`. [Match the harnesses on your machine](configuration.md#match-the-harnesses-on-your-machine) explains the key and `omt detect`.
+
+omt does not read the T3 settings of a single project, so the local check can miss a harness that T3 turns on for one project only. An agent in a T3 thread passes the live provider list instead. It saves the result of the T3 tool `orchestrator_capabilities` to a temp file and adds `--capabilities <file>`:
+
+```sh
+omt install --project --capabilities /tmp/t3-capabilities.json --dry-run
+```
+
+With `--capabilities`, a harness counts when T3 has a provider of its driver that can run child tasks.
+
 The first line of `omt doctor --project` names what runs omt. It is `PASS  runtime  omt 0.1.0 binary` for the release binary, or the runtime and its version, such as `PASS  runtime  node 22.21.1` or `PASS  runtime  bun 1.4.3`. Node older than 22 or Bun older than 1.4.3 gives a `FAIL` line.
 
 The project install refuses to run in your home directory, because there the project paths are the global paths. It also refuses to run when the CLI is in the temp directory, other than a runner cache, because such a path can disappear. The refusal lists the install channels.
@@ -119,7 +142,7 @@ The install writes these paths in the project root:
 | --- | --- |
 | `.agents/skills/<skill>` | A copy of each skill. Codex, Cursor, OpenCode, Pi, and Antigravity read this directory. |
 | `.claude/skills/<skill>` | A relative symlink to the copy, for Claude Code. |
-| `.omt/config.jsonc`, `.omt/plans/` | The project config and the plans directory, as `omt init` creates them. |
+| `.omt/config.jsonc`, `.omt/plans/` | The project config and the plans directory, as `omt init` creates them. The config pins the latest default set, and gets a `"harnesses"` key when a harness is missing. |
 | `.omt/bin/omt` | The shim: a shell script that runs the CLI that made the install. The next section lists its forms. |
 | `.claude/settings.local.json` | The `ulw` hook entry, only with `--hooks`. The hook calls `.omt/bin/omt`. |
 | `.omt/install.json`, `.omt/backups/` | The manifest and the backups. |
@@ -242,7 +265,7 @@ Then install the skills:
 omt install
 ```
 
-`omt install` shows its plan first and asks before it writes. Add `--yes` to skip the question.
+`omt install` shows its plan first and asks before it writes. Add `--yes` to skip the question. The plan includes the [harness detection](#harness-detection) of the project install, and the user config gets the same `"harnesses"` key when a harness is missing.
 
 To arm ultrawork with the `ulw` keyword in Claude Code, also install the hook:
 
