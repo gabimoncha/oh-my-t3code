@@ -1,5 +1,8 @@
 # Install oh-my-t3code
 
+Use a patched supported Node release for the npm package: 22.23.4 or 24.22.1 LTS.
+Bun 1.4.3 fixes TLS validation bugs but still needs the separate emSign certificate fix.
+
 You install omt in two parts. First, install the `omt` CLI from a package registry or as a release binary. You do not clone the repository. Then let the CLI install the skills, in one of two modes:
 
 - The project install puts omt into one repository. It does not change `~/.agents/skills`, `~/.claude`, or your `PATH`. Start here.

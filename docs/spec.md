@@ -770,7 +770,7 @@ Package manager detection (`detectManager`):
 - It reads `package.json` (a byte order mark is allowed). Invalid JSON or a value that is not an object blocks with `fix package.json`.
 - Declarations: `packageManager` (`<name>@<version>`, with an optional `+<integrity>` suffix) and `devEngines.packageManager` (an object, or a list with one entry, with `name` and an optional `version`). Two declarations must name the same manager, and two exact versions must be equal.
 - A declared `npm`, `yarn`, or other manager is unsupported; omt never replaces it. A declared version must be exact (`<major>.<minor>.<patch>`). A range or a tag blocks generation with a manual-setup hint. omt has no semver implementation.
-- An exact declared version below the minimum blocks: Bun 1.3.14, pnpm 10.12.1.
+- Security minimums block both declared and installed versions: Bun 1.4.3, pnpm 10.34.5 on major 10, and pnpm 11.11.0 on major 11. pnpm 12 and later remain supported. These minimums also cover global virtual store support. Bun 1.4.3 does not resolve the separate emSign certificate issue.
 - The lockfile of the selected manager must exist: `pnpm-lock.yaml` for pnpm, `bun.lock` or `bun.lockb` for Bun. The two Bun formats are one manager.
 - Without a declaration, the lockfiles decide. One supported manager selects it. Both pnpm and Bun lockfiles block as ambiguous. Only `package-lock.json`, `npm-shrinkwrap.json`, or `yarn.lock` is unsupported. A `package.json` without a lockfile blocks. No `package.json` and no lockfile gives `status: "none"`: there is nothing to install.
 
@@ -1980,7 +1980,7 @@ The commands use paths relative to the current directory. A path with a characte
 
 ### 17.1 Workflows
 
-Two GitHub Actions workflows run the tests and the release. Both set workflow-level `permissions: {}`, and each job sets its own permissions. Each job with steps runs on `ubuntu-24.04`. Each action is pinned by its full commit SHA, with a `# vX.Y.Z` comment. `actions/checkout` runs with `persist-credentials: false`. Where a job uses them, `jdx/mise-action` installs mise 2026.10.15 with `add_shims_to_path: false`, `install: true`, and `cache: false`, so Bun comes from `mise.toml`. `actions/setup-node` installs Node 24.22.0, which includes npm 11.19.1, with `package-manager-cache: false`.
+Two GitHub Actions workflows run the tests and the release. Both set workflow-level `permissions: {}`, and each job sets its own permissions. Each job with steps runs on `ubuntu-24.04`. Each action is pinned by its full commit SHA, with a `# vX.Y.Z` comment. `actions/checkout` runs with `persist-credentials: false`. Where a job uses them, `jdx/mise-action` installs mise 2026.10.17 with `add_shims_to_path: false`, `install: true`, and `cache: false`, so Bun comes from `mise.toml`. `actions/setup-node` installs Node 24.22.1, which includes npm 11.19.1, with `package-manager-cache: false`.
 
 `.github/workflows/ci.yml` (name `CI`):
 
