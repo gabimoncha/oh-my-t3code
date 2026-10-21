@@ -6,7 +6,7 @@ import { findRoleTemplate, loadResultContract } from "../brief/templates.ts";
 import { limitArg } from "../config/validate.ts";
 import { requestId } from "../ledger/ledger.ts";
 import { evidenceDir, findProjectRoot } from "../paths.ts";
-import { findRole, resolveRole, toRouteOutput } from "../routing/resolve.ts";
+import { findRole, harnessOptions, resolveRole, toRouteOutput } from "../routing/resolve.ts";
 import type { BriefJsonOutput, CliContext, CommandRun } from "../types.ts";
 import { parseArgs, positiveInt } from "../util/args.ts";
 import { OmtError, usageError } from "../util/errors.ts";
@@ -170,7 +170,11 @@ export const run: CommandRun = async (ctx) => {
   }
 
   const caps = await readCapabilities(ctx, values.capabilities);
-  const resolution = resolveRole(name, role, caps, { ...await againstOptions(ctx, config, role, values), models: config.models });
+  const resolution = resolveRole(name, role, caps, {
+    ...harnessOptions(config.harnesses, config.roles),
+    ...await againstOptions(ctx, config, role, values),
+    models: config.models,
+  });
   for (const note of toRouteOutput(resolution).notes) ctx.stderr(`note: ${note}\n`);
   const args = resolution.delegateTask;
   if (args === undefined) {

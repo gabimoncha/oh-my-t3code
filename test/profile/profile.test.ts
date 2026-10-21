@@ -121,6 +121,7 @@ test("profile CLI rejects unknown selections and broken chains and prints role m
   for (const args of [["profile", "show", "custom"], ["plan", "status", "demo"], ["ledger", "stats", "--plan", "demo"]]) {
     const result = run(...args);
     assert.equal(result.code, 0, args.join(" "));
-    assert.match(result.stderr, /error profile "custom" roles.brandnew: a new role needs description, access, and chain/);
+    assert.match(result.stderr, /error \S+config\.jsonc profiles\.custom\.roles\.brandnew: a new role needs description, access, and chain/);
+    assert.equal(result.stderr.match(/roles\.brandnew/g)?.length, 1);
   }
 });

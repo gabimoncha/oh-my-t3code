@@ -48,7 +48,7 @@ src/
   types.ts               shared types (section 3)
   paths.ts               path helpers (section 4)
   util/                  errors.ts, args.ts, fs.ts, output.ts, json.ts, ids.ts
-  config/                jsonc.ts, defaults.ts, validate.ts, merge.ts, load.ts, starter.ts, schema.ts
+  config/                jsonc.ts, defaults.ts, defaultSets.ts (section 6.4), validate.ts, merge.ts, load.ts, starter.ts, schema.ts
   routing/               capabilities.ts, effort.ts, resolve.ts, format.ts, family.ts
   brief/                 templates.ts, render.ts
   plan/                  template.ts, parse.ts
@@ -56,12 +56,13 @@ src/
   ledger/                ledger.ts
   profile/               resolve.ts
   lock/                  lock.ts
-  install/               skills.ts, links.ts, claudeHook.ts, manifest.ts, plan.ts, apply.ts, doctor.ts, confirm.ts, fsops.ts, project.ts
+  install/               skills.ts, links.ts, claudeHook.ts, manifest.ts, plan.ts, apply.ts, doctor.ts, confirm.ts, fsops.ts, project.ts, harness.ts (section 5.14)
   hooks/                 userPromptSubmit.ts
   worktree/              runner.ts, runnerText.ts, check.ts, setup.ts (section 5.12)
   commands/              one file per command, each exports `run: CommandRun`
                          profile.ts and lock.ts add profile and lock commands
                          worktree.ts adds the worktree command
+                         defaults.ts and detect.ts add the defaults and detect commands (sections 5.13 and 5.14)
                          shared.ts holds the helpers that commands share and exports no `run`
 scripts/
   build-schema.ts        writes schema/omt.schema.json from src/config/schema.ts
@@ -75,6 +76,7 @@ templates/
 skills/
   omt/                   router skill and shared references
   omt-ulw/ omt-plan/ omt-design/ omt-review/ omt-research/ omt-swarm/ omt-loop/ omt-show/
+  omt-help/ omt-setup/
 test/
   helpers.ts             temp dirs and a fake CliContext
   run.ts                 command helpers
@@ -182,22 +184,26 @@ export interface ProfileConfig {
 
 export interface OmtConfig {
   version: 1;
+  defaults: string; // the selected default set, for example "2026-10"
   profile: string;
   profiles: Record<string, ProfileConfig>;
   models: Record<string, ModelConfig>;
   roles: Record<string, RoleConfig>;
   limits: Limits;
   visuals: Visuals;
+  harnesses?: string[]; // the driver kinds that routing may use; absent means every driver
 }
 
 export interface ConfigLayer {
   version?: 1;
+  defaults?: string;
   profile?: string;
   profiles?: Record<string, Partial<ProfileConfig> | null>;
   models?: Record<string, ModelConfig>;
   roles?: Record<string, Partial<RoleConfig> | null>;
   limits?: Partial<Limits>;
   visuals?: Partial<Visuals>;
+  harnesses?: string[];
 }
 
 export type IssueSeverity = "error" | "warning";
@@ -219,6 +225,14 @@ export interface LoadedConfig {
   config: OmtConfig;
   sources: ConfigSource[];
   issues: ConfigIssue[];
+  defaultsSource: string; // the config file that selects config.defaults, or "latest"
+}
+
+export interface DefaultsChange {
+  path: string; // for example "roles.execute.chain"
+  from: string; // the printed value, or "none" when the path is absent
+  to: string;
+  overriddenBy?: string; // the config file whose value wins over the change
 }
 
 export interface OptionChoice {
@@ -360,6 +374,22 @@ export interface LedgerStats {
   canDispatch: boolean; // active < maxParallel && dispatched < maxTasksPerRun
 }
 
+export type T3DriverStatus = "enabled" | "disabled" | "unknown";
+
+export interface HarnessStatus {
+  driver: string; // a driver kind, for example "claudeAgent"
+  detected: boolean;
+  t3: T3DriverStatus;
+  executable: string | null; // the first match on PATH; null with capabilities
+  reason: string;
+}
+
+export interface HarnessReport {
+  source: "capabilities" | "local";
+  harnesses: HarnessStatus[]; // claudeAgent, then codex
+  recommended: string[]; // the detected drivers, in the order of harnesses
+}
+
 // How the CLI runs: the TypeScript sources with Bun, the JavaScript bundle dist/cli.js, or a compiled binary.
 export type CliBuild = "source" | "bundle" | "binary";
 
@@ -456,11 +486,13 @@ Argument parsing uses `node:util` `parseArgs` with `strict: true` and `allowPosi
 
 | Command | Synopsis |
 | --- | --- |
-| `install` | `omt install [--project [--no-git-exclude]] [--targets <list>] [--hooks] [--yes] [--dry-run] [--force]` |
+| `install` | `omt install [--project [--no-git-exclude]] [--targets <list>] [--hooks] [--capabilities <file>] [--yes] [--dry-run] [--force]` |
 | `uninstall` | `omt uninstall [--project] [--yes] [--dry-run] [--purge] [--force]` |
 | `doctor` | `omt doctor [--project] [--capabilities <file>] [--json]` |
 | `init` | `omt init` |
 | `config` | `omt config [show \| path \| validate \| init] [--json] [--defaults] [--force]` |
+| `defaults` | `omt defaults list [--json]`, `omt defaults diff [<from>] [<to>] [--json]`, `omt defaults use <set\|latest> [--user \| --project] [--dry-run] [--yes] [--json]` |
+| `detect` | `omt detect [--capabilities <file>] [--json] [--write] [--user \| --project] [--dry-run] [--yes]` |
 | `roles` | `omt roles [--capabilities <file>] [--role <name>]... [--plan <slug>] [--profile <name>] [--json]` |
 | `route` | `omt route <role> [--capabilities <file>] [--against <provider\|driver\|auto>] [--plan <slug>] [--profile <name>] [--unit <id>]` |
 | `brief` | `omt brief <role> (--task <text> \| --task-file <file>) [options]` |
@@ -500,7 +532,7 @@ Both outputs inline the worktree setup runner, its module and its text (section 
 
 ### 5.1 `omt config`
 
-- `show` (the default subcommand) prints the merged config as JSON, before the selected profile is applied (section 6.7). `--defaults` prints the built-in defaults instead. Config issues go to stderr, and the command still exits 0.
+- `show` (the default subcommand) prints the merged config as JSON, before the selected profile is applied (section 6.7). `--defaults` prints the selected default set (section 6.4) instead. Config issues go to stderr, and the command still exits 0.
 - `path` prints two lines: `user: <path> (present)` or `(absent)`, then `project: <path> (present)` or `(absent)`. Neither path goes through `realpath`. The CLI takes its cwd from `$PWD` when `$PWD` resolves to `process.cwd()` and `findProjectRoot($PWD)` resolves to the same real directory as `findProjectRoot(process.cwd())`; otherwise it uses `process.cwd()`. So the project root always names the physical project, and `$PWD` changes only how it prints.
 - `validate` prints each issue as `<severity> <source> <path>: <message>`, or `<severity> <source>: <message>` when the path is empty. A JSONC syntax error is one issue with an empty path and the message `<line>:<column>: <reason>`, so the file path appears once. It prints `config ok` when there is no issue. It exits 1 when any issue is an error. `--json` prints `{ "ok": boolean, "issues": ConfigIssue[] }`.
 - `init` writes the starter user config (section 6.5) and prints `create <path>` or `overwrite <path>`. It refuses to overwrite an existing file unless `--force` is given.
@@ -856,15 +888,47 @@ The runner. T3 starts it in the new worktree. It works on the checkout two level
 
 The runner sets no global configuration and no store or cache path, so the user's store and cache settings apply. Package managers may keep patched, trusted, or local packages out of the global store. On Windows, a `.exe` on `PATH` runs directly, and a `.cmd` or `.bat` shim runs through `%ComSpec% /d /s /c` with `windowsVerbatimArguments`. The arguments are fixed strings from the runner, never text from `package.json`, and a path or argument with a quote, `%`, `!`, `^`, or a line break is refused. `launchSpec(name, args, { platform, env, exists })` and `installCommand(manager, version)` are exported for tests.
 
+### 5.13 `omt defaults`
+
+`omt defaults` lists, compares, and pins the dated default sets of section 6.4. Every subcommand accepts `--json`. `--user`, `--project`, `--dry-run`, and `--yes` apply only to `use`; with another subcommand they are a usage error. A set name that is not `latest` and not in `DEFAULT_SETS` is a usage error with the hint `known sets: <names>, or latest`.
+
+- `list` prints one line per set: the name, then the marks `latest` and `selected (<source>)`, joined by `, `. `<source>` is `LoadedConfig.defaultsSource`: the config file that selects the set, or `latest`. Config issues go to stderr. `--json` prints `{ "latest", "selected", "source", "sets": [{ "name", "latest", "selected" }] }`.
+- `diff [<from>] [<to>]` compares two sets with `diffDefaultSets` (section 6.4). `<from>` defaults to the selected set and `<to>` to `latest`; each takes a set name or `latest`. The overrides are the present user and project layers, in that order, after `validateLayer`. It prints one line per change, `<path>: <from> -> <to>`, followed by ` (overridden by <file>)` when `overriddenBy` is set. With no change it prints `no changes`. `--json` prints `{ "from", "to", "changes": DefaultsChange[] }`.
+- `use <set|latest>` changes only the `defaults` key of one config file with `setTopLevelValue` (section 7). `latest` writes the concrete set name. The target is the project config with `--project`, the user config with `--user`, and without a flag the project config when it exists, else the user config. Both flags together are a usage error. `configTarget(ctx, flags)` in `src/commands/defaults.ts` exports this rule. An absent target fails with exit 1, the message `<path> does not exist`, and the hint `run omt init` (project) or `run omt config init` (user). A file that does not parse fails with the `jsonc_parse` error. The command prints `<file>: defaults <old|none> -> <new>`. When the value does not change, it prints `Nothing to change.` and writes nothing. `--dry-run` prints `Dry run: nothing was written.` and writes nothing. Otherwise it confirms with `confirmApply` as `omt install` does (`--yes`, refuse without a TTY, else ask), writes the file atomically, and prints `update <file>`. A refused confirmation exits 1. After the confirmation, also with `--yes`, the write goes through `writeConfigTarget(target, snapshot, next)` in `src/commands/defaults.ts`: it reads the target again, and when the text differs from the text that the change was computed from, or the file is gone, it writes nothing and fails with exit 1, the `config_changed` error `<path> changed while omt waited for confirmation; nothing was written`, and the hint `run the command again`. omt does not lock config writes, so a change saved between this read and the atomic rename can still be lost. `--json` prints `{ "file", "from": string | null, "to", "changed", "applied" }` instead of the text lines.
+
+### 5.14 `omt detect`
+
+`omt detect` finds the harnesses that can run omt's child tasks and sets the root `harnesses` key (section 6.2) to match.
+
+`detectHarnesses({ env, homedir, capabilities? }): HarnessReport` in `src/install/harness.ts` checks the default drivers `claudeAgent` and `codex`, in that order (`DEFAULT_HARNESSES`):
+
+- With capabilities, `source` is `capabilities`. A driver is detected when a provider of that `driverKind` has `canRunChildTask: true`, and `executable` is `null`. `t3` is `enabled` when a provider of the driver exists, else `unknown`. When every such provider has `canRunChildTask: false`, `reason` names each provider and its constraints (`no reason given` for an empty list).
+- Without capabilities, `source` is `local`. `t3` follows the rule below, `executable` is the first `PATH` entry named `claude` (for `claudeAgent`) or `codex` that is a file with an execute bit, and a driver is detected when `t3` is not `disabled` and `executable` is set. On Windows, the names `<name>.exe` and `<name>.cmd` match too. `reason` is `T3 <status>, <executable or "<name> not on PATH">`.
+- `recommended` lists the detected drivers in the order `claudeAgent`, `codex`.
+
+T3 status rule. omt reads `providerInstances` from `t3SettingsPath()` and never writes the file. An entry without a string `driver` is ignored. T3 adds an implicit instance whose id equals the driver kind unless an entry with that id exists, and the implicit `claudeAgent` and `codex` instances start enabled. An instance is disabled when `enabled === false` or `config.enabled === false`, else enabled. A driver is `enabled` when its implicit instance exists or any entry with that `driver` is enabled; `disabled` when no instance of the driver is enabled; `unknown` when the file is absent, unreadable, or not a JSON object. omt does not read `projectSettingsOverrides` or the legacy `providers` key, so it can call a driver disabled that T3 enables for one project.
+
+Output. The command prints one line per driver, `<driver padded to 11>  detected|not detected  <reason>`, for example `claudeAgent  detected  T3 enabled, /usr/local/bin/claude`. Then it prints the recommendation: `recommended: no harnesses key (every default harness is detected)`, or `recommended: harnesses ["codex"]`. Then the effect lines of `harnessEffects`: `design and ui: unavailable without claudeAgent` when `claudeAgent` is missing, and `cross-family review: the same family reviews` when one default driver is left.
+
+Target and wanted value. `--user` and `--project` pick the target file with the rule of `omt defaults use` (`configTarget`, section 5.13), also without `--write`: then the command only compares. The wanted value of the target is `recommended` when a default driver is missing. When every default driver is detected, the wanted value is no key, unless the target is the project file and the user file sets a `harnesses` value that excludes a detected driver; then it is `recommended`. The command compares the target file's own `harnesses` value with the wanted value. When they are equal, it prints `no change in <file>`. Otherwise it prints `<file>: harnesses <current|none> -> <wanted|none>`, and, when the target is the user file and the project file sets `harnesses`, `note: <project file> sets harnesses <value>, which overrides this change`. Without `--write`, it then prints `run omt detect --write to apply`.
+
+`--write` edits only the `harnesses` key of the target with `setTopLevelValue` (section 7): it sets the wanted value, or removes the key when the wanted value is no key. An absent target fails as in `omt defaults use`. `--dry-run` prints `Dry run: nothing was written.` and writes nothing. Otherwise the command confirms with `confirmApply` (`--yes`, refuse without a TTY, else ask), writes the file with `writeConfigTarget` (section 5.13), and prints `update <file>`. A refused confirmation exits 1. When the target changed after the command read it, the command writes nothing and fails with the `config_changed` error of section 5.13. `--dry-run` or `--yes` without `--write` is a usage error.
+
+With no driver detected, the command prints the driver lines, writes nothing, and exits 1 with the `no_harness` error `no harness can run child tasks; nothing was written` and a hint to sign in to Claude Code (`claude`) or Codex (`codex`) and check that T3 Code enables it.
+
+`--json` prints the `HarnessReport` plus `effects`, `file`, `current` (the target's value or `null`), `wanted` (`null` for no key or when no driver is detected), `changed`, `applied`, and `overriddenBy` (the project file, when it overrides the change), instead of the text lines.
+
 ## 6. Config
 
 ### 6.1 Files and layering
 
 The merged config is built from three layers, in this order:
 
-1. The built-in defaults (`src/config/defaults.ts`).
+1. The selected default set (section 6.4, `src/config/defaultSets.ts`).
 2. The user config: `userConfigPath()`.
 3. The project config: `projectConfigPath(findProjectRoot(cwd))`.
+
+`loadConfig` selects the set before any layer merges. The project layer's `defaults` wins over the user layer's. With neither, it uses `LATEST_DEFAULT_SET`. It clones that set as the base, sets `config.defaults` to its name, and sets `LoadedConfig.defaultsSource` to the path of the file that selects it, or `"latest"`. A config without `defaults` therefore resolves exactly like the latest set. `readConfigLayers({ cwd, env, homedir })` in `src/config/load.ts` reads, parses, and validates the user and project files, in that order, and returns `{ kind, path, present, layer, issues }` for each; `loadConfig` and `omt defaults diff` use it.
 
 A missing file is not an error. Each file is JSONC (section 7). Profile selection applies after these layers (section 6.7).
 
@@ -872,7 +936,9 @@ A missing file is not an error. Each file is JSONC (section 7). Profile selectio
 
 `validateLayer(value, source)` returns `{ layer: ConfigLayer, issues: ConfigIssue[] }`. It prunes invalid parts and keeps valid ones.
 
-- The root must be an object. Allowed keys: `$schema` (string, ignored), `version` (must equal 1), `profile` (name), `profiles` (object), `models` (object), `roles` (object), `limits` (object), and `visuals` (object). An unknown key is an error, and the key is dropped.
+- The root must be an object. Allowed keys: `$schema` (string, ignored), `version` (must equal 1), `defaults` (a default set name), `profile` (name), `profiles` (object), `models` (object), `roles` (object), `limits` (object), `visuals` (object), and `harnesses` (array). An unknown key is an error, and the key is dropped.
+- `harnesses` is an array of 1 to 10 unique driver kinds that match `^[a-zA-Z][a-zA-Z0-9_-]{0,63}$`. Any other value is the error `must be an array of 1 to 10 unique driver kinds that match <pattern>, got <value>`, and the key is dropped.
+- `defaults` is valid only when it is a string that matches `DEFAULT_SET_NAME_RE` (`^\d{4}-\d{2}(-[a-z0-9]+)?$`) and names a set in `DEFAULT_SETS`. Otherwise the error is `unknown default set "<name>"; known sets: <names>`, and the key is dropped.
 - A role name matches `^[a-z][a-z0-9-]{0,31}$`. A role value is `null` (remove the role) or an object.
 - Allowed role keys and values:
   - `description`: a non-empty string of at most 300 characters.
@@ -913,13 +979,33 @@ A missing file is not an error. Each file is JSONC (section 7). Profile selectio
   - `crossFamily` stays unset, which counts as `false`. `fast` stays unset, so model settings can apply.
 - Each limit field replaces the old value.
 - Each `visuals` field replaces the old value.
+- `harnesses` replaces the old value as a whole. Absent in every layer, `config.harnesses` stays unset, which means no filter (section 8.3).
 - `profile` replaces the selected name. `models` merges per model and field.
 - Profiles merge per name. An existing profile keeps fields that a layer omits. `workflow` merges per group and key, `limits` per key, `roles` per role and field, and `models` per model and field. Arrays, including `chain` and `testLayers`, replace the old array.
 - A new profile needs `description`. `null` removes a custom profile, with a warning when it does not exist. Removing `normal`, `prototype`, or `pr-review` is an error.
 
-`loadConfig({ cwd, env, homedir })` reads, parses, validates, and merges the layers. It returns a `LoadedConfig`. After all layers merge, `validateMergedProfiles` checks the selected name and every inheritance chain. A project profile can extend a user profile. Unknown parents, cycles, and chains longer than eight profiles are errors that name the chain. Issues name the last source of the profile, or the selection source for an unknown root `profile`. This pass leaves the merged profiles intact. A JSONC syntax error in a file becomes one error issue, and that file is skipped. Only unexpected I/O errors throw.
+`loadConfig({ cwd, env, homedir })` reads, parses, validates, and merges the layers. It returns a `LoadedConfig`. After all layers merge, `validateMergedProfiles` checks the selected name and every inheritance chain. A project profile can extend a user profile. Unknown parents, cycles, and chains longer than eight profiles are errors that name the chain. Issues name the last source of the profile, or the selection source for an unknown root `profile`. This pass leaves the merged profiles intact.
+
+`loadConfig` then resolves every merged profile the way `resolveProfile` does (section 6.7) and adds each merge issue to `LoadedConfig.issues`, so `omt config validate` reports it. Each issue has the last source of the profile and the path `profiles.<name>.roles.<role>` (or `.limits.<key>` or `.models.<id>`), with the message of the merge rule above, for example `a new role needs description, access, and chain; missing: description, access, chain`. An issue is reported once, for the profile that declares the field. A child profile that inherits the field does not repeat the issue. A profile whose chain check failed is not resolved.
+
+A new profile without `description` gets the error `a new profile needs description; missing: description` and stays out of the merged config. `loadConfig` runs the chain check and the profile resolution on a temporary copy of the merged config that holds this profile, so its unknown `extends` parent and its role errors are reported too. It checks each dropped profile of each layer on its own copy and reports its issues with that layer's source, also when a later layer adds the description.
+
+`effectiveConfig` returns `issues: loaded.issues` and does not add the resolved profile's issues again. The resolved profile keeps its own `issues`. So `omt profile show` prints each profile issue once, with the file source.
+
+A JSONC syntax error in a file becomes one error issue, and that file is skipped. Only unexpected I/O errors throw.
 
 ### 6.4 Defaults
+
+`src/config/defaultSets.ts` exports the dated default sets:
+
+- `DEFAULT_SETS: Readonly<Record<string, OmtConfig>>`. Each set is a whole `OmtConfig`, and its `defaults` field holds its own name. The only set is `"2026-10"`, with the values of this section. A set never changes after a release; a change to the defaults goes into a new set with a later name.
+- `LATEST_DEFAULT_SET = "2026-10"` and `DEFAULT_SET_NAME_RE = /^\d{4}-\d{2}(-[a-z0-9]+)?$/`.
+- `isDefaultSet(name)`, `defaultSetNames()`, and `defaultSet(name)`, which returns the named set, or the latest set for a name that omt does not ship.
+- `diffDefaultSets(from: OmtConfig, to: OmtConfig, overrides: { source: string; layer: ConfigLayer }[]): DefaultsChange[]`.
+
+`src/config/defaults.ts` exports `DEFAULT_CONFIG`, the latest set. `resolveProfile` takes its base workflow from the `normal` profile of the set that `config.defaults` names (section 6.7).
+
+`diffDefaultSets` walks both sets as plain objects, skips the root `defaults` key, and reports every leaf path whose JSON value differs: `profile`, every `roles.<role>.<field>`, `limits.<key>`, `models.<id>.<field>`, `visuals.<key>`, and every `profiles.<name>.<field>`, including a profile's `description`, `extends`, `workflow.<group>.<key>`, `limits.<key>`, `roles.<role>.<field>`, and `models.<id>.<field>`. An array, such as a `chain` or `testLayers`, compares as one leaf. A `chain` prints as `driver/model effort, ...` (with `provider` when a rung has no `driver`, and ` fast` for a fast rung). Other values print as JSON. A path that exists in one set only prints `none` on the missing side, and an object that exists in one set only reports each of its leaves. `overrides` come in precedence order: the user layer first, then the project layer. A layer overrides a change when walking the change's path into the layer finds a defined value at the full path, or `null` at an ancestor; `roles.execute: null` therefore overrides every `roles.execute.*` change. `overriddenBy` is the source of the last layer in that order that overrides the change.
 
 Every default rung sets `driver` and also sets `provider` to the same value (`claudeAgent` or `codex`). These are the ids of the T3 built-in provider instances. So an unverified default target names `providerInstanceId`, and a verified one still checks the instance. Observed T3 behavior is the reason. T3 checks a named provider instance again before it refuses it, but it picks a `driverKind`-only target from a cached provider snapshot, and that snapshot can be stale, for example when the T3 window is in the background. With capabilities, a default rung whose instance is not registered runs on an instance of its driver (section 8.3). Without capabilities, a user whose provider instance ids differ from the driver kinds overrides the chains in a config layer.
 
@@ -973,11 +1059,11 @@ Default visuals: `plan` is `true`. omt-plan then shows a final plan as a page in
 
 ### 6.5 Starter files
 
-`src/config/starter.ts` exports two strings. `omt config init` and `omt install` write the user starter. `omt init` writes the project starter. Both are sparse. They hold `$schema`, `version`, empty `roles` and `limits` objects, and comments with one example override, a commented `"profile": "prototype"` line, a commented `"visuals": { "plan": false }` line, and a pointer to `omt config show --defaults`. The `$schema` URL is `https://raw.githubusercontent.com/gabimoncha/oh-my-t3code/main/schema/omt.schema.json`.
+`src/config/starter.ts` exports two strings. `omt config init` and `omt install` write the user starter. `omt init` writes the project starter. Both are sparse. They hold `$schema`, `version`, `"defaults": "<LATEST_DEFAULT_SET>"` after `"version": 1` with a comment that names `omt defaults diff`, empty `roles` and `limits` objects, and comments with one example override, a commented `"profile": "prototype"` line, a commented `"visuals": { "plan": false }` line, and a pointer to `omt config show --defaults`. After the `"profile"` line, each starter has a commented `"profiles"` example: a profile `fast-proto` with `description`, `"extends": "prototype"`, `"workflow": { "build": { "checkpoint": "none" } }`, and `"roles": { "execute": { "fast": true } }`, and a comment that points to `omt profile show <name>`. The `$schema` URL is `https://raw.githubusercontent.com/gabimoncha/oh-my-t3code/main/schema/omt.schema.json`.
 
 ### 6.6 JSON Schema
 
-`src/config/schema.ts` exports the JSON Schema (draft 2020-12) for a config file as a plain object. `scripts/build-schema.ts` writes it to `schema/omt.schema.json` with 2-space indentation and a final newline. A test fails when the committed file differs from the generated output. Another test checks that the schema allows exactly the keys that `validateLayer` allows. Role and rung definitions include boolean `fast`. The role definition also includes boolean `crossFamily`. The schema defines `profile`, `profiles`, `models`, and all workflow groups. Preset profile values cannot be null. New-profile descriptions and inheritance chains need the runtime merge checks. `visuals` is an object with `additionalProperties: false` and a boolean `plan`.
+`src/config/schema.ts` exports the JSON Schema (draft 2020-12) for a config file as a plain object. `scripts/build-schema.ts` writes it to `schema/omt.schema.json` with 2-space indentation and a final newline. A test fails when the committed file differs from the generated output. Another test checks that the schema allows exactly the keys that `validateLayer` allows. Role and rung definitions include boolean `fast`. The role definition also includes boolean `crossFamily`. The schema defines `profile`, `profiles`, `models`, and all workflow groups. Preset profile values cannot be null. New-profile descriptions and inheritance chains need the runtime merge checks. `visuals` is an object with `additionalProperties: false` and a boolean `plan`. `defaults` has an `enum` of the names in `DEFAULT_SETS`.
 
 ### 6.7 Profiles and workflow
 
@@ -989,7 +1075,7 @@ Default visuals: `plan` is `true`. omt-plan then shows a final plan as a page in
 4. The user config's `profile`.
 5. `normal`.
 
-`resolveProfile(config, name)` starts from the merged config. It walks `extends`, then applies the chain from parent to child. A profile without `extends` inherits `normal`, except `normal` itself. Each profile applies its roles, limits, and models through `mergeLayer`. Workflow values start from the built-in normal workflow and merge per group and key. Profile overrides therefore apply after root config overrides. The function does not mutate the input.
+`resolveProfile(config, name)` starts from the merged config. It walks `extends`, then applies the chain from parent to child. A profile without `extends` inherits `normal`, except `normal` itself. Each profile applies its roles, limits, and models through `mergeLayer`. Workflow values start from the `normal` profile of the default set that `config.defaults` names (section 6.4) and merge per group and key. Profile overrides therefore apply after root config overrides. The function does not mutate the input.
 
 `effectiveConfig(loaded, { profile?, planProfile? })` returns the loaded fields plus the resolved `profile`. Its `config` has the selected name and the profile-applied `roles`, `limits`, and `models`. The resolved `profile` contains the full `workflow` and its merge issues. `omt config show` returns the layers before this application. `omt profile show` returns the resolved values.
 
@@ -1031,6 +1117,13 @@ The skills apply these switches at the steps in section 15. They reload the prof
 - On a syntax error it throws `OmtError` with code `jsonc_parse` and the message `<source>:<line>:<column>: <reason>`. An unterminated block comment is also an error.
 - Accepts and strips a UTF-8 byte order mark.
 
+`setTopLevelValue(text: string, key: string, value: unknown | undefined): string` in the same file edits one top-level key of a JSONC object and keeps every other byte, comments included:
+
+- It replaces the value of an existing key with `JSON.stringify(value)`. With duplicate keys, it replaces the last one and removes the others, so the parsed result holds the new value.
+- It inserts a new key after the last of the top-level keys `version` and `defaults` that exists, or as the first property when neither exists. The new line takes the indentation of the line it follows (or of the first property), the file's line ending, and a comma that keeps the object valid: a trailing comma when the previous property had one, else a comma after the previous value. A same-line comment stays with its property. When a block comment that spans lines starts on that line, the new property goes on the same line, directly after the previous property, so it is never inside a comment.
+- With `value` `undefined`, it removes every occurrence of the key and the comma that each one needs: its own comma, or for the last property the comma before it. It removes the whole line when the property is alone on that line. It keeps every comment outside the removed property, also a comment after the removed value. A comment between the removed key and its value is part of the property and goes with it.
+- It throws the `jsonc_parse` error for text that does not parse, and `OmtError` code `jsonc_edit` when the root is not an object.
+
 ## 8. Capabilities, effort, and routing
 
 ### 8.1 Reading capabilities
@@ -1068,7 +1161,9 @@ Any other driver, or an unknown driver, returns no options and the note `effort 
 
 ### 8.3 Resolving a role
 
-`resolveRole(name, role, caps?, options?)` walks the chain and builds one `RungAttempt` per rung. `options` is `{ models?: Record<string, ModelConfig>; against?: string; notes?: string[]; drivers?: Map<string, string> }`. `notes` are role-level notes that go first, such as the `--against auto` note (section 5.3). `drivers` maps a provider instance id to a driver kind for the family rule below. The command layer passes `configuredDrivers(config.roles)` and the effective `config.models`.
+`resolveRole(name, role, caps?, options?)` walks the chain and builds one `RungAttempt` per rung. `options` is `{ models?: Record<string, ModelConfig>; against?: string; notes?: string[]; drivers?: Map<string, string>; harnesses?: string[] }`. `notes` are role-level notes that go first, such as the `--against auto` note (section 5.3). `drivers` maps a provider instance id to a driver kind for the family rule below. The command layer passes `configuredDrivers(config.roles)` and the effective `config.models`.
+
+Harness filter. `omt roles`, `omt route`, `omt brief`, and the doctor `roles` check pass the effective `config.harnesses`; `harnessOptions(harnesses, roles)` builds `{ harnesses, drivers: configuredDrivers(roles) }`, or `{}` when the key is unset. When `options.harnesses` is set, a rung whose driver kind is known and not in the list is a failed attempt with the reason `harness <driver> is not enabled (harnesses: <list joined with ", ">); run omt detect`, before any other check. The driver kind is known when the rung names a registered provider (its `driverKind`), sets `driver`, or names a provider instance that `drivers` maps. A rung whose driver kind is unknown stays. The role is `unavailable` when no rung is left.
 
 With capabilities, first check the parent's mode ceilings. T3 lets a child keep or narrow the parent's modes, never widen them.
 
@@ -1111,7 +1206,7 @@ Status:
 
 `delegateTask` uses the first ok rung's target plus the role's `t3Role`, `interactionMode`, and `runtimeMode`. `fallbacks` holds the targets of the later ok rungs. `RoleResolution.crossFamily` copies the role's flag (`false` when unset). `RoleResolution.notes` holds the role-level notes, and is absent when there are none. `toRouteOutput` puts them before the rung notes.
 
-`resolveAll(config, caps?, only?)` returns a `RolesReport`. It keeps the order of `only` and drops duplicates. An unknown name in `only` throws `OmtError` with code `unknown_role`.
+`resolveAll(config, caps?, only?, harnesses?)` returns a `RolesReport` and passes `harnesses` to every `resolveRole` call. It keeps the order of `only` and drops duplicates. An unknown name in `only` throws `OmtError` with code `unknown_role`.
 
 ### 8.4 Fast mode
 
@@ -1469,7 +1564,9 @@ Skill copies go to `skillRoots().agents/<name>`. Each target is one of:
 
 Links go to `skillRoots().claude/<name>`, and to `skillRoots().gemini/<name>` when that target is selected. The link is relative. Its target is computed from real paths, `path.relative(realpath(link root), join(realpath(agents root), name))`, so the link resolves even when a root is itself a symlink. Each link is `create`, `unchanged` (a symlink that resolves to the canonical directory), or `conflict` (anything else). Before planning links, resolve each root and the agents root with `fs.realpath` (a missing root resolves to its own path). When a link root and the agents root are the same directory, plan no links for that root.
 
-The user config is `create` when absent, else `unchanged`. The Claude hook, only with `--hooks`, is `create`, `update`, or `unchanged` (section 14.4).
+The user config is `create` when absent, else `unchanged`.
+
+The plan also holds a harness step. The install runs `detectHarnesses` (section 5.14), with the file of `--capabilities` when given. When the config step is `create`, a default driver is missing, and at least one driver is detected, the starter gets `"harnesses": [<recommended>]`, inserted after the `defaults` line with `setTopLevelValue`. When the config exists, the install never edits it. When its effective `harnesses` (unset means both default drivers) differ from `recommended` and a driver is detected, the step holds the hint `run omt detect --write`. The Claude hook, only with `--hooks`, is `create`, `update`, or `unchanged` (section 14.4).
 
 `--targets` is a comma-separated subset of `agents`, `claude`, and `gemini`. `agents` is always included. The default is `agents,claude`, plus `gemini` when `<home>/.gemini` exists.
 
@@ -1483,7 +1580,7 @@ The hash is SHA-256 over the sorted relative paths and the contents of a skill d
 
 ### 14.3 Install flow
 
-1. Print the plan, grouped by skills, links, config, and hooks. One line per action, such as `create   omt-ulw`.
+1. Print the plan, grouped by skills, links, config, and hooks. One line per action, such as `create   omt-ulw`. After the config action, a `Harnesses (T3 settings and PATH):` or `Harnesses (capabilities):` section prints one indented line per driver (section 5.14). When the starter gets a `harnesses` key, it prints `the starter config gets "harnesses": <value>` and the effect lines. With no driver detected, it prints `no harness detected; sign in to Claude Code or Codex, then run omt detect`. With the hint of section 14.2, it prints `the config's harnesses differ from the recommendation <value or "(no key)">; run omt detect --write`. This section comes before the confirmation prompt.
 2. With any `conflict` and no `--force`, print a hint that names `--force` and exit 1. With `--force`, mark each conflict as `replace` in the plan.
 3. With `--dry-run`, stop here and exit 0. Nothing is written. When every action is `unchanged`, skip the prompt in step 4.
 4. Without `--yes`: when `isTTY` is true, ask `Apply this plan? [y/N] ` and continue only on `y` or `yes`. Any other answer prints `Nothing was changed.` and exits 1. When it is false, print `Re-run with --yes to apply.` and exit 1. Nothing is written in either case.
@@ -1571,15 +1668,17 @@ The plan lists the user config and the manifest only when they exist. Two names 
 | --- | --- | --- | --- | --- |
 | `runtime` | binary mode, with the message `omt <version> binary`; otherwise `ctx.runtimeName` is `node` with `ctx.runtimeVersion` 22 or later, or `bun` with 1.4.3 or later | | an older Node or Bun; the message names both minimum versions | |
 | `config` | no issues | warnings only | any error | |
+| `defaults` | a config file pins the latest set: `<set> (pinned, latest)` | | | no file pins a set: `<set> (latest, not pinned); run omt defaults use latest to pin`; or a file pins an older set: `pinned <set> from <file>; omt ships <latest>; run omt defaults diff` |
+| `harnesses` | the config sets no `harnesses` key: `claudeAgent, codex`; or the key holds both | | | the key leaves out `claudeAgent`: `<list> only; design and ui are unavailable`; or it leaves out `codex`: `<list> only; cross-family review uses the same family` |
 | `skills` | every bundled skill is installed, managed, and current | missing, outdated, or locally modified skills | the CLI has no bundled skills (section 14.1) | |
 | `links` | every Claude link resolves to its canonical directory | a missing link | a broken or conflicting link | |
 | `hooks` | the manifest hook is present in the Claude settings, and the paths in its command exist | the manifest hook is missing from the settings | a path in the hook's command does not exist | no hook installed; suggest `omt install --hooks` |
 | `path` | an executable `omt` exists in a `PATH` directory | none found; skills fall back to manual role resolution, and the message names the install channels of section 14.2 | | |
 | `t3` | `t3SettingsPath()` exists | it does not exist | | |
-| `homes` | every T3 `claudeAgent` instance that sets `config.homePath` has the skills linked in `<homePath>/skills` | an instance with a `homePath` that lacks the skills | | no instance sets a `homePath` |
+| `homes` | every T3 `claudeAgent` instance that sets `config.homePath` has the skills linked in `<homePath>/skills` | an instance with a `homePath` that lacks the skills; a settings file that cannot be read or is not valid JSON | | no instance sets a `homePath` |
 | `roles` | every role resolves (only with `--capabilities`) | some roles are unavailable | the `execute` role is unavailable | |
 
-With `--project`, doctor checks the project scope (section 14.8). It runs `runtime` and `config` as above, and `skills`, `links`, and `hooks` against the project paths. It replaces `path` and `homes` with these checks, keeps `t3` and `roles`, and adds `worktree` after `t3`. `worktree` checks the checkout of the current directory, which can be a linked worktree, while the other project checks use the main checkout:
+With `--project`, doctor checks the project scope (section 14.8). It runs `runtime`, `config`, `defaults`, and `harnesses` as above, and `skills`, `links`, and `hooks` against the project paths. It replaces `path` and `homes` with these checks, keeps `t3` and `roles`, and adds `worktree` after `t3`. `worktree` checks the checkout of the current directory, which can be a linked worktree, while the other project checks use the main checkout:
 
 | Id | PASS | WARN | FAIL | INFO |
 | --- | --- | --- | --- | --- |
@@ -1589,7 +1688,7 @@ With `--project`, doctor checks the project scope (section 14.8). It runs `runti
 
 In project scope, every install hint names the running CLI, because `omt` may not be on `PATH` and the shim may be broken. The hint is `"<cliPath>" install --project` in binary mode, `node "<cliPath>" install --project` or `bun "<cliPath>" install --project` in bundle mode, after the runtime that runs the bundle (`runtimeName`), so the hint works with no `node` on `PATH` under Bun, and `bun "<cliPath>" install --project` in source mode. When the CLI runs from a one-shot cache, as it does through a runner shim, the hint is `npx --yes omt3@<version> install --project`, or the `pnpm dlx` or `bunx` form of the shim.
 
-The `hooks` check reads the settings paths from the manifest. With no manifest hook, it looks for a signed entry in `claudeSettingsPath()`. The `homes` check reads `providerInstances` from `t3SettingsPath()` and never writes it. It looks at instances whose `driver` is `claudeAgent`, expands a leading `~`, and accepts a link or a managed copy for each skill. The `roles` check is left out without `--capabilities`. The status set is `PASS`, `WARN`, `FAIL`, and `INFO`. `--json` prints `{ "ok": boolean, "checks": [{ "id", "status", "message" }] }`, where `ok` is false when any check fails. The exit code is 1 when any check fails.
+The `hooks` check reads the settings paths from the manifest. With no manifest hook, it looks for a signed entry in `claudeSettingsPath()`. The `homes` check reads `providerInstances` from `t3SettingsPath()` and never writes it. It looks at instances whose `driver` is `claudeAgent`, expands a leading `~`, and accepts a link or a managed copy for each skill. The `roles` check is left out without `--capabilities`. `checkDefaults(loaded)` in `src/install/doctor.ts` builds the `defaults` check, and `checkHarnesses(loaded)` builds the `harnesses` check from the effective `config.harnesses`. After `omt install` applies a plan, it loads the config and prints `note: defaults <message>` when that check is `INFO`. The status set is `PASS`, `WARN`, `FAIL`, and `INFO`. `--json` prints `{ "ok": boolean, "checks": [{ "id", "status", "message" }] }`, where `ok` is false when any check fails. The exit code is 1 when any check fails.
 
 ### 14.8 Project scope
 
@@ -1813,6 +1912,8 @@ User scope and project scope never read or write each other's files.
 | `omt-research` | model | Parallel read-only research into a cited report. |
 | `omt-swarm` | user | Independent tracks in separate worktree threads with `t3_thread_launch`, stacked branches, `link_pull_request`, and `watch_pull_request`. Invoking it is the explicit user request that T3 requires for new threads. |
 | `omt-show` | model | A page in the T3 thread with flowcharts, tables, and status cards. The skill writes a page spec (section 5.9) with only what the built tabs do not show, builds the page with `omt visual`, and passes the page text to `html_render` with `height` 2000. Without `html_render`, the page file is the result. Reference: `references/page-spec.md`. |
+| `omt-help` | model | Help and a short tour. Read-only: it maps a question to a workflow skill, a CLI command, or a config change, grounds each answer in the output of read commands (`omt --help`, `omt doctor --project`, `omt roles`, `omt defaults list`, `omt detect`, and others), links the docs on GitHub, and hands every write to `omt-setup`. |
+| `omt-setup` | model | Set up, configure, or update omt through the CLI: the doctor check, the harnesses (`omt detect`, with `--capabilities` in a T3 thread), the default set (`omt defaults`), worktree setup, profile and role edits, and an update. It shows each command or edit first, runs `--dry-run` where the command has it, and passes `--yes` only after the user agrees. |
 | `omt-loop` | user | Keep work going across turns. On Claude and Codex threads, it asks the user to type `/goal <objective>`; no MCP tool sets a goal. Otherwise it uses a `schedule_task` heartbeat bound to the thread, a condition command, and a hard iteration cap counted in the ledger. It deletes the schedule when done. |
 
 Rules that the skills must carry:

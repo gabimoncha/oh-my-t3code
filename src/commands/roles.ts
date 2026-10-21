@@ -30,7 +30,7 @@ export const run: CommandRun = async (ctx) => {
   }, { maxPositionals: 0 });
   const { config } = await loadEffectiveConfigReporting(ctx, { plan: values.plan, profile: values.profile, allowMissingPlan: true });
   const caps = await readCapabilities(ctx, values.capabilities);
-  const report = resolveAll(config, caps, values.role);
+  const report = resolveAll(config, caps, values.role, config.harnesses);
   ctx.stdout(values.json ? formatJson(report) : formatRolesTable(report));
   return 0;
 };

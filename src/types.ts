@@ -88,22 +88,26 @@ export interface ProfileConfig {
 
 export interface OmtConfig {
   version: 1;
+  defaults: string; // the selected default set, for example "2026-10"
   profile: string;
   profiles: Record<string, ProfileConfig>;
   models: Record<string, ModelConfig>;
   roles: Record<string, RoleConfig>;
   limits: Limits;
   visuals: Visuals;
+  harnesses?: string[]; // the driver kinds that routing may use; absent means every driver
 }
 
 export interface ConfigLayer {
   version?: 1;
+  defaults?: string;
   profile?: string;
   profiles?: Record<string, Partial<ProfileConfig> | null>;
   models?: Record<string, ModelConfig>;
   roles?: Record<string, Partial<RoleConfig> | null>;
   limits?: Partial<Limits>;
   visuals?: Partial<Visuals>;
+  harnesses?: string[];
 }
 
 export type IssueSeverity = "error" | "warning";
@@ -125,6 +129,14 @@ export interface LoadedConfig {
   config: OmtConfig;
   sources: ConfigSource[];
   issues: ConfigIssue[];
+  defaultsSource: string; // the config file that selects config.defaults, or "latest"
+}
+
+export interface DefaultsChange {
+  path: string; // for example "roles.execute.chain"
+  from: string; // the printed value, or "none" when the path is absent
+  to: string;
+  overriddenBy?: string; // the config file whose value wins over the change
 }
 
 export interface OptionChoice {
@@ -271,6 +283,22 @@ export interface LedgerStats {
   planMaxParallel?: number; // the plan header max-parallel; set only when the plan has one
   planMaxTasks?: number; // the plan header max-tasks; set only when the plan has one
   canDispatch: boolean; // active < maxParallel && dispatched < maxTasksPerRun
+}
+
+export type T3DriverStatus = "enabled" | "disabled" | "unknown";
+
+export interface HarnessStatus {
+  driver: string; // a driver kind, for example "claudeAgent"
+  detected: boolean;
+  t3: T3DriverStatus;
+  executable: string | null; // the first match on PATH; null with capabilities
+  reason: string;
+}
+
+export interface HarnessReport {
+  source: "capabilities" | "local";
+  harnesses: HarnessStatus[]; // claudeAgent, then codex
+  recommended: string[]; // the detected drivers, in the order of harnesses
 }
 
 // How the CLI runs: the TypeScript sources with Bun, the JavaScript bundle dist/cli.js, or a compiled binary.

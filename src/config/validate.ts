@@ -15,9 +15,10 @@ import type {
   WorkflowLayer,
 } from "../types.ts";
 import { usageError } from "../util/errors.ts";
+import { defaultSetNames, isDefaultSet } from "./defaultSets.ts";
 import { isRecord } from "../util/json.ts";
 
-export const ROOT_KEYS: readonly string[] = ["$schema", "version", "profile", "profiles", "models", "roles", "limits", "visuals"];
+export const ROOT_KEYS: readonly string[] = ["$schema", "version", "defaults", "profile", "profiles", "models", "roles", "limits", "visuals", "harnesses"];
 export const ROLE_KEYS: readonly string[] = [
   "description",
   "access",
@@ -85,6 +86,8 @@ export const DESCRIPTION_MAX = 300;
 export const MODEL_MAX = 200;
 export const CHAIN_MIN = 1;
 export const CHAIN_MAX = 10;
+export const HARNESSES_MIN = 1;
+export const HARNESSES_MAX = 10;
 export const LIMIT_RANGES: Readonly<Record<keyof Limits, readonly [number, number]>> = {
   maxParallel: [1, 32],
   maxTasksPerRun: [1, 500],
@@ -414,6 +417,20 @@ function validateProfiles(value: unknown, out: Collector): ConfigLayer["profiles
   return profiles;
 }
 
+function validateHarnesses(value: unknown, out: Collector): string[] | undefined {
+  const valid = Array.isArray(value) &&
+    value.length >= HARNESSES_MIN &&
+    value.length <= HARNESSES_MAX &&
+    value.every((item) => typeof item === "string" && PROVIDER_RE.test(item)) &&
+    new Set(value).size === value.length;
+  if (valid) return [...(value as string[])];
+  out.error(
+    "harnesses",
+    `must be an array of ${HARNESSES_MIN} to ${HARNESSES_MAX} unique driver kinds that match ${PROVIDER_PATTERN}, got ${describe(value)}`,
+  );
+  return undefined;
+}
+
 export function validateLayer(value: unknown, source: string): { layer: ConfigLayer; issues: ConfigIssue[] } {
   const out = new Collector(source);
   const layer: ConfigLayer = {};
@@ -429,6 +446,9 @@ export function validateLayer(value: unknown, source: string): { layer: ConfigLa
     } else if (key === "version") {
       if (item === 1) layer.version = 1;
       else out.error(key, `must be 1, got ${describe(item)}`);
+    } else if (key === "defaults") {
+      if (typeof item === "string" && isDefaultSet(item)) layer.defaults = item;
+      else out.error(key, `unknown default set ${describe(item)}; known sets: ${defaultSetNames().join(", ")}`);
     } else if (key === "roles") {
       const roles = validateRoles(item, key, out);
       if (roles !== undefined) layer.roles = roles;
@@ -447,6 +467,9 @@ export function validateLayer(value: unknown, source: string): { layer: ConfigLa
     } else if (key === "models") {
       const models = validateModels(item, key, out);
       if (models !== undefined) layer.models = models;
+    } else if (key === "harnesses") {
+      const harnesses = validateHarnesses(item, out);
+      if (harnesses !== undefined) layer.harnesses = harnesses;
     }
   }
   return { layer, issues: out.issues };

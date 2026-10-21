@@ -1,4 +1,4 @@
-import { DEFAULT_CONFIG } from "../config/defaults.ts";
+import { defaultSet } from "../config/defaultSets.ts";
 import { mergeLayer } from "../config/merge.ts";
 import { PROFILE_CHAIN_MAX } from "../config/validate.ts";
 import type { ConfigIssue, LoadedConfig, OmtConfig, ProfileConfig, Workflow } from "../types.ts";
@@ -43,11 +43,10 @@ function profileChain(config: OmtConfig, name: string): { name: string; profile:
   return chain.reverse();
 }
 
-export function resolveProfile(config: OmtConfig, name: string): ResolvedProfile {
-  const chain = profileChain(config, name);
+function applyChain(config: OmtConfig, chain: { name: string; profile: ProfileConfig }[]) {
   // Keep the workflow in a temporary profile so mergeLayer also merges its groups and keys.
-  let applied: OmtConfig = { ...config, profiles: { normal: structuredClone(DEFAULT_CONFIG.profiles.normal!) } };
-  const issues: ConfigIssue[] = [];
+  let applied: OmtConfig = { ...config, profiles: { normal: structuredClone(defaultSet(config.defaults).profiles.normal!) } };
+  const issues: { profile: string; issue: ConfigIssue }[] = [];
   for (const entry of chain) {
     const { roles, limits, models, workflow } = entry.profile;
     const merged = mergeLayer(applied, {
@@ -57,8 +56,13 @@ export function resolveProfile(config: OmtConfig, name: string): ResolvedProfile
       ...(workflow === undefined ? {} : { profiles: { normal: { workflow } } }),
     }, `profile "${entry.name}"`);
     applied = merged.config;
-    issues.push(...merged.issues);
+    issues.push(...merged.issues.map((issue) => ({ profile: entry.name, issue })));
   }
+  return { applied, issues };
+}
+
+export function resolveProfile(config: OmtConfig, name: string): ResolvedProfile {
+  const { applied, issues } = applyChain(config, profileChain(config, name));
   return {
     name,
     source: "argument",
@@ -66,8 +70,36 @@ export function resolveProfile(config: OmtConfig, name: string): ResolvedProfile
     limits: applied.limits,
     roles: applied.roles,
     models: applied.models,
-    issues,
+    issues: issues.map((entry) => entry.issue),
   };
+}
+
+// Resolves each named profile and returns the issues of the fields that it declares, so that
+// a child profile does not repeat an issue that it inherits. Skips a profile whose chain fails.
+export function profileIssues(
+  config: OmtConfig,
+  profileSources: ReadonlyMap<string, string>,
+  names: Iterable<string> = Object.keys(config.profiles),
+): ConfigIssue[] {
+  const issues: ConfigIssue[] = [];
+  for (const name of names) {
+    let chain: { name: string; profile: ProfileConfig }[];
+    try {
+      chain = profileChain(config, name);
+    } catch (error) {
+      if (error instanceof OmtError) continue;
+      throw error;
+    }
+    for (const entry of applyChain(config, chain).issues) {
+      if (entry.profile !== name) continue;
+      issues.push({
+        ...entry.issue,
+        source: profileSources.get(name) ?? "defaults",
+        path: `profiles.${name}.${entry.issue.path}`,
+      });
+    }
+  }
+  return issues;
 }
 
 export function effectiveConfig(loaded: LoadedConfig, options: EffectiveConfigOptions = {}): LoadedConfig & { profile: ResolvedProfile } {
@@ -75,11 +107,11 @@ export function effectiveConfig(loaded: LoadedConfig, options: EffectiveConfigOp
   const profile = resolveProfile(loaded.config, name);
   profile.source = options.profile !== undefined ? "argument"
     : options.planProfile !== undefined ? "plan"
-    : loaded.config.profile !== DEFAULT_CONFIG.profile ? "config" : "default";
+    : loaded.config.profile !== defaultSet(loaded.config.defaults).profile ? "config" : "default";
   return {
     ...loaded,
     config: { ...loaded.config, profile: name, limits: profile.limits, roles: profile.roles, models: profile.models },
     profile,
-    issues: [...loaded.issues, ...profile.issues],
+    issues: loaded.issues,
   };
 }

@@ -1,10 +1,13 @@
 import { EFFORT_LADDER } from "../types.ts";
+import { DEFAULT_SETS, LATEST_DEFAULT_SET } from "./defaultSets.ts";
 import { SCHEMA_URL } from "./starter.ts";
 import {
   ACCESS_VALUES,
   CHAIN_MAX,
   CHAIN_MIN,
   DESCRIPTION_MAX,
+  HARNESSES_MAX,
+  HARNESSES_MIN,
   INTERACTION_MODE_VALUES,
   LIMIT_RANGES,
   MODEL_MAX,
@@ -42,6 +45,10 @@ export const CONFIG_SCHEMA = {
   properties: {
     $schema: { type: "string" },
     version: { const: 1 },
+    defaults: {
+      enum: Object.keys(DEFAULT_SETS),
+      description: `Pinned default set. Without it, omt uses the latest set (${LATEST_DEFAULT_SET}). Run omt defaults diff to see what a newer set changes.`,
+    },
     profile: { type: "string", pattern: ROLE_NAME_PATTERN, description: "Default workflow profile. Default normal." },
     profiles: {
       type: "object",
@@ -83,6 +90,14 @@ export const CONFIG_SCHEMA = {
           description: "Show a final plan as a page in the T3 thread. Default true.",
         },
       },
+    },
+    harnesses: {
+      type: "array",
+      minItems: HARNESSES_MIN,
+      maxItems: HARNESSES_MAX,
+      uniqueItems: true,
+      items: { type: "string", pattern: PROVIDER_PATTERN },
+      description: "T3 driver kinds that routing may use, for example [\"codex\"]. A rung of another driver fails. Without it, every driver may run. Run omt detect to set it.",
     },
   },
   $defs: {

@@ -1,5 +1,7 @@
+import { loadConfig } from "../config/load.ts";
 import { applyInstall } from "../install/apply.ts";
 import { confirmApply } from "../install/confirm.ts";
+import { checkDefaults } from "../install/doctor.ts";
 import { buildInstallPlan, installConflicts, installHasChanges, parseTargets, renderInstallPlan } from "../install/plan.ts";
 import { shimPaths } from "../install/project.ts";
 import type { CommandRun } from "../types.ts";
@@ -7,10 +9,11 @@ import { parseArgs } from "../util/args.ts";
 import { usageError } from "../util/errors.ts";
 import { plural } from "../util/output.ts";
 import { worktreeSummary } from "../worktree/check.ts";
+import { readCapabilities } from "./shared.ts";
 
 export const summary = "Install the omt skills, links, starter config, and optional Claude hook.";
 
-export const usage = `Usage: omt install [--project [--no-git-exclude]] [--targets <list>] [--hooks] [--yes] [--dry-run] [--force]
+export const usage = `Usage: omt install [--project [--no-git-exclude]] [--targets <list>] [--hooks] [--capabilities <file>] [--yes] [--dry-run] [--force]
 
 Install the bundled skills into ~/.agents/skills and link them into the
 selected agent skill roots. Shows the plan first, then asks to apply it.
@@ -30,6 +33,10 @@ Options:
                     agents is always included; gemini is not available
                     with --project)
   --hooks           also add the Claude Code UserPromptSubmit ultrawork hook
+  --capabilities <file>
+                    orchestrator_capabilities output (- for stdin) for the
+                    harness detection; without it, omt reads the T3
+                    settings and PATH
   --yes             apply the plan without asking
   --dry-run         print the plan and write nothing
   --force           back up conflicting paths, then install over them
@@ -45,6 +52,7 @@ export const run: CommandRun = async (ctx) => {
     force: { type: "boolean" },
     project: { type: "boolean" },
     "no-git-exclude": { type: "boolean" },
+    capabilities: { type: "string" },
   }, { maxPositionals: 0 });
   const scope = values.project === true ? "project" : "user";
   if (values["no-git-exclude"] === true && scope !== "project") throw usageError("--no-git-exclude needs --project");
@@ -55,6 +63,7 @@ export const run: CommandRun = async (ctx) => {
     force: values.force === true,
     scope,
     gitExclude: values["no-git-exclude"] !== true,
+    capabilities: await readCapabilities(ctx, values.capabilities),
   });
 
   ctx.stdout(renderInstallPlan(plan));
@@ -89,6 +98,8 @@ export const run: CommandRun = async (ctx) => {
   }
   const runner = plan.project === undefined ? undefined : shimPaths(plan.project.shim.after).runner;
   if (runner !== undefined) ctx.stdout(`note: .omt/bin/omt runs ${runner}, which needs the network again after its cache is cleared\n`);
+  const defaults = checkDefaults(await loadConfig(ctx));
+  if (defaults.status === "INFO") ctx.stdout(`note: defaults ${defaults.message}\n`);
   ctx.stdout(
     plan.project === undefined
       ? "Next steps:\n" +

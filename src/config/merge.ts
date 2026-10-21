@@ -106,5 +106,6 @@ export function mergeLayer(
   config.models = mergeModels(config.models, structuredClone(layer.models ?? {}));
   Object.assign(config.limits, layer.limits ?? {});
   Object.assign(config.visuals, layer.visuals ?? {});
+  if (layer.harnesses !== undefined) config.harnesses = [...layer.harnesses];
   return { config, issues };
 }

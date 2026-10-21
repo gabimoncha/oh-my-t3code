@@ -1,6 +1,7 @@
 import { test } from "bun:test";
 import assert from "node:assert/strict";
 import { DEFAULT_CONFIG } from "../src/config/defaults.ts";
+import { LATEST_DEFAULT_SET } from "../src/config/defaultSets.ts";
 import { PROJECT_STARTER_CONFIG, USER_STARTER_CONFIG } from "../src/config/starter.ts";
 import { EFFORT_LADDER } from "../src/types.ts";
 
@@ -126,7 +127,8 @@ function stripJsonc(text: string): string {
 for (const [name, text] of Object.entries({ USER_STARTER_CONFIG, PROJECT_STARTER_CONFIG })) {
   test(`${name} parses as JSONC and is sparse`, () => {
     const parsed = JSON.parse(stripJsonc(text)) as Record<string, unknown>;
-    assert.deepEqual(Object.keys(parsed).sort(), ["$schema", "limits", "roles", "version"]);
+    assert.deepEqual(Object.keys(parsed).sort(), ["$schema", "defaults", "limits", "roles", "version"]);
+    assert.equal(parsed.defaults, LATEST_DEFAULT_SET);
     assert.equal(parsed.$schema, "https://raw.githubusercontent.com/gabimoncha/oh-my-t3code/main/schema/omt.schema.json");
     assert.equal(parsed.version, 1);
     assert.deepEqual(parsed.roles, {});

@@ -98,6 +98,24 @@ test("config validate prints each issue and exits 1 on an error", async () => {
   assert.equal(lines[1]?.split(projectPath).length, 2, "prints the path once");
 });
 
+test("config validate reports the role, missing-description, and unknown-parent errors in project profiles", () => {
+  const { root, project, projectPath, write } = setup();
+  write(projectPath, JSON.stringify({
+    profiles: {
+      custom: { description: "Custom profile", roles: { exceute: { fast: true } } },
+      broken: { extends: "protoype" },
+    },
+  }));
+  const result = spawnOmt(["config", "validate"], { root, cwd: project, env: { PWD: project } });
+  assert.equal(result.code, 1, result.stderr);
+  assert.equal(result.stderr, "");
+  assert.deepEqual(result.stdout.trimEnd().split("\n").sort(), [
+    `error ${projectPath} profiles.custom.roles.exceute: a new role needs description, access, and chain; missing: description, access, chain`,
+    `error ${projectPath} profiles.broken: a new profile needs description; missing: description`,
+    `error ${projectPath} profiles.broken.extends: unknown profile "protoype" in chain: broken -> protoype`,
+  ].sort());
+});
+
 test("config validate exits 0 when every issue is a warning", async () => {
   const { ctx, write, userPath } = setup();
   write(userPath, '{ "roles": { "nope": null } }');
