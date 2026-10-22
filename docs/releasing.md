@@ -69,7 +69,7 @@ On npmjs.com:
 
 On your machine:
 
-1. Update npm to 11.15 or later, so that `npm trust` works. Check the version with `npm --version`. npm 12 needs Node `^22.22.2 || ^24.15.0 || >=26`. If your Node version is in that range, run `npm install -g npm@latest`. If not, run `npm install -g npm@11`.
+1. Use the pinned npm 11.21.1 release, which includes the October bundled dependency security fixes and supports `npm trust`. Run `mise install`, then check the version with `mise exec -- npm --version`.
 2. Log in to npm with `npm login`.
 3. Log in to GitHub with `gh auth login`, with write access to `gabimoncha/oh-my-t3code`.
 4. Install the repository tools as a contributor does: run `mise install` and `bun install` in the clone.

@@ -1980,13 +1980,13 @@ The commands use paths relative to the current directory. A path with a characte
 
 ### 17.1 Workflows
 
-Two GitHub Actions workflows run the tests and the release. Both set workflow-level `permissions: {}`, and each job sets its own permissions. Each job with steps runs on `ubuntu-24.04`. Each action is pinned by its full commit SHA, with a `# vX.Y.Z` comment. `actions/checkout` runs with `persist-credentials: false`. Where a job uses them, `jdx/mise-action` installs mise 2026.10.17 with `add_shims_to_path: false`, `install: true`, and `cache: false`, so Bun comes from `mise.toml`. `actions/setup-node` installs Node 24.22.1, which includes npm 11.19.1, with `package-manager-cache: false`.
+Two GitHub Actions workflows run the tests and the release. Both set workflow-level `permissions: {}`, and each job sets its own permissions. Each job with steps runs on `ubuntu-24.04`. Each action is pinned by its full commit SHA, with a `# vX.Y.Z` comment. `actions/checkout` runs with `persist-credentials: false`. Where a job uses them, `jdx/mise-action` installs mise 2026.10.17 with `add_shims_to_path: false`, `install: true`, and `cache: false`, so Bun comes from `mise.toml`. `actions/setup-node` installs Node 24.22.1, with `package-manager-cache: false`. CI and the npm publishing job then install npm 11.21.1 and check its exact version.
 
 `.github/workflows/ci.yml` (name `CI`):
 
 - Triggers: `push` to `main`, `pull_request` to `main`, and `workflow_call`.
 - Concurrency group `ci-${{ github.event_name }}-${{ github.ref }}`. A new run cancels the previous run only for `pull_request`. The group does not use `github.workflow`, because in a `workflow_call` run that is the caller's name, so the group would match the release group and deadlock the release run.
-- One job, `verify`, with `contents: read`. Its steps are, in order: checkout, mise, Node, `pnpm/action-setup` with pnpm 12.13.0 and `run_install: false`, `node --check templates/worktree-setup.mjs`, the bun-folder check, `bun install --frozen-lockfile`, and `bun run verify`.
+- One job, `verify`, with `contents: read`. Its steps are, in order: checkout, mise, Node, the pinned npm release, `pnpm/action-setup` with pnpm 12.13.0 and `run_install: false`, `node --check templates/worktree-setup.mjs`, the bun-folder check, `bun install --frozen-lockfile`, and `bun run verify`.
 - The bun-folder check prints `command -v` and `realpath` for `bun`, `node`, `npm`, `npx`, and `pnpm`. It fails when `bun` is in the folder of `node`, `npm`, or `pnpm`, or in `/usr/bin` or `/bin`. This is the rule of `tools()` in `test/e2e/registry.ts`.
 
 `.github/workflows/release.yml` (name `Release`):
