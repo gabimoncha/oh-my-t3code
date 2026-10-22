@@ -283,7 +283,7 @@ footer.page-footer ul { columns: 2 300px; }
   <h2 id="what-h">1. What it is and who it is for</h2>
   <p>The user is a developer who runs Claude Code, Codex, Cursor, Pi, or OpenCode agents from T3 Code. That developer types one sentence, for example <code>ulw: add OAuth to the API</code>. omt turns the sentence into a planned run. Each unit goes to the right model and gets a review from the other model family when that family is available. The run ends with tests that ran. In a HEAVY run with the default profile, a reviewer from the other model family tries to find faults in the result before the run counts as done.</p>
   <p><code>ulw</code> is the keyword that starts the <code>omt-ulw</code> skill. Terms such as unit, rung, wake, and oracle are defined in the <a href="#glossary">glossary</a>.</p>
-  <p>The maintainer gets a small TypeScript CLI with no runtime dependencies, nine portable skills, and one config file. omt adds no server, no daemon, and no T3 fork. Every subagent is a T3 child thread, so the T3 UI already shows progress, cancellation, and results.</p>
+  <p>The maintainer gets a small TypeScript CLI with no runtime dependencies, 11 portable skills, and one config file. omt adds no server, no daemon, and no T3 fork. Every subagent is a T3 child thread, so the T3 UI already shows progress, cancellation, and results.</p>
   <div class="callout">
     <strong>The split in one line.</strong>
     <p>T3 gives the mechanism. It does not give roles, model routing, briefs, review loops, done criteria, or fan-out limits. omt fills these gaps and uses only the <code>t3-code</code> MCP tools that T3 already exposes.</p>
@@ -350,7 +350,7 @@ footer.page-footer ul { columns: 2 300px; }
   <text class="m" x="407" y="200" text-anchor="middle">omt-ulw  omt-plan  omt-design</text>
   <text class="m" x="407" y="218" text-anchor="middle">omt-review  omt-research</text>
   <text class="m" x="407" y="236" text-anchor="middle">omt-show  omt-swarm  omt-loop</text>
-  <text class="m" x="407" y="254" text-anchor="middle">omt</text>
+  <text class="m" x="407" y="254" text-anchor="middle">omt-help  omt-setup  omt</text>
   <text class="s" x="407" y="276" text-anchor="middle">plan, split work, read results,</text>
   <text class="s" x="407" y="294" text-anchor="middle">choose the next step</text>
   <rect class="box-a" x="598" y="156" width="230" height="148" rx="8"/>
@@ -1112,16 +1112,16 @@ can dispatch: yes</code></pre>
 <!-- 7. Skills -->
 <section id="skills" aria-labelledby="skills-h">
   <h2 id="skills-h">7. The skills</h2>
-  <p>Nine <code>SKILL.md</code> files share one reference folder, <code>skills/omt/references/</code>. All T3 rules live in <code>delegation.md</code>. Skill names work as composer mentions. <code>$omt-ulw</code> becomes <code>/omt-ulw</code> in Claude and Cursor and <code>/skill:omt-ulw</code> in Pi. It stays <code>$omt-ulw</code> in Codex. Every skill that calls <code>delegate_task</code> records <code>--provider</code> and <code>--model</code> on each dispatch, so <code>--against auto</code> can find the worker later.</p>
+  <p>Eleven <code>SKILL.md</code> files share one reference folder, <code>skills/omt/references/</code>. All T3 rules live in <code>delegation.md</code>. Skill names work as composer mentions. <code>$omt-ulw</code> becomes <code>/omt-ulw</code> in Claude and Cursor and <code>/skill:omt-ulw</code> in Pi. It stays <code>$omt-ulw</code> in Codex. Every skill that calls <code>delegate_task</code> records <code>--provider</code> and <code>--model</code> on each dispatch, so <code>--against auto</code> can find the worker later.</p>
   <div class="cards">
     <article class="card">
       <h3>omt</h3>
       <p class="kind">user-invoked router</p>
       <dl>
         <dt>Trigger</dt><dd>The user picks a workflow.</dd>
-        <dt>Does</dt><dd>Lists the eight workflow skills and a CLI cheat sheet. Names <code>omt-ulw</code> as the default.</dd>
+        <dt>Does</dt><dd>Lists the eight workflow skills, <code>omt-help</code> for questions about omt, <code>omt-setup</code> for setup and config changes, and a CLI cheat sheet. Names <code>omt-ulw</code> as the default.</dd>
         <dt>Dispatches</dt><dd>No roles.</dd>
-        <dt>Hands off to</dt><dd>Any of the eight workflow skills.</dd>
+        <dt>Hands off to</dt><dd>Any of the eight workflow skills, <code>omt-help</code>, or <code>omt-setup</code>.</dd>
       </dl>
     </article>
     <article class="card">
@@ -1546,7 +1546,7 @@ can dispatch: yes</code></pre>
         <tr><th scope="row"><code>src/profile/</code>, <code>src/lock/</code>, <code>src/visual/</code></th><td>Profile resolution, the shared build lock, and the HTML page builder (spec, inline, flow, plan, page).</td></tr>
         <tr><th scope="row"><code>src/commands/</code></th><td>One file per command (15), plus <code>shared.ts</code>.</td></tr>
         <tr><th scope="row"><code>src/util/</code></th><td>args, errors (<code>OmtError</code>), fs (<code>writeFileAtomic</code>), ids, json, output</td></tr>
-        <tr><th scope="row"><code>skills/</code></th><td>The nine skills and <code>omt/references/</code>.</td></tr>
+        <tr><th scope="row"><code>skills/</code></th><td>The 11 skills and <code>omt/references/</code>.</td></tr>
         <tr><th scope="row"><code>scripts/</code>, <code>schema/</code></th><td><code>build-schema.ts</code> writes <code>schema/omt.schema.json</code> from <code>src/config/schema.ts</code>. Run <code class="cmd"><span class="nw">bun</span> <span class="nw">run</span> <span class="nw">schema</span></code> after you change validation. <code>build.ts</code> writes the bundle and the binary, and <code>release.ts</code> writes the npm packages and the release archives.</td></tr>
         <tr><th scope="row"><code>test/</code></th><td><code>bun:test</code> suites with temp-dir helpers and <code>fakeContext()</code>. Child-process tests point <code>HOME</code> and the <code>OMT_*</code>, <code>XDG_*</code>, <code>CLAUDE_*</code>, and <code>T3CODE_*</code> variables at temp paths.</td></tr>
       </tbody>
@@ -1633,7 +1633,7 @@ can dispatch: yes</code></pre>
       <li><code>docs/<wbr>research/<wbr>oh-my-openagent.md</code></li>
       <li><code>docs/<wbr>research/<wbr>oh-my-pi.md</code></li>
       <li><code>README.md</code>, <code>package.json</code></li>
-      <li><code>skills/<wbr>omt-ulw/<wbr>SKILL.md</code> and the other eight skills</li>
+      <li><code>skills/<wbr>omt-ulw/<wbr>SKILL.md</code> and the other ten skills</li>
       <li><code>skills/<wbr>omt/<wbr>references/<wbr>delegation.md</code>, <code>roles.md</code>, <code>results.md</code>, <code>results/<wbr>*.md</code></li>
     </ul>
   </div>

@@ -19,13 +19,15 @@ import {
   skillRoots,
   userConfigPath,
 } from "../paths.ts";
-import type { CliContext } from "../types.ts";
+import { loadConfig } from "../config/load.ts";
+import type { Capabilities, CliContext, HarnessReport } from "../types.ts";
 import { usageError } from "../util/errors.ts";
 import { errorCode, hashDir, isSymlink, pathExists, readFileIfExists, realOrSelf } from "../util/fs.ts";
 import { plural } from "../util/output.ts";
 import { hookCommand, planHookInstall, planHookRemoval, shimHookCommand } from "./claudeHook.ts";
 import type { HookChange } from "./claudeHook.ts";
 import { resolveReal } from "./fsops.ts";
+import { allDetected, DEFAULT_HARNESSES, detectHarnesses, formatHarnessLine, formatHarnessValue, harnessEffects } from "./harness.ts";
 import { planLinks } from "./links.ts";
 import type { LinkRoot, LinkRootName, SkippedRoot } from "./links.ts";
 import { manifestText, readManifest, rebaseManifest } from "./manifest.ts";
@@ -79,6 +81,13 @@ export interface ConfigStep {
   path: string;
   action: PlanAction;
   reason?: string;
+  harnesses?: string[]; // install: the harnesses key that a created starter gets
+}
+
+// install: the harness detection, and what it means for the config.
+export interface HarnessStep {
+  report: HarnessReport;
+  hint?: string; // the existing config's effective harnesses differ from the recommendation
 }
 
 export interface HookStep extends Omit<HookChange, "action"> {
@@ -188,6 +197,7 @@ export interface InstallPlan {
   links: LinkStep[];
   skippedRoots: SkippedRoot[];
   config: ConfigStep;
+  harnesses?: HarnessStep;
   hook?: HookStep;
   previous?: Manifest;
   project?: ProjectInstallSteps;
@@ -253,6 +263,7 @@ export interface InstallOptions {
   force: boolean;
   scope?: InstallScope;
   gitExclude?: boolean; // project scope only; default true
+  capabilities?: Capabilities | undefined; // for the harness detection
 }
 
 async function isRegularFile(path: string): Promise<boolean> {
@@ -493,6 +504,24 @@ async function planProjectInstall(
   return steps;
 }
 
+function sameDrivers(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((driver) => b.includes(driver));
+}
+
+// A created config gets the recommended harnesses when a default harness is missing. An existing config
+// is never edited; the step only says when its effective value differs from the recommendation.
+async function planHarnesses(ctx: CliContext, config: ConfigStep, capabilities?: Capabilities): Promise<HarnessStep> {
+  const report = await detectHarnesses({ env: ctx.env, homedir: ctx.homedir, capabilities });
+  if (config.action === "create") {
+    if (!allDetected(report) && report.recommended.length > 0) config.harnesses = report.recommended;
+    return { report };
+  }
+  const effective = (await loadConfig(ctx)).config.harnesses ?? DEFAULT_HARNESSES;
+  return sameDrivers(effective, report.recommended) || report.recommended.length === 0
+    ? { report }
+    : { report, hint: "run omt detect --write" };
+}
+
 export async function buildInstallPlan(ctx: CliContext, options: InstallOptions): Promise<InstallPlan> {
   const scope = options.scope ?? "user";
   const paths = scopePaths(ctx, scope);
@@ -538,6 +567,7 @@ export async function buildInstallPlan(ctx: CliContext, options: InstallOptions)
   };
   const { manifest: previous, from } = await loadScopeManifest(paths);
   if (previous !== undefined) plan.previous = previous;
+  plan.harnesses = await planHarnesses(ctx, plan.config, options.capabilities);
   if (command !== undefined) plan.hook = await planHookInstall(paths.settingsPath, command);
   if (paths.root !== undefined) plan.project = await planProjectInstall(ctx, plan, paths.root, options.gitExclude !== false, from, runner);
   if (options.force) {
@@ -907,6 +937,22 @@ function line(action: PlanAction, subject: string, reason?: string): string {
   return `  ${action.padEnd(8)} ${subject}${reason === undefined ? "" : `  (${reason})`}\n`;
 }
 
+// The lines are info, not plan actions, so they sit deeper than the two-space action lines.
+function renderHarnesses(step: HarnessStep, config: ConfigStep): string {
+  const { report } = step;
+  let text = `Harnesses (${report.source === "local" ? "T3 settings and PATH" : "capabilities"}):\n`;
+  for (const harness of report.harnesses) text += `    ${formatHarnessLine(harness)}`;
+  if (config.harnesses !== undefined) {
+    text += `    the starter config gets "harnesses": ${formatHarnessValue(config.harnesses)}\n`;
+    for (const effect of harnessEffects(config.harnesses)) text += `    ${effect}\n`;
+  }
+  if (report.recommended.length === 0) text += "    no harness detected; sign in to Claude Code or Codex, then run omt detect\n";
+  if (step.hint !== undefined) {
+    text += `    the config's harnesses differ from the recommendation ${allDetected(report) ? "(no key)" : formatHarnessValue(report.recommended)}; ${step.hint}\n`;
+  }
+  return text;
+}
+
 export function renderInstallPlan(plan: InstallPlan): string {
   let text = `Skills (${plan.agentsRoot}):\n`;
   if (plan.skills.length === 0) text += "  none found in the package\n";
@@ -921,6 +967,7 @@ export function renderInstallPlan(plan: InstallPlan): string {
   for (const skipped of plan.skippedRoots) text += `  skip     ${skipped.path}  (${skipped.reason})\n`;
   text += "Config:\n";
   text += line(plan.config.action, plan.config.path);
+  if (plan.harnesses !== undefined) text += renderHarnesses(plan.harnesses, plan.config);
   text += "Hooks:\n";
   text +=
     plan.hook === undefined

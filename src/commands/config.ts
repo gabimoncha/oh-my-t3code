@@ -1,4 +1,4 @@
-import { DEFAULT_CONFIG } from "../config/defaults.ts";
+import { defaultSet } from "../config/defaultSets.ts";
 import { loadConfig } from "../config/load.ts";
 import { USER_STARTER_CONFIG } from "../config/starter.ts";
 import { findProjectRoot, projectConfigPath, userConfigPath } from "../paths.ts";
@@ -22,7 +22,7 @@ Subcommands:
 
 Options:
   --json            print validate results as JSON
-  --defaults        with show: print the built-in defaults
+  --defaults        with show: print the selected default set
   --force           with init: overwrite an existing file
   -h, --help        print this help
 `;
@@ -30,12 +30,8 @@ Options:
 const SUBCOMMANDS = ["show", "path", "validate", "init"];
 
 async function show(ctx: CliContext, defaults: boolean): Promise<number> {
-  if (defaults) {
-    ctx.stdout(formatJson(DEFAULT_CONFIG));
-    return 0;
-  }
   const loaded = await loadConfigReporting(ctx);
-  ctx.stdout(formatJson(loaded.config));
+  ctx.stdout(formatJson(defaults ? defaultSet(loaded.config.defaults) : loaded.config));
   return 0;
 }
 

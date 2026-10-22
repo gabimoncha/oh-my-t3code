@@ -50,6 +50,24 @@ The CLI cannot call T3 itself. Claude and Codex sessions get the T3 MCP server t
 
 The skills also work without the CLI. They tell the agent to try a role's chain in order and to fall back on a typed T3 error. T3 is the final validator either way.
 
+### The CLI and the skills serve people and agents
+
+The owner set this rule. A person runs omt from a terminal, and an agent runs the same commands from a T3 thread, often for the same person. So every part of omt has two readers:
+
+- Each command prints text for a person. The commands that report state, such as `omt doctor`, `omt roles`, `omt profile show`, `omt defaults`, and `omt detect`, also print JSON with `--json`, so that an agent reads one field without parsing text. `omt init`, `omt install`, and `omt worktree setup` have no `--json` flag. `omt config show` always prints JSON.
+- A command that changes the user's files shows the change first and asks, or takes `--yes`: `omt install`, `omt uninstall`, `omt worktree setup`, `omt defaults use`, and `omt detect --write`. Without a terminal it does not ask and writes nothing. So an agent shows the person the `--dry-run` output and passes `--yes` only after the person agrees. `omt init` and `omt config init` do not ask. They create a missing file and keep an existing config. There are two exceptions. `omt init` adds the missing lines to an existing `.omt/.gitignore`, because an older omt wrote fewer lines, and it keeps every other line. `omt config init --force` replaces an existing user config. So an agent passes `--force` only after the person agrees.
+- Skill names and descriptions are written for people, because a person picks a skill by name in the composer and reads its description in the skill picker. The description also tells the agent when to load the skill, so it puts the trigger words first. The skill body is written for agents: numbered steps, each with a check.
+
+`omt-help` and `omt-setup` follow from this rule. A person who does not know the commands asks in plain words. The skill runs the same commands that the person would run and shows their text output, so the person can check every answer and every change.
+
+### Default sets are pinned
+
+The defaults change between releases, for example when a new model enters a chain. A user who overrides one role should not find that an update changed the other roles without notice. So each release ships dated default sets that never change, such as `2026-10`, and a new config pins the latest set with the `defaults` key. The config holds only the user's overrides, and omt edits only the `defaults` key. `omt defaults diff` lists each change and the override that still wins over it, so the user moves the pin with that list in view. A config without a pin follows the latest set, as every config did before pins existed.
+
+### Harnesses filter the chains
+
+Many users run only Claude Code or only Codex. A config that rewrote all 15 chains for one harness would stop getting new defaults. The `harnesses` key instead removes the rungs of a missing harness when omt resolves a role, so the chains still come from the pinned set. omt detects the harnesses from the T3 settings and `PATH`, or from the live provider list that an agent passes with `--capabilities`. T3's rule for an enabled provider comes from its source code, not a documented API, and omt does not read T3's settings per project. So the install and `omt detect` show the result and ask before they write the key.
+
 ### The owner sees a plan as a page
 
 The owner does not read long plans. Each plan therefore opens with a summary of at most 15 lines in plain words, and a plan reviewer blocks a summary line that the plan does not support, because the owner may read nothing else. A summary still hides the shape of the work: which units wait for which, and how a new process runs. T3 renders no flowcharts in chat, but its `html_render` tool shows an HTML page above the agent's reply. So when a plan is final, `omt-plan` shows it as a page with the summary, the units as a flowchart by dependency layer, the checks, and up to 3 flowcharts or tables of the design.

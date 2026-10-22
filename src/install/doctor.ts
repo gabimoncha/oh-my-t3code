@@ -1,6 +1,7 @@
 import { constants } from "node:fs";
 import { access, realpath, stat } from "node:fs/promises";
 import { delimiter, join } from "node:path";
+import { LATEST_DEFAULT_SET } from "../config/defaultSets.ts";
 import { loadConfig } from "../config/load.ts";
 import { projectShimPath, skillRoots, t3SettingsPath } from "../paths.ts";
 import { resolveAll } from "../routing/resolve.ts";
@@ -26,6 +27,7 @@ import {
   shimPaths,
 } from "./project.ts";
 import { worktreeSummary } from "../worktree/check.ts";
+import { DEFAULT_HARNESSES } from "./harness.ts";
 import { classifySkill, isManagedDir, listBundledSkills } from "./skills.ts";
 import type { BundledSkill } from "./skills.ts";
 
@@ -76,6 +78,25 @@ function checkConfig({ config, issues }: LoadedConfig): DoctorCheck {
   if (errors > 0) return check("config", "FAIL", `${plural(errors, "error")}, ${plural(warnings, "warning")}; run omt config validate`);
   if (warnings > 0) return check("config", "WARN", `${roles}, ${plural(warnings, "warning")}; run omt config validate`);
   return check("config", "PASS", roles);
+}
+
+// Doctor prints this check, and install prints its INFO message as a note after it applies.
+export function checkDefaults({ config, defaultsSource }: Pick<LoadedConfig, "config" | "defaultsSource">): DoctorCheck {
+  const set = config.defaults;
+  if (defaultsSource === "latest") {
+    return check("defaults", "INFO", `${set} (latest, not pinned); run omt defaults use latest to pin`);
+  }
+  if (set === LATEST_DEFAULT_SET) return check("defaults", "PASS", `${set} (pinned, latest)`);
+  return check("defaults", "INFO", `pinned ${set} from ${defaultsSource}; omt ships ${LATEST_DEFAULT_SET}; run omt defaults diff`);
+}
+
+export function checkHarnesses({ config }: Pick<LoadedConfig, "config">): DoctorCheck {
+  const harnesses = config.harnesses;
+  if (harnesses === undefined) return check("harnesses", "PASS", DEFAULT_HARNESSES.join(", "));
+  const list = harnesses.join(", ");
+  if (!harnesses.includes("claudeAgent")) return check("harnesses", "INFO", `${list} only; design and ui are unavailable`);
+  if (!harnesses.includes("codex")) return check("harnesses", "INFO", `${list} only; cross-family review uses the same family`);
+  return check("harnesses", "PASS", list);
 }
 
 // The command that runs this CLI again: the runner with the pinned version for a one-shot run, the
@@ -293,7 +314,12 @@ async function linkedInto(skillsDir: string, agentsRoot: string, name: string): 
 
 async function checkHomes(ctx: CliContext, names: string[]): Promise<DoctorCheck> {
   const path = t3SettingsPath(ctx.env, ctx.homedir);
-  const text = await readFileIfExists(path);
+  let text: string | undefined;
+  try {
+    text = await readFileIfExists(path);
+  } catch (error) {
+    return check("homes", "WARN", `cannot read ${path}: ${errorMessage(error)}`);
+  }
   if (text === undefined) return check("homes", "INFO", "no T3 settings file; no instance sets a homePath");
   let settings: unknown;
   try {
@@ -339,6 +365,8 @@ export async function runDoctor(ctx: CliContext, caps?: Capabilities, scope: Ins
   const checks = [
     checkRuntime(ctx),
     checkConfig(loadedConfig),
+    checkDefaults(loadedConfig),
+    checkHarnesses(loadedConfig),
     await checkSkills(ctx, paths, bundled),
     await checkLinks(ctx, paths, names),
   ];
@@ -360,7 +388,7 @@ export async function runDoctor(ctx: CliContext, caps?: Capabilities, scope: Ins
     checks.push(await checkPath(ctx), await checkT3(ctx), await checkHomes(ctx, names));
   }
   if (caps !== undefined) {
-    checks.push(checkRoles(resolveAll(loadedConfig.config, caps)));
+    checks.push(checkRoles(resolveAll(loadedConfig.config, caps, undefined, loadedConfig.config.harnesses)));
   }
   return { ok: !checks.some((c) => c.status === "FAIL"), checks };
 }

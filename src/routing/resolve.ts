@@ -16,13 +16,14 @@ import type {
 } from "../types.ts";
 import { OmtError } from "../util/errors.ts";
 import { mapEffort } from "./effort.ts";
-import { crossFamilyOrder, rungFamily, workerFamily } from "./family.ts";
+import { configuredDrivers, crossFamilyOrder, rungFamily, workerFamily } from "./family.ts";
 
 export interface ResolveOptions {
   models?: Record<string, ModelConfig>;
   against?: string; // provider instance id or driver kind of the worker whose change the task reviews
   notes?: string[]; // role-level notes to put before the notes that resolveRole adds
   drivers?: Map<string, string>; // provider instance id to driver kind (configuredDrivers), for the worker and for every rung
+  harnesses?: string[]; // the config's harnesses; a rung of another known driver fails
 }
 
 const RUNTIME_RANK = ["approval-required", "auto-accept-edits", "auto", "full-access"];
@@ -175,6 +176,21 @@ function resolveUnverified(rung: Rung, fast: boolean, notes: string[]): Resolved
   return makeTarget(ref, rung.model, options);
 }
 
+// The rung's driver kind when something names it: the registered provider, the rung's driver, or a configured rung.
+function knownDriver(rung: Rung, caps?: Capabilities, drivers?: Map<string, string>): string | undefined {
+  const registered = rung.provider !== undefined && caps?.providers.some((p) => p.providerInstanceId === rung.provider) === true;
+  if (registered || rung.driver !== undefined) return rungFamily(rung, caps, drivers);
+  return rung.provider === undefined ? undefined : drivers?.get(rung.provider);
+}
+
+function harnessFailure(rung: Rung, options: ResolveOptions, caps?: Capabilities): string | undefined {
+  const { harnesses } = options;
+  if (harnesses === undefined) return undefined;
+  const driver = knownDriver(rung, caps, options.drivers);
+  if (driver === undefined || harnesses.includes(driver)) return undefined;
+  return `harness ${driver} is not enabled (harnesses: ${harnesses.join(", ")}); run omt detect`;
+}
+
 function attempt(index: number, rung: Rung, fast: boolean, caps: Capabilities | undefined, ceiling: string | undefined): RungAttempt {
   const notes: string[] = [];
   if (ceiling !== undefined) return { index, rung, ok: false, reason: ceiling, notes };
@@ -221,6 +237,8 @@ export function resolveRole(
   const ceiling = caps === undefined ? undefined : modeCeiling(role, caps);
   const attempts = order.map((index) => {
     const rung = role.chain[index] as Rung;
+    const filtered = harnessFailure(rung, options, caps);
+    if (filtered !== undefined) return { index, rung, ok: false, reason: filtered, notes: [] };
     const model = options.models !== undefined && Object.hasOwn(options.models, rung.model) ? options.models[rung.model] : undefined;
     return attempt(index, rung, rung.fast ?? role.fast ?? model?.fast ?? false, caps, ceiling);
   });
@@ -264,13 +282,19 @@ export function findRole(config: OmtConfig, name: string): RoleConfig {
   return role;
 }
 
-export function resolveAll(config: OmtConfig, caps?: Capabilities, only?: string[]): RolesReport {
+// The harness filter of a config, for resolveRole. Empty when the config has no harnesses key.
+export function harnessOptions(harnesses: string[] | undefined, roles: Record<string, RoleConfig>): ResolveOptions {
+  return harnesses === undefined ? {} : { harnesses, drivers: configuredDrivers(roles) };
+}
+
+export function resolveAll(config: OmtConfig, caps?: Capabilities, only?: string[], harnesses?: string[]): RolesReport {
   const known = Object.keys(config.roles);
   const names = only === undefined ? known : [...new Set(only)];
   const roles: Record<string, RoleResolution> = {};
+  const options: ResolveOptions = { ...harnessOptions(harnesses, config.roles), models: config.models };
   for (const name of names) {
     const role = findRole(config, name);
-    roles[name] = resolveRole(name, role, caps, { models: config.models });
+    roles[name] = resolveRole(name, role, caps, options);
   }
   return { version: 1, verified: caps !== undefined, roles, limits: config.limits };
 }

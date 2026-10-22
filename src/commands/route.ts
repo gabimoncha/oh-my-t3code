@@ -1,4 +1,4 @@
-import { findRole, resolveRole, toRouteOutput } from "../routing/resolve.ts";
+import { findRole, harnessOptions, resolveRole, toRouteOutput } from "../routing/resolve.ts";
 import type { CommandRun } from "../types.ts";
 import { parseArgs } from "../util/args.ts";
 import { usageError } from "../util/errors.ts";
@@ -36,7 +36,11 @@ export const run: CommandRun = async (ctx) => {
   const { config } = await loadEffectiveConfigReporting(ctx, { plan: values.plan, profile: values.profile, allowMissingPlan: true });
   const role = findRole(config, name);
   const caps = await readCapabilities(ctx, values.capabilities);
-  const resolution = resolveRole(name, role, caps, { ...await againstOptions(ctx, config, role, values), models: config.models });
+  const resolution = resolveRole(name, role, caps, {
+    ...harnessOptions(config.harnesses, config.roles),
+    ...await againstOptions(ctx, config, role, values),
+    models: config.models,
+  });
   const output = toRouteOutput(resolution);
   ctx.stdout(formatJson(output));
   return output.status === "unavailable" ? 1 : 0;

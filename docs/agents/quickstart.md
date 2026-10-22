@@ -24,6 +24,8 @@ Tell the user what one provider family costs them:
 - With one family, the same family reviews its own work.
 - The `design` and `ui` roles run only on Claude Opus 5.5 and have no fallback. Without Claude Code, omt cannot do design or UI units.
 
+The install in step 4 detects which of the two harnesses can run, and fits the new config to them.
+
 Check: git exists, Node 22 or later, Bun 1.4.4 or later, or `mise` is on `PATH`, and the user confirms T3 Code and at least one signed-in provider. If T3 Code or a provider is missing, tell the user what to install and stop.
 
 ## 2. Find out if you run in a T3 thread
@@ -112,13 +114,17 @@ The commands below use `omt`. Replace `omt` with the command before `install` in
 
 Add `--hooks` only when the user runs Claude Code. The hook lets the user start ultrawork with the bare `ulw` keyword. Codex gets no hook. Codex users type `$omt-ulw`. With a one-shot install, the hook calls the runner on each prompt. If the runner's cache is cleared and the network is down, the hook can pass its 10-second timeout.
 
+If you run in a T3 thread (step 2), give the install the live provider list. Call `orchestrator_capabilities` with no arguments, save the result to a temp file outside the repository, such as `/tmp/t3-capabilities.json`, and add `--capabilities <file>` to both install commands below. Outside a T3 thread, leave the flag out. The install then reads the T3 settings file and `PATH`.
+
 First, show the plan and write nothing:
 
 ```sh
 omt install --project --hooks --dry-run
 ```
 
-Then apply it. Without a terminal, the install does not ask. It prints `Re-run with --yes to apply.` and changes nothing, so pass `--yes`:
+Read the `Harnesses` section of the plan to the user. It lists `claudeAgent` and `codex` as `detected` or `not detected`. When one is missing, it shows the `"harnesses"` value that the new config gets and its effect, such as `design and ui: unavailable without claudeAgent`. When a harness is missing that the user expected, stop, and help the user sign in to it or enable it in T3 before you apply the plan.
+
+Then apply it. Without a terminal, the install does not ask. It prints `Re-run with --yes to apply.` and changes nothing, so pass `--yes` only after the user agrees with the plan:
 
 ```sh
 omt install --project --hooks --yes
@@ -135,22 +141,26 @@ Check the install:
 Expect these lines, with paths in the user's project:
 
 ```text
-PASS  runtime  <runtime>
-PASS  config   15 roles
-PASS  skills   9 skills installed in <project>/.agents/skills
-PASS  links    9 links in <project>/.claude/skills
-PASS  hooks    Claude UserPromptSubmit hook in <project>/.claude/settings.local.json
-PASS  shim     <project>/.omt/bin/omt
-PASS  exclude  omt block in <project>/.git/info/exclude
-PASS  t3       <home>/.t3/userdata/settings.json
-PASS  worktree <project>: the setup script "Setup" runs node .t3/omt-worktree-setup.mjs; ...
+PASS  runtime    <runtime>
+PASS  config     15 roles
+PASS  defaults   2026-10 (pinned, latest)
+PASS  harnesses  claudeAgent, codex
+PASS  skills     11 skills installed in <project>/.agents/skills
+PASS  links      11 links in <project>/.claude/skills
+PASS  hooks      Claude UserPromptSubmit hook in <project>/.claude/settings.local.json
+PASS  shim       <project>/.omt/bin/omt
+PASS  exclude    omt block in <project>/.git/info/exclude
+PASS  t3         <home>/.t3/userdata/settings.json
+PASS  worktree   <project>: the setup script "Setup" runs node .t3/omt-worktree-setup.mjs; ...
 ```
 
 `<runtime>` names what runs omt: `omt 0.1.0 binary` for the release binary, or the runtime and its version, such as `node 22.21.1` or `bun 1.4.4`. After a one-shot install, the `shim` line names the runner, such as `<project>/.omt/bin/omt runs npx --yes omt3@0.1.0`.
 
 The `worktree` line is often `WARN` or `INFO` on the first install. The worktree setup step below covers it.
 
-Without `--hooks`, the `hooks` line is `INFO  hooks  no hook installed; ...`. That is correct for Codex.
+Without `--hooks`, the `hooks` line is `INFO  hooks      no hook installed; ...`. That is correct for Codex.
+
+An `INFO  harnesses` line, such as `codex only; design and ui are unavailable`, means that the config skips one harness. Tell the user the effect.
 
 A `WARN  t3` line means doctor found no T3 settings file: `... settings.json does not exist; is T3 Code installed?`. The install itself is fine. Ask the user if T3 Code is installed. If T3 Code keeps its data in another place, set `T3CODE_HOME` to that directory and run doctor again.
 
@@ -214,7 +224,12 @@ The user starts three skills by name. An agent does not pick them on its own:
 - `$omt-swarm` splits work into independent tracks. Each track runs in its own T3 worktree thread and ends in a pull request. The thread must run in `full-access` runtime mode and `default` interaction mode.
 - `$omt` lists the workflows, the CLI commands, and the shared references.
 
-Check: the user knows the three first tasks and how to start the three user-started skills.
+Two more skills help with omt itself. The agent can start both on its own when the user asks for help or for a change:
+
+- `$omt-help` answers questions such as "what can omt do", "what do I do next", or "which skill do I use", and gives a tour of at most 5 steps. It only reads.
+- `$omt-setup` sets up, configures, or updates omt: the harnesses, the default set, models, roles, profiles, and the worktree setup. It shows each change first and asks before it writes.
+
+Check: the user knows the three first tasks, how to start the three user-started skills, and that `$omt-help` and `$omt-setup` exist.
 
 ## 7. Show the user how to customize roles and profiles
 
@@ -234,6 +249,8 @@ Tell the user how to change them:
 - Write a profile: add it under `profiles` in `.omt/config.jsonc` (this project) or `~/.config/oh-my-t3code/config.jsonc` (all projects). A profile `extends` a preset and can switch workflow steps and override roles, models, and limits. A profile without `extends` inherits `normal`. [Configure roles and profiles](../configuration.md#write-a-custom-profile) has an example.
 - Add a custom role: add it under `roles` in the same config files. A new role needs `description`, `access`, and `chain`. Its `result` field picks the result block: `work`, `review`, `test`, `research`, `plan`, or `guardrail`.
 - Add a persona: write `.omt/roles/<role>.md`. Its content is the persona and rules for that role, and it replaces the bundled persona. The lookup order is `.omt/roles/`, then `~/.config/oh-my-t3code/roles/`, then the bundled personas.
+- Fit the harnesses: `.omt/bin/omt detect` prints which harnesses can run and the `"harnesses"` value that fits them. `.omt/bin/omt detect --write --dry-run` shows the change, and `--yes` instead of `--dry-run` writes it. In a T3 thread, add `--capabilities <file>` from step 4 to each of these commands.
+- Let an agent do it: the user can ask `$omt-setup` for any of these changes.
 
 Check: `.omt/bin/omt config validate` reports no errors after each config change.
 
@@ -274,6 +291,8 @@ Do this when the user asks to update omt. After the CLI updates, the project kee
    omt install --project --hooks --yes
    ```
 
+   In a T3 thread, add `--capabilities <file>` as in step 4. The install does not change the existing config. When its `Harnesses` section ends with `run omt detect --write`, show the user the output of `.omt/bin/omt detect --capabilities <file> --write --dry-run` (leave out `--capabilities` outside a T3 thread). Run the same command with `--yes` instead of `--dry-run` only after the user agrees.
+
    Check: the command exits 0.
 
 3. Check the skills:
@@ -282,9 +301,22 @@ Do this when the user asks to update omt. After the CLI updates, the project kee
    .omt/bin/omt doctor --project | grep -E '^PASS +skills '
    ```
 
-   Check: the command prints `PASS  skills   9 skills installed in <project>/.agents/skills`. If it prints nothing, read the `skills` line of `.omt/bin/omt doctor --project` and fix it as "4. Install omt into the project" says.
+   Check: the command prints `PASS  skills     11 skills installed in <project>/.agents/skills`. If it prints nothing, read the `skills` line of `.omt/bin/omt doctor --project` and fix it as "4. Install omt into the project" says.
 
-4. Tell the user to close the T3 threads of this project and start new ones. A running session keeps the old skills.
+4. Compare the default sets. The update does not change the config.
+
+   ```sh
+   .omt/bin/omt defaults list
+   ```
+
+   Read the `selected` mark. `selected (<file>)` means that `<file>` pins the set, and the config stays on that set. `selected (latest)` means that no config pins a set, so the config already follows the latest set, with any new defaults of this release.
+
+   - When a file pins the set, run `.omt/bin/omt defaults diff`. When it prints `no changes`, go to the next step. Otherwise show the lines to the user. A line that ends with `(overridden by <file>)` has no effect, because the user's config sets that value. When the user wants the new set, show the user the output of `.omt/bin/omt defaults use latest --dry-run`. Run the same command with `--yes` instead of `--dry-run` only after the user agrees.
+   - When no file pins the set, tell the user that the config follows the latest set. To keep the defaults fixed through later updates, show the user the output of `.omt/bin/omt defaults use latest --dry-run`. Run the same command with `--yes` instead of `--dry-run` only after the user agrees.
+
+   Check: the user decided, and `.omt/bin/omt config validate` reports no errors.
+
+5. Tell the user to close the T3 threads of this project and start new ones. A running session keeps the old skills.
 
    Check: the user confirms that the new threads are open.
 
@@ -316,7 +348,7 @@ The project uninstall does not remove the CLI. To remove it too, use the command
 
 - [Walkthrough](../walkthrough.md): two real omt runs, with their plans, tasks, and reviews.
 - [Install guide](../install.md): every install channel, the global install, every path the install writes, and the uninstall details.
-- [Configure roles and profiles](../configuration.md): the default roles, custom roles and profiles, and fast mode.
+- [Configure roles and profiles](../configuration.md): the default roles, custom roles and profiles, limits, fast mode, the default set, and the harnesses.
 - [Commands](../commands.md): every `omt` command.
 - [README](../../README.md): the features, the skills, and the limits.
 

@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { chmod, readdir, rename, rm, rmdir, symlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { PROJECT_STARTER_CONFIG, USER_STARTER_CONFIG } from "../config/starter.ts";
+import { starterConfig } from "../config/starter.ts";
 import { errorMessage, OmtError } from "../util/errors.ts";
 import { copyDir, ensureDir, hashDir, pathExists, readFileIfExists, writeFileAtomic } from "../util/fs.ts";
 import { isOmtLayout, writeHookChange } from "./claudeHook.ts";
@@ -305,7 +305,7 @@ export async function applyInstall(plan: InstallPlan, now: Date): Promise<ApplyR
       throw new OmtError("conflict", `cannot apply a plan with conflicts (${step.path})`, { hint: "use --force" });
     }
   }
-  const starter = plan.scope === "project" ? PROJECT_STARTER_CONFIG : USER_STARTER_CONFIG;
+  const starter = starterConfig(plan.scope, plan.config.harnesses);
   const hookCreated =
     plan.hook !== undefined &&
     (plan.hook.before === undefined ||
