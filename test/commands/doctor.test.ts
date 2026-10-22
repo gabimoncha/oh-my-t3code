@@ -37,6 +37,16 @@ test("doctor runtime check passes on Node 22 and fails on an older version", asy
   assert.equal(old.code, 1);
 });
 
+test("doctor rejects Bun 1.4.3 and accepts the patched Bun 1.4.4", async () => {
+  const project = makeProject();
+  const bun = (runtimeVersion: string) => ({ runtimeName: "bun" as const, runtimeVersion });
+  const old = await doctor(project, [], bun("1.4.3"));
+  assert.equal(old.get("runtime").status, "FAIL");
+  assert.equal(old.code, 1);
+  assert.match(old.get("runtime").message, /Bun 1\.4\.4 or later/);
+  assert.equal((await doctor(project, [], bun("1.4.4"))).get("runtime").status, "PASS");
+});
+
 test("doctor config check: PASS, WARN for warnings, FAIL for errors", async () => {
   const project = makeProject();
   assert.equal((await doctor(project)).get("config").status, "PASS");

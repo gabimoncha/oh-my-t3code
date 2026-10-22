@@ -6,7 +6,7 @@
   "type": "module",
   "license": "MIT",
   "repository": "github:gabimoncha/oh-my-t3code",
-  "packageManager": "bun@1.4.3",
+  "packageManager": "bun@1.4.4",
   "bin": {
     "omt": "dist/cli.js",
     "oh-my-t3code": "dist/cli.js"
@@ -19,7 +19,7 @@
     "LICENSE"
   ],
   "engines": {
-    "bun": ">=1.4.3"
+    "bun": ">=1.4.4"
   },
   "scripts": {
     "omt": "bun src/cli.ts",

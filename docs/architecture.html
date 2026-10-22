@@ -1418,7 +1418,7 @@ can dispatch: yes</code></pre>
       <caption>Doctor checks</caption>
       <thead><tr><th scope="col">Check</th><th scope="col">Scope</th><th scope="col">What it looks at</th></tr></thead>
       <tbody>
-        <tr><th scope="row"><code>runtime</code></th><td>both</td><td>The release binary, Node 22 or later, or Bun 1.4.3 or later</td></tr>
+        <tr><th scope="row"><code>runtime</code></th><td>both</td><td>The release binary, Node 22 or later, or Bun 1.4.4 or later</td></tr>
         <tr><th scope="row"><code>config</code></th><td>both</td><td>Config loads with no issues</td></tr>
         <tr><th scope="row"><code>skills</code></th><td>both</td><td>All skills installed and current, not modified</td></tr>
         <tr><th scope="row"><code>links</code></th><td>both</td><td>Every Claude skill link resolves to its managed skill copy</td></tr>
@@ -1482,7 +1482,7 @@ can dispatch: yes</code></pre>
 <!-- 11. CLI -->
 <section id="cli" aria-labelledby="cli-h">
   <h2 id="cli-h">11. The CLI at a glance</h2>
-  <p><code>omt</code> is an ESM TypeScript CLI. It runs in three modes. In a clone, Bun runs the <code>.ts</code> sources. The npm package holds one JavaScript file, <code>dist/cli.js</code>, that <code>bun build --target=node</code> makes, and Node 22 or later or Bun 1.4.3 or later runs it. The release binary comes from <code>bun build --compile</code>, holds the skills, and needs neither Node nor Bun. <code>src/main.ts</code> holds a fixed registry of 15 commands. Each command module exports <code>summary</code>, <code>usage</code>, and <code>run</code>, and stays a thin adapter over a domain module.</p>
+  <p><code>omt</code> is an ESM TypeScript CLI. It runs in three modes. In a clone, Bun runs the <code>.ts</code> sources. The npm package holds one JavaScript file, <code>dist/cli.js</code>, that <code>bun build --target=node</code> makes, and Node 22 or later or Bun 1.4.4 or later runs it. The release binary comes from <code>bun build --compile</code>, holds the skills, and needs neither Node nor Bun. <code>src/main.ts</code> holds a fixed registry of 15 commands. Each command module exports <code>summary</code>, <code>usage</code>, and <code>run</code>, and stays a thin adapter over a domain module.</p>
   <div class="table-wrap" tabindex="0" role="region" aria-label="Commands">
     <table>
       <caption>Commands</caption>

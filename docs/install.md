@@ -1,7 +1,7 @@
 # Install oh-my-t3code
 
 Use a patched supported Node release for the npm package: 22.23.4 or 24.22.1 LTS.
-Bun 1.4.3 fixes TLS validation bugs but still needs the separate emSign certificate fix.
+[Bun 1.4.4](https://bun.com/blog/bun-v1.4.4) blocks the compromised emSign intermediate keys. Rebuild release binaries with this version to include the fix.
 
 You install omt in two parts. First, install the `omt` CLI from a package registry or as a release binary. You do not clone the repository. Then let the CLI install the skills, in one of two modes:
 
@@ -17,7 +17,7 @@ If you are a coding agent, follow the [agent quick start](agents/quickstart.md) 
 - T3 Code v0.1.0 or later.
 - Claude Code, Codex, or both, signed in and enabled in T3 Settings, Providers.
 - git.
-- For the npm package: Node.js 22 or later on `PATH`. On a machine with only Bun 1.4.3 or later, see [Run the npm package with Bun only](#run-the-npm-package-with-bun-only). The release binary needs neither Node nor Bun.
+- For the npm package: Node.js 22 or later on `PATH`. On a machine with only Bun 1.4.4 or later, see [Run the npm package with Bun only](#run-the-npm-package-with-bun-only). The release binary needs neither Node nor Bun.
 
 ## Install the CLI
 
@@ -51,7 +51,7 @@ mise checks the archive against the `SHA256SUMS` file of the release. mise puts 
 
 ### npm package
 
-The npm package `oh-my-t3code` holds one JavaScript file, `dist/cli.js`, and the skills. It has no dependencies. It gives three commands: `omt`, `omt3`, and `oh-my-t3code`. All three run the same file. The file starts with `#!/usr/bin/env node`, so these commands need Node 22 or later on `PATH`. Bun 1.4.3 or later can also run the file, through `bunx` or `bun`.
+The npm package `oh-my-t3code` holds one JavaScript file, `dist/cli.js`, and the skills. It has no dependencies. It gives three commands: `omt`, `omt3`, and `oh-my-t3code`. All three run the same file. The file starts with `#!/usr/bin/env node`, so these commands need Node 22 or later on `PATH`. Bun 1.4.4 or later can also run the file, through `bunx` or `bun`.
 
 `mise use -g npm:oh-my-t3code` installs the npm package through mise. To make mise install it with Bun instead of npm, set the mise setting first:
 
@@ -79,7 +79,7 @@ A one-shot run can install only into a project. A global install from a one-shot
 
 ### Run the npm package with Bun only
 
-On a machine with Bun 1.4.3 or later and no Node, the bare `omt` command fails with `env: node: No such file or directory` and exit code 127. For this machine, the release binary is the best channel, because it needs neither Node nor Bun. To use the npm package, run it through Bun:
+On a machine with Bun 1.4.4 or later and no Node, the bare `omt` command fails with `env: node: No such file or directory` and exit code 127. For this machine, the release binary is the best channel, because it needs neither Node nor Bun. To use the npm package, run it through Bun:
 
 | Channel | Run omt as |
 | --- | --- |
@@ -108,7 +108,7 @@ After a dev-dependency install, run `npx omt install --project`, `pnpm exec omt 
 
 The install shows its plan first and asks before it writes. Add `--yes` to skip the question. Add `--dry-run` to print the plan and write nothing. `--hooks` adds the Claude Code hook that arms ultrawork with the `ulw` keyword. Leave it out if you use only Codex.
 
-The first line of `omt doctor --project` names what runs omt. It is `PASS  runtime  omt 0.1.0 binary` for the release binary, or the runtime and its version, such as `PASS  runtime  node 22.21.1` or `PASS  runtime  bun 1.4.3`. Node older than 22 or Bun older than 1.4.3 gives a `FAIL` line.
+The first line of `omt doctor --project` names what runs omt. It is `PASS  runtime  omt 0.1.0 binary` for the release binary, or the runtime and its version, such as `PASS  runtime  node 22.21.1` or `PASS  runtime  bun 1.4.4`. Node older than 22 or Bun older than 1.4.4 gives a `FAIL` line.
 
 The project install refuses to run in your home directory, because there the project paths are the global paths. It also refuses to run when the CLI is in the temp directory, other than a runner cache, because such a path can disappear. The refusal lists the install channels.
 
@@ -175,7 +175,7 @@ For a Bun or pnpm project without a setup script, generate one:
 .omt/bin/omt worktree setup --yes
 ```
 
-This writes `t3.json` and `.t3/omt-worktree-setup.mjs` in the current checkout, also in a linked worktree. For pnpm, it also writes `pnpm-workspace.yaml` with `enableGlobalVirtualStore: true` when that file is missing. The runner uses only Node, so it works in worktrees without omt. It installs from the lockfile with a frozen install and the isolated linker, into a global virtual store, so worktrees share the installed package directories. It needs Bun 1.3.14 or later, or pnpm 10.12.1 or later, already on `PATH`. It downloads no package manager and sets no global configuration. It stops instead of converting an existing `node_modules`.
+This writes `t3.json` and `.t3/omt-worktree-setup.mjs` in the current checkout, also in a linked worktree. For pnpm, it also writes `pnpm-workspace.yaml` with `enableGlobalVirtualStore: true` when that file is missing. The runner uses only Node, so it works in worktrees without omt. It installs from the lockfile with a frozen install and the isolated linker, into a global virtual store, so worktrees share the installed package directories. It needs Bun 1.4.4 or later, pnpm 10.34.5 on major 10, pnpm 11.11.0 on major 11, or pnpm 12 or later, already on `PATH`. It downloads no package manager and sets no global configuration. It stops instead of converting an existing `node_modules`.
 
 omt never rewrites an existing `t3.json`, runner, or `pnpm-workspace.yaml`, and never changes a linker or store setting. pnpm needs the store setting in `pnpm-workspace.yaml`: without it, a later `pnpm run` or `pnpm exec` can re-install `node_modules` with a local store. When an existing `pnpm-workspace.yaml` lacks the setting, turns it off, or cannot be read, `omt worktree setup` prints `Setup is incomplete` with the line to add and exits 1, `omt worktree check` shows it on its `store` line, and the runner stops before it installs anything. Add `enableGlobalVirtualStore: true` (or `virtualStoreType: global` with pnpm 11.23.0 or later) as a top-level line.
 
