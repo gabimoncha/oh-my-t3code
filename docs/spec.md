@@ -38,7 +38,7 @@ The package is named `oh-my-t3code` and is `private`, so nobody publishes the re
 ```text
 .github/
   workflows/             ci.yml (CI) and release.yml (release on a v* tag) (section 17.1)
-mise.toml                pins bun = "1.4.4"
+mise.toml                pins Bun 1.4.4, Node 24.22.1, and npm 11.21.1
 package.json             scripts (section 1), packageManager bun@1.4.4, dev dependencies @types/bun and tsrs
 bun.lock                 Bun lockfile
 tsconfig.json            compiler options for tsrs
@@ -1980,7 +1980,7 @@ The commands use paths relative to the current directory. A path with a characte
 
 ### 17.1 Workflows
 
-Two GitHub Actions workflows run the tests and the release. Both set workflow-level `permissions: {}`, and each job sets its own permissions. Each job with steps runs on `ubuntu-24.04`. Each action is pinned by its full commit SHA, with a `# vX.Y.Z` comment. `actions/checkout` runs with `persist-credentials: false`. Where a job uses them, `jdx/mise-action` installs mise 2026.10.17 with `add_shims_to_path: false`, `install: true`, and `cache: false`, so Bun comes from `mise.toml`. `actions/setup-node` installs Node 24.22.1, with `package-manager-cache: false`. CI and the npm publishing job then install npm 11.21.1 and check its exact version.
+Two GitHub Actions workflows run the tests and the release. Both set workflow-level `permissions: {}`, and each job sets its own permissions. Each job with steps runs on `ubuntu-24.04`. Each action is pinned by its full commit SHA, with a `# vX.Y.Z` comment. `actions/checkout` runs with `persist-credentials: false`. Where a job uses them, `jdx/mise-action` installs mise 2026.10.17 with `add_shims_to_path: false`, `install: true`, and `cache: false`, so Bun, Node, and npm come from `mise.toml`. `actions/setup-node` installs Node 24.22.1, with `package-manager-cache: false`. CI and the npm publishing job then install npm 11.21.1 and check its exact version.
 
 `.github/workflows/ci.yml` (name `CI`):
 
