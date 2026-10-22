@@ -74,6 +74,9 @@ Do not use omt in these cases:
 - git.
 - Node 22 or later for the npm package. The release binary needs neither Node nor Bun.
 
+Use a patched supported Node release for the npm package: 22.23.4 or 24.22.1 LTS.
+[Bun 1.4.4](https://bun.com/blog/bun-v1.4.4) blocks the compromised emSign intermediate keys. Rebuild release binaries with this version to include the fix.
+
 ## First run
 
 In a T3 thread, type:

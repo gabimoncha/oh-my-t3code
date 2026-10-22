@@ -14,7 +14,7 @@ Check each requirement on the user's machine. Ask the user about the items that 
 | --- | --- |
 | T3 Code v0.1.0 or later. It is free for macOS, Windows, and Linux. Install it from https://t3.codes. | Ask the user, or look for `~/.t3/userdata/settings.json`. |
 | At least one provider signed in and enabled in T3 Settings, Providers: Claude Code (`claude auth login`), Codex with a ChatGPT sign-in, or both. | Run `claude auth status` or `codex login status` when the CLI is on `PATH`. Ask the user to confirm the provider is enabled in T3. |
-| One way to install and run omt: `mise`, Node.js 22 or later, or Bun 1.4.3 or later. The release binary that mise installs needs neither Node nor Bun. The `omt` command of the npm package needs Node. | `mise --version`, `node --version`, `bun --version` |
+| One way to install and run omt: `mise`, Node.js 22 or later, or Bun 1.4.4 or later. The release binary that mise installs needs neither Node nor Bun. The `omt` command of the npm package needs Node. | `mise --version`, `node --version`, `bun --version` |
 | git. | `git --version` |
 | Optional: `flock` or `lockf`, for shared build locks. Without either, `omt lock run` runs the command with a warning. | `command -v flock || command -v lockf` |
 
@@ -26,7 +26,7 @@ Tell the user what one provider family costs them:
 
 The install in step 4 detects which of the two harnesses can run, and fits the new config to them.
 
-Check: git exists, Node 22 or later, Bun 1.4.3 or later, or `mise` is on `PATH`, and the user confirms T3 Code and at least one signed-in provider. If T3 Code or a provider is missing, tell the user what to install and stop.
+Check: git exists, Node 22 or later, Bun 1.4.4 or later, or `mise` is on `PATH`, and the user confirms T3 Code and at least one signed-in provider. If T3 Code or a provider is missing, tell the user what to install and stop.
 
 ## 2. Find out if you run in a T3 thread
 
@@ -48,7 +48,7 @@ Install omt from a package registry or as a release binary. Do not clone the rep
 | `mise` on `PATH` | `mise use -g github:gabimoncha/oh-my-t3code` | `omt --version` |
 | `npm` on `PATH`, and `node --version` prints v22 or later | `npm i -g oh-my-t3code` | `omt --version` |
 | `pnpm` on `PATH`, and `node --version` prints v22 or later | `pnpm add -g oh-my-t3code` | `omt --version` |
-| `bun` on `PATH`, and `bun --version` prints 1.4.3 or later | `bun add -D oh-my-t3code` in the project root | `bunx omt --version` |
+| `bun` on `PATH`, and `bun --version` prints 1.4.4 or later | `bun add -D oh-my-t3code` in the project root | `bunx omt --version` |
 
 The check prints the omt version, such as `0.1.0`. If it fails, the channel does not work on this machine. Tell the user the error, and try the next row that fits.
 
@@ -154,7 +154,7 @@ PASS  t3         <home>/.t3/userdata/settings.json
 PASS  worktree   <project>: the setup script "Setup" runs node .t3/omt-worktree-setup.mjs; ...
 ```
 
-`<runtime>` names what runs omt: `omt 0.1.0 binary` for the release binary, or the runtime and its version, such as `node 22.21.1` or `bun 1.4.3`. After a one-shot install, the `shim` line names the runner, such as `<project>/.omt/bin/omt runs npx --yes omt3@0.1.0`.
+`<runtime>` names what runs omt: `omt 0.1.0 binary` for the release binary, or the runtime and its version, such as `node 22.21.1` or `bun 1.4.4`. After a one-shot install, the `shim` line names the runner, such as `<project>/.omt/bin/omt runs npx --yes omt3@0.1.0`.
 
 The `worktree` line is often `WARN` or `INFO` on the first install. The worktree setup step below covers it.
 

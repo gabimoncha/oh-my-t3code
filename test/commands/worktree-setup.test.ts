@@ -100,7 +100,7 @@ test("U1 pnpm linked checkout keeps shared state and local setup files", () => {
 
 // e2e U1: Bun generation and the standalone runner with a controlled executable.
 test("U1 Bun generated runner installs frozen dependencies in its own checkout", () => {
-  const f = fixture("bun", "1.3.14", "bun.lock");
+  const f = fixture("bun", "1.4.4", "bun.lock");
   ok(f.setup());
   f.tool();
   assert.match(ok(f.runner()).out, /dependencies installed/);
@@ -132,7 +132,7 @@ test("U2 repository setup blocks until its current manager finishes and adapts t
   const expected: unknown = pin?.[1] ?? engine?.name ?? (present.length === 1 ? present[0]![0] : undefined);
   assert.ok(expected === "pnpm" || expected === "bun", "current manifest and lockfiles select a supported manager");
   assert.ok(locks[expected].some((file) => existsSync(join(PACKAGE_ROOT, file))), "current manager has a lockfile");
-  const versions: Record<string, string> = { pnpm: "12.13.0", bun: "1.3.14" };
+  const versions: Record<string, string> = { pnpm: "12.13.0", bun: "1.4.4" };
   versions[expected] = pin?.[2] ?? engine?.version ?? versions[expected]!;
   const f = fixture(expected, versions[expected], locks[expected][0]);
   writeFile(join(f.project, "package.json"), manifest);
@@ -187,7 +187,7 @@ test("U1 Bun runner validates lockfiles and versions and propagates install fail
     const f = fixture("bun", undefined, lock);
     writeFile(join(f.project, "package.json"), "{}");
     ok(f.setup());
-    f.tool("1.3.14");
+    f.tool("1.4.4");
     ok(f.runner());
     assert.deepEqual(f.calls().at(-1)!.args, ["install", "--linker", "isolated", "--frozen-lockfile"]);
     for (const call of f.calls()) assert.equal(call.env.COREPACK_ENABLE_NETWORK, "0");
@@ -195,18 +195,18 @@ test("U1 Bun runner validates lockfiles and versions and propagates install fail
     f.tool("1.3.13");
     const old = f.runner();
     assert.equal(old.code, 1);
-    assert.match(old.err, /needs bun 1\.3\.14 or later/);
-    f.tool("1.3.14", 7);
+    assert.match(old.err, /needs bun 1\.4\.4 or later/);
+    f.tool("1.4.4", 7);
     assert.equal(f.runner().code, 7);
-    writeFile(join(f.project, "package.json"), '{"packageManager":"bun@1.3.14"}');
-    f.tool("1.4.2");
-    assert.match(f.runner().err, /pins bun 1\.3\.14, but bun 1\.4\.2/);
+    writeFile(join(f.project, "package.json"), '{"packageManager":"bun@1.4.4"}');
+    f.tool("1.4.5");
+    assert.match(f.runner().err, /pins bun 1\.4\.4, but bun 1\.4\.5/);
     writeFile(join(f.project, "bunfig.toml"), '[install]\nlinker = "hoisted"\n');
     const count = f.calls().length;
     assert.match(f.runner().err, /hoisted/);
     assert.equal(f.calls().length, count);
   }
-  const missing = fixture("bun", "1.3.14", "unrelated.lock");
+  const missing = fixture("bun", "1.4.4", "unrelated.lock");
   assert.equal(missing.setup().code, 1);
   assert.match(missing.setup().err, /bun.lock or bun.lockb is missing/);
 });
@@ -237,7 +237,10 @@ test("U1 setup preserves configuration and refuses unsafe or unsupported inputs"
     [{}, "bun.lock", /both .*exist/],
     [{ packageManager: "npm@11.0.0" }, "package-lock.json", /supports only Bun and pnpm/],
     [{ packageManager: "pnpm@^12.0.0" }, "pnpm-lock.yaml", /not an exact version/],
-    [{ packageManager: "pnpm@10.12.0" }, "pnpm-lock.yaml", /needs pnpm 10.12.1/],
+    [{ packageManager: "pnpm@10.12.0" }, "pnpm-lock.yaml", /needs pnpm 10.34.5/],
+    [{ packageManager: "pnpm@10.34.4" }, "pnpm-lock.yaml", /needs pnpm 10.34.5/],
+    [{ packageManager: "pnpm@11.10.0" }, "pnpm-lock.yaml", /needs pnpm 11.11.0/],
+    [{ packageManager: "bun@1.4.3" }, "bun.lock", /needs bun 1.4.4/],
   ] as const) {
     const f = fixture();
     writeFile(join(f.project, "package.json"), JSON.stringify(pkg));
@@ -268,9 +271,9 @@ test("U1 setup preserves configuration and refuses unsafe or unsupported inputs"
   for (const [version, workspace, status] of [
     ["12.13.0", "enableGlobalVirtualStore: true\n", "set"],
     ["12.13.0", "virtualStoreType: global\n", "set"],
-    ["10.12.1", "virtualStoreType: global\n", "missing"],
+    ["10.34.5", "virtualStoreType: global\n", "missing"],
     ["12.13.0", "virtualStoreType: project\nenableGlobalVirtualStore: true\n", "off"],
-    ["10.12.1", "virtualStoreType: project\nenableGlobalVirtualStore: true\n", "set"],
+    ["10.34.5", "virtualStoreType: project\nenableGlobalVirtualStore: true\n", "set"],
     [undefined, "virtualStoreType: global\n", "version-dependent"],
     [undefined, "virtualStoreType: project\n", "off"],
     ["12.13.0", "enableGlobalVirtualStore: false\n", "off"],
@@ -301,7 +304,7 @@ test("U1 setup preserves configuration and refuses unsafe or unsupported inputs"
 
 // integration U1: pnpm runner processes and Windows command construction.
 test("U1 pnpm runner selects version flags and handles process and configuration failures", () => {
-  for (const version of ["10.12.1", "11.10.0", "11.23.0", "12.13.0"]) {
+  for (const version of ["10.34.5", "11.11.0", "11.23.0", "12.13.0"]) {
     const f = fixture("pnpm", version);
     ok(f.setup());
     f.tool();
@@ -309,22 +312,22 @@ test("U1 pnpm runner selects version flags and handles process and configuration
     const result = ok(f.runner());
     const install = f.calls().at(-1)!;
     assert.deepEqual(install.args, ["install", "--frozen-lockfile", "--config.node-linker=isolated",
-      version === "10.12.1" || version === "11.10.0" ? "--config.enable-global-virtual-store=true" : "--config.virtual-store-type=global",
-      ...(version === "10.12.1" ? ["--config.manage-package-manager-versions=false", "--config.package-manager-strict-version=true"] : ["--pm-on-fail=error"])]);
+      version === "10.34.5" || version === "11.11.0" ? "--config.enable-global-virtual-store=true" : "--config.virtual-store-type=global",
+      ...(version === "10.34.5" ? ["--config.manage-package-manager-versions=false", "--config.package-manager-strict-version=true"] : ["--pm-on-fail=error"])]);
     for (const call of f.calls()) {
       assert.equal(call.env.COREPACK_ENABLE_NETWORK, "0");
       assert.equal(call.env.npm_config_manage_package_manager_versions, "false");
       assert.equal(call.env.npm_config_package_manager_strict_version, "true");
       assert.equal(call.env.pnpm_config_pm_on_fail, "error");
     }
-    if (version === "10.12.1" || version === "11.10.0") assert.match(result.err, /can turn off the global virtual store when CI is set/);
+    if (version === "10.34.5" || version === "11.11.0") assert.match(result.err, /can turn off the global virtual store when CI is set/);
     else assert.equal(result.err, "");
     f.tool(version, 5);
     const failed = f.runner();
     assert.equal(failed.code, 5);
     assert.match(failed.err, /install failed \(exit code 5\)/);
     f.tool("10.12.0");
-    assert.match(f.runner().err, /needs pnpm 10.12.1/);
+    assert.match(f.runner().err, /needs pnpm 10.34.5/);
     f.tool("12.12.0");
     assert.match(f.runner().err, /pins pnpm .*but pnpm 12.12.0/);
     f.tool(version, 0, "broken", 9);
@@ -364,4 +367,21 @@ assert.throws(() => launchSpec("pnpm", ["bad%arg"], { platform: "win32", env }),
 console.log("Windows command assertions passed");
 `);
   assert.match(ok(f.run(process.execPath, [script])).out, /Windows command assertions passed/);
+});
+
+test("worktree runner rejects vulnerable unpinned package managers before install", () => {
+  for (const [manager, version, minimum, lock] of [
+    ["pnpm", "10.34.4", "10.34.5", "pnpm-lock.yaml"],
+    ["pnpm", "11.10.0", "11.11.0", "pnpm-lock.yaml"],
+    ["bun", "1.4.3", "1.4.4", "bun.lock"],
+  ]) {
+    const f = fixture(manager, undefined, lock);
+    writeFile(join(f.project, "package.json"), "{}");
+    ok(f.setup());
+    f.tool(version);
+    const result = f.runner();
+    assert.equal(result.code, 1);
+    assert.ok(result.err.includes(`needs ${manager} ${minimum}`), result.err);
+    assert.deepEqual(f.calls().map(call => call.args), [["--version"]]);
+  }
 });

@@ -47,7 +47,7 @@ export interface DoctorReport {
 type ScopeManifest = { manifest: Manifest | undefined } | { error: unknown };
 
 export const MIN_NODE = [22, 0, 0] as const;
-export const MIN_BUN = [1, 4, 3] as const;
+export const MIN_BUN = [1, 4, 4] as const;
 
 function check(id: string, status: CheckStatus, message: string): DoctorCheck {
   return { id, status, message };
@@ -62,7 +62,7 @@ function atLeast(version: string, min: readonly number[]): boolean {
   return true;
 }
 
-// A binary carries its own runtime. The bundle and the sources need Node 22 or Bun 1.4.3, or later.
+// A binary carries its own runtime. The bundle and the sources need Node 22 or Bun 1.4.4, or later.
 export function checkRuntime(ctx: Pick<CliContext, "build" | "version" | "runtimeName" | "runtimeVersion">): DoctorCheck {
   if (ctx.build === "binary") return check("runtime", "PASS", `omt ${ctx.version} binary`);
   const runtime = `${ctx.runtimeName} ${ctx.runtimeVersion}`;

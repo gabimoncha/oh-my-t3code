@@ -10,7 +10,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const RUNNER_MARKER = "oh-my-t3code worktree setup runner";
-export const MINIMUM_VERSIONS = { bun: "1.3.14", pnpm: "10.12.1" };
+export const MINIMUM_VERSIONS = { bun: "1.4.4", pnpm: "10.34.5" };
 export const PNPM_CANONICAL_GLOBAL_STORE = "11.23.0";
 export const LOCKFILES = { pnpm: ["pnpm-lock.yaml"], bun: ["bun.lock", "bun.lockb"] };
 const OTHER_LOCKFILES = { npm: ["package-lock.json", "npm-shrinkwrap.json"], yarn: ["yarn.lock"] };
@@ -38,6 +38,12 @@ export function compareVersions(a, b) {
     if (left[i] !== right[i]) return left[i] < right[i] ? -1 : 1;
   }
   return 0;
+}
+
+function minimumVersion(manager, version) {
+  return manager === "pnpm" && parseVersion(version)?.[0] === 11
+    ? "11.11.0"
+    : MINIMUM_VERSIONS[manager];
 }
 
 function readText(path) {
@@ -146,10 +152,11 @@ export function detectManager(root) {
       version = d.spec;
       declaredBy = d.source;
     }
-    if (version !== undefined && compareVersions(version, MINIMUM_VERSIONS[name]) < 0) {
+    const minimum = minimumVersion(name, version);
+    if (version !== undefined && compareVersions(version, minimum) < 0) {
       return blocked(
-        `${declaredBy} pins ${name} ${version}; a global virtual store needs ${name} ${MINIMUM_VERSIONS[name]} or later`,
-        `upgrade the pinned ${name} version to ${MINIMUM_VERSIONS[name]} or later`,
+        `${declaredBy} pins ${name} ${version}; worktree setup needs ${name} ${minimum} or later`,
+        `upgrade the pinned ${name} version to ${minimum} or later`,
       );
     }
     const lockfile = lockfiles[name][0];
@@ -623,9 +630,10 @@ export function runSetup({
   const actual = String(probe.stdout ?? "").trim().split(/\r?\n/).pop()?.trim().replace(/^v/, "") ?? "";
   const core = /^(\d+\.\d+\.\d+)/.exec(actual)?.[1];
   if (core === undefined) return fail(`${manager} --version printed "${actual}", which is not a version`);
-  if (compareVersions(core, MINIMUM_VERSIONS[manager]) < 0) {
+  const minimum = minimumVersion(manager, core);
+  if (compareVersions(core, minimum) < 0) {
     return fail(
-      `${manager} ${actual} is installed; a global virtual store needs ${manager} ${MINIMUM_VERSIONS[manager]} or later`,
+      `${manager} ${actual} is installed; worktree setup needs ${manager} ${minimum} or later`,
       `upgrade ${manager}; this setup installs no package manager`,
     );
   }
