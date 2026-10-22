@@ -10,7 +10,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const RUNNER_MARKER = "oh-my-t3code worktree setup runner";
-export const MINIMUM_VERSIONS = { bun: "1.4.3", pnpm: "10.34.5" };
+export const MINIMUM_VERSIONS = { bun: "1.4.4", pnpm: "10.34.5" };
 export const PNPM_CANONICAL_GLOBAL_STORE = "11.23.0";
 export const LOCKFILES = { pnpm: ["pnpm-lock.yaml"], bun: ["bun.lock", "bun.lockb"] };
 const OTHER_LOCKFILES = { npm: ["package-lock.json", "npm-shrinkwrap.json"], yarn: ["yarn.lock"] };

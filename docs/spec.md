@@ -4,7 +4,7 @@ This page is the reference for the code, the skills, and the tests. [`design.md`
 
 ## 1. Toolchain and conventions
 
-- Toolchain: Bun 1.4.3, pinned in `mise.toml` and in the `packageManager` field (`bun@1.4.3`). `engines.bun` is `>=1.4.3`. Run Bun through `mise exec --` so that the pinned version runs. The lockfile is `bun.lock`.
+- Toolchain: Bun 1.4.4, pinned in `mise.toml` and in the `packageManager` field (`bun@1.4.4`). `engines.bun` is `>=1.4.4`. Run Bun through `mise exec --` so that the pinned version runs. The lockfile is `bun.lock`.
 - Runtime: Bun runs the TypeScript sources directly. `src/cli.ts` starts with `#!/usr/bin/env bun`.
 - Language: TypeScript, ESM (`"type": "module"`). Use erasable syntax only. That means no `enum`, no `namespace`, no parameter properties, and no decorators. Use `import type` for type-only imports. Relative imports end in `.ts`.
 - Runtime dependencies: none.
@@ -38,8 +38,8 @@ The package is named `oh-my-t3code` and is `private`, so nobody publishes the re
 ```text
 .github/
   workflows/             ci.yml (CI) and release.yml (release on a v* tag) (section 17.1)
-mise.toml                pins bun = "1.4.3"
-package.json             scripts (section 1), packageManager bun@1.4.3, dev dependencies @types/bun and tsrs
+mise.toml                pins bun = "1.4.4"
+package.json             scripts (section 1), packageManager bun@1.4.4, dev dependencies @types/bun and tsrs
 bun.lock                 Bun lockfile
 tsconfig.json            compiler options for tsrs
 src/
@@ -770,7 +770,7 @@ Package manager detection (`detectManager`):
 - It reads `package.json` (a byte order mark is allowed). Invalid JSON or a value that is not an object blocks with `fix package.json`.
 - Declarations: `packageManager` (`<name>@<version>`, with an optional `+<integrity>` suffix) and `devEngines.packageManager` (an object, or a list with one entry, with `name` and an optional `version`). Two declarations must name the same manager, and two exact versions must be equal.
 - A declared `npm`, `yarn`, or other manager is unsupported; omt never replaces it. A declared version must be exact (`<major>.<minor>.<patch>`). A range or a tag blocks generation with a manual-setup hint. omt has no semver implementation.
-- Security minimums block both declared and installed versions: Bun 1.4.3, pnpm 10.34.5 on major 10, and pnpm 11.11.0 on major 11. pnpm 12 and later remain supported. These minimums also cover global virtual store support. Bun 1.4.3 does not resolve the separate emSign certificate issue.
+- Security minimums block both declared and installed versions: Bun 1.4.4, pnpm 10.34.5 on major 10, and pnpm 11.11.0 on major 11. pnpm 12 and later remain supported. These minimums also cover global virtual store support. Bun 1.4.4 blocks the compromised emSign intermediate keys.
 - The lockfile of the selected manager must exist: `pnpm-lock.yaml` for pnpm, `bun.lock` or `bun.lockb` for Bun. The two Bun formats are one manager.
 - Without a declaration, the lockfiles decide. One supported manager selects it. Both pnpm and Bun lockfiles block as ambiguous. Only `package-lock.json`, `npm-shrinkwrap.json`, or `yarn.lock` is unsupported. A `package.json` without a lockfile blocks. No `package.json` and no lockfile gives `status: "none"`: there is nothing to install.
 
@@ -1570,7 +1570,7 @@ The plan lists the user config and the manifest only when they exist. Two names 
 
 | Id | PASS | WARN | FAIL | INFO |
 | --- | --- | --- | --- | --- |
-| `runtime` | binary mode, with the message `omt <version> binary`; otherwise `ctx.runtimeName` is `node` with `ctx.runtimeVersion` 22 or later, or `bun` with 1.4.3 or later | | an older Node or Bun; the message names both minimum versions | |
+| `runtime` | binary mode, with the message `omt <version> binary`; otherwise `ctx.runtimeName` is `node` with `ctx.runtimeVersion` 22 or later, or `bun` with 1.4.4 or later | | an older Node or Bun; the message names both minimum versions | |
 | `config` | no issues | warnings only | any error | |
 | `skills` | every bundled skill is installed, managed, and current | missing, outdated, or locally modified skills | the CLI has no bundled skills (section 14.1) | |
 | `links` | every Claude link resolves to its canonical directory | a missing link | a broken or conflicting link | |

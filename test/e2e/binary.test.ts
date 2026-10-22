@@ -34,7 +34,7 @@ test("compiled host binary installs matching skills and hooks, passes doctor, an
   });
   mkdirSync(env.HOME!, { recursive: true });
   const project = join(root, "project");
-  gitRepo(homeRoot, project, { "package.json": JSON.stringify({ packageManager: "bun@1.4.3" }), "bun.lock": "" });
+  gitRepo(homeRoot, project, { "package.json": JSON.stringify({ packageManager: "bun@1.4.4" }), "bun.lock": "" });
 
   function run(command: string, args: string[], cwd = project, timeout = 30_000): string {
     const result = spawnSync(command, args, { cwd, env, encoding: "utf8", timeout });
