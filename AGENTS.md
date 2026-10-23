@@ -12,6 +12,8 @@ Clone the repository, then run `mise install` (it installs the Bun version that 
 
 `docs/spec.md` is the contract for the code, the skills, and the tests. Read the section for your module before you change it. When the code and the spec disagree, fix one of them in the same change. `docs/design.md` explains why each part exists.
 
+To change the landing page in `site/`, read [site/AGENTS.md](site/AGENTS.md) first. The site is a separate package with its own commands and tests.
+
 ## Commands
 
 Run each command through `mise exec --` (or in a shell where mise is active), so that the Bun version that `mise.toml` pins runs.

@@ -37,7 +37,8 @@ The package is named `oh-my-t3code` and is `private`, so nobody publishes the re
 
 ```text
 .github/
-  workflows/             ci.yml (CI) and release.yml (release on a v* tag) (section 17.1)
+  workflows/             ci.yml (CI), release.yml (release on a v* tag), and site.yml (checks and deploys site/) (section 17.1)
+assets/                  icon.svg (the omt3 icon) and banner.png (the README banner); both ship in the npm packages
 mise.toml                pins Bun 1.4.4, Node 24.22.1, and npm 11.21.1
 package.json             scripts (section 1), packageManager bun@1.4.4, dev dependencies @types/bun and tsrs
 bun.lock                 Bun lockfile
@@ -88,6 +89,7 @@ test/
   routing/fast.test.ts    fast option mapping and precedence
   skills/                common.test.ts, personas.test.ts, plan-design.test.ts, review.test.ts, ulw.test.ts, shared.ts
 docs/
+site/                    the landing page, a separate Bun package (section 17.2)
 ```
 
 ## 3. Shared types
@@ -2067,7 +2069,7 @@ The npm packages get only the files that `git ls-files -- skills` lists.
 
 The script writes these paths under `<outdir>`:
 
-- `npm/oh-my-t3code/` and `npm/omt3/`. The two directories are identical except the `name` field. Each holds `package.json`, `dist/cli.js` (mode 0755), `skills/`, `README.md`, and `LICENSE`. The `package.json` has the repository version, the description, `type: "module"`, the license, the repository, `bin: { "omt": "dist/cli.js", "omt3": "dist/cli.js", "oh-my-t3code": "dist/cli.js" }`, `files: ["dist", "skills", "README.md", "LICENSE"]`, and `engines.node: ">=22"`. It has no dependencies and no scripts. `dist/cli.js` reads `skills/` from the package root (section 5). The packages hold no `templates/`, because `dist/cli.js` inlines the worktree setup runner (section 5.12).
+- `npm/oh-my-t3code/` and `npm/omt3/`. The two directories are identical except the `name` field. Each holds `package.json`, `dist/cli.js` (mode 0755), `skills/`, `assets/icon.svg`, `assets/banner.png`, `README.md`, and `LICENSE`. The `package.json` has the repository version, the description, `type: "module"`, the license, the repository, the homepage, `bin: { "omt": "dist/cli.js", "omt3": "dist/cli.js", "oh-my-t3code": "dist/cli.js" }`, `files: ["dist", "skills", "assets", "README.md", "LICENSE"]`, and `engines.node: ">=22"`. It has no dependencies and no scripts. `dist/cli.js` reads `skills/` from the package root (section 5). The packages hold no `templates/`, because `dist/cli.js` inlines the worktree setup runner (section 5.12).
 - `github/oh-my-t3code-v<version>-<platform>.tar.gz` for each platform. The archive holds only `omt` (mode 0755) at its root.
 - `github/SHA256SUMS`, with one `<sha256>  <archive name>` line per archive, so `shasum -a 256 -c SHA256SUMS` checks them.
 
@@ -2081,7 +2083,7 @@ The commands use paths relative to the current directory. A path with a characte
 
 ### 17.1 Workflows
 
-Two GitHub Actions workflows run the tests and the release. Both set workflow-level `permissions: {}`, and each job sets its own permissions. Each job with steps runs on `ubuntu-24.04`. Each action is pinned by its full commit SHA, with a `# vX.Y.Z` comment. `actions/checkout` runs with `persist-credentials: false`. Where a job uses them, `jdx/mise-action` installs mise 2026.10.17 with `add_shims_to_path: false`, `install: true`, and `cache: false`, so Bun, Node, and npm come from `mise.toml`. `actions/setup-node` installs Node 24.22.1, with `package-manager-cache: false`. CI and the npm publishing job then install npm 11.21.1 and check its exact version.
+Three GitHub Actions workflows run the tests, the release, and the site deploy. All three set workflow-level `permissions: {}`, and each job sets its own permissions. Each job with steps runs on `ubuntu-24.04`. Each action is pinned by its full commit SHA, with a `# vX.Y.Z` comment. `actions/checkout` runs with `persist-credentials: false`. Where a job uses them, `jdx/mise-action` installs mise 2026.10.17 with `add_shims_to_path: false`, `install: true`, and `cache: false`, so Bun, Node, and npm come from `mise.toml`. `actions/setup-node` installs Node 24.22.1, with `package-manager-cache: false`. CI and the npm publishing job then install npm 11.21.1 and check its exact version.
 
 `.github/workflows/ci.yml` (name `CI`):
 
@@ -2117,3 +2119,29 @@ The `github` job uses `GH_TOKEN: ${{ github.token }}`. It expects the 6 archives
 - A published release that has all 7 assets: the job skips.
 - A draft, or a release with missing assets: the job fails. It prints the draft state, the missing assets, and the recovery commands `gh release upload "<tag>" <files> --clobber` and `gh release edit "<tag>" --draft=false`, or tells the owner to delete the draft release and re-run the job.
 - Any other `gh release view` error: the job fails.
+
+`.github/workflows/site.yml` (name `Site`):
+
+- Triggers: `pull_request` and `push` to `main` that change `site/**` or `.github/workflows/site.yml`, and `workflow_dispatch`. A push or a pull request that changes no file in these paths does not start the workflow.
+- Job `check`, with `contents: read` and the concurrency group `site-check-<ref>` with `cancel-in-progress: true`. It runs in `site/`: checkout, mise, Node, `bun install --frozen-lockfile`, `bun run typecheck`, `bun run build`, `bunx playwright install --with-deps chromium webkit`, and `bun run e2e`. When a step fails, it uploads `site/test-results/` as the artifact `site-e2e-report` for 7 days.
+- Job `deploy` needs `check` and runs only for a push or a manual start on `main`, never for a pull request. It has `contents: read`, the environment `site`, and the concurrency group `site-deploy` with `cancel-in-progress: false`, so two deploys never run at the same time. It runs in `site/`: checkout, mise, `bun install --frozen-lockfile`, and `bun run deploy`. The deploy step reads `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` from the secrets. The token is an account token with only the `Pages Write` permission.
+
+### 17.2 Site
+
+`site/` holds the landing page. It is a separate Bun package with its own `package.json` and `bun.lock`, so its dependencies never reach the CLI or the npm packages. The root `bun test` and `bun run typecheck` do not cover it.
+
+- Stack: TanStack Start (React) with Vite. The only route, `/`, is prerendered at build time, so `dist/client` holds the whole site as static files. The site runs on the Cloudflare Pages project `oh-my-t3code`, at `https://oh-my-t3code.pages.dev`. `wrangler.jsonc` names the project and sets `pages_build_output_dir`. `public/404.html` is the page for an unknown path.
+- Scripts: `dev`, `build`, `preview`, `typecheck`, `e2e` (`playwright test`), and `deploy` (`vite build` and `wrangler pages deploy --branch main`, a production deployment).
+- End-to-end tests: `e2e/site.e2e.ts` runs in Chromium and WebKit at 1440 x 1000 and in WebKit as an iPhone 15. `e2e/serve.ts` serves `dist/client` the way Cloudflare Pages does, with `404.html` and status 404 for an unknown path. The tests check that the page renders with no errors and no sideways scroll, the 404 page, the order of the hero runs, the install tabs, the skill tour, and reduced motion.
+- `site/AGENTS.md` is the guide for agents that change the site.
+- Design: the Paper file `omt3`, page `omt3 · Final`. The pictures in `site/public/img/` and `site/src/art/` are the design's SVG exports.
+- Changes from the design, after the owner's review of the live site:
+  - The hero picture is split in two, with ulw on the left and swarm on the right, on the same grid. The ulw run plays first while the swarm panel shows its last frame, dimmed; then the swarm run plays. Both then stay on their last frame, and "Play again" plays them again.
+    - `omt-ulw`: the line draws at one speed, so it does not stop at the stations. On the first unit track, the review requests changes: a dashed loop goes back to Delegate, the second pass to Review draws in yellow, and only then does the track go on to Done.
+    - `omt-swarm`: three tracks leave the plan at different times and speeds, and each ends in its own pull request. The tracks never merge.
+  - The state chart plays two trips while the chart is in view. In the first, a review requests changes, the unit goes back to Delegated, its second pass draws in yellow, and the second review approves it. In the second, a review blocks the unit. The verdict of each review lights up.
+  - Skills is one list with a pointer; the last three rows say "by name only". The picture of the selected skill plays next to the list (above it on a narrow screen), and then the pointer goes to the next skill. A click or an arrow key selects a skill and stops the tour. `src/components/metro.tsx` draws these pictures and the two hero pictures, and `src/components/scenes.ts` defines them.
+  - Install has two steps with tabs, side by side, and no Names list. Step 1 gets the `omt` command: Bun (the default), pnpm, mise, or a one-shot run. Step 2 installs the skills for all projects (`omt install --hooks`) or for one project (`omt install --project --hooks`). A one-shot run allows only the project install, because the user install refuses a CLI that runs from a one-shot cache (section 14.2).
+  - The page text is short: one line for each step of How it works, one line under the state chart, and one line of notes under Install. The requirements ask for the latest T3 Code release.
+  - Text has three steps on the ground, measured with APCA: white for headings and key text, `#c8c8c8` for body copy, and `#9a9a9a` for labels and meta. Rules are `#2a2a2a`. Sections use one rhythm: `--gap-section` between sections, `--gap-block` between the parts of one section, and `--gap-heading` under a section heading.
+  - The animations pause while they are out of view. With reduced motion, each picture shows its last frame, and nothing moves on by itself.

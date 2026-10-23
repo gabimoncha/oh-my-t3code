@@ -22,6 +22,8 @@ const PLATFORMS: Record<string, string> = {
   "linux-x64-musl": "bun-linux-x64-musl",
 };
 const PACKAGES = ["oh-my-t3code", "omt3"];
+// The icon and the README banner. The README points at the banner, so it renders from the package too.
+const ASSETS = ["icon.svg", "banner.png"];
 // The script deletes build/, npm/, and github/ only in an outdir that holds this marker.
 const MARKER = ".omt-release";
 
@@ -102,6 +104,7 @@ const root = JSON.parse(await readFile(join(ROOT, "package.json"), "utf8")) as {
   description: string;
   license: string;
   repository: string;
+  homepage: string;
 };
 const version = root.version;
 
@@ -127,8 +130,9 @@ for (const name of PACKAGES) {
     type: "module",
     license: root.license,
     repository: root.repository,
+    homepage: root.homepage,
     bin: { omt: "dist/cli.js", omt3: "dist/cli.js", "oh-my-t3code": "dist/cli.js" },
-    files: ["dist", "skills", "README.md", "LICENSE"],
+    files: ["dist", "skills", "assets", "README.md", "LICENSE"],
     engines: { node: ">=22" },
   };
   await mkdir(join(dir, "dist"), { recursive: true });
@@ -139,6 +143,8 @@ for (const name of PACKAGES) {
     await mkdir(dirname(join(dir, file)), { recursive: true });
     await cp(join(ROOT, file), join(dir, file));
   }
+  await mkdir(join(dir, "assets"), { recursive: true });
+  for (const file of ASSETS) await cp(join(ROOT, "assets", file), join(dir, "assets", file));
   await cp(join(ROOT, "README.md"), join(dir, "README.md"));
   await cp(join(ROOT, "LICENSE"), join(dir, "LICENSE"));
   console.log(`wrote ${relative(process.cwd(), dir)}`);

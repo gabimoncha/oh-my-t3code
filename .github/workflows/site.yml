@@ -1,0 +1,102 @@
+name: Site
+
+# Checks the landing page in site/ on each pull request that changes it: type check, build, and
+# end-to-end tests in Chromium and WebKit. A push to main that changes the site runs the same
+# checks, then deploys to Cloudflare Pages. The owner can also start a deploy of main by hand.
+on:
+  pull_request:
+    paths:
+      - "site/**"
+      - ".github/workflows/site.yml"
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - ".github/workflows/site.yml"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  check:
+    name: check
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    concurrency:
+      group: site-check-${{ github.ref }}
+      cancel-in-progress: true
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: jdx/mise-action@fc42bcc7ddbf51124c30f95a877a0c5168a3bfde # v5.2.1
+        with:
+          version: 2026.10.17
+          add_shims_to_path: false
+          install: true
+          cache: false
+
+      # Playwright Test runs on Node.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.22.1
+          package-manager-cache: false
+
+      - run: bun install --frozen-lockfile
+
+      - run: bun run typecheck
+
+      - run: bun run build
+
+      - run: bunx playwright install --with-deps chromium webkit
+
+      - run: bun run e2e
+
+      - name: Upload the test report
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: site-e2e-report
+          path: site/test-results/
+          retention-days: 7
+
+  deploy:
+    name: deploy
+    needs: check
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    environment:
+      name: site
+      url: https://oh-my-t3code.pages.dev
+    permissions:
+      contents: read
+    concurrency:
+      group: site-deploy
+      cancel-in-progress: false
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: jdx/mise-action@fc42bcc7ddbf51124c30f95a877a0c5168a3bfde # v5.2.1
+        with:
+          version: 2026.10.17
+          add_shims_to_path: false
+          install: true
+          cache: false
+
+      - run: bun install --frozen-lockfile
+
+      - name: Build and deploy
+        run: bun run deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

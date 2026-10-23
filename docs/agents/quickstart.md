@@ -12,7 +12,7 @@ Check each requirement on the user's machine. Ask the user about the items that 
 
 | Requirement | How to check |
 | --- | --- |
-| T3 Code v0.1.0 or later. It is free for macOS, Windows, and Linux. Install it from https://t3.codes. | Ask the user, or look for `~/.t3/userdata/settings.json`. |
+| The latest T3 Code release; omt is tested only on it. It is free for macOS, Windows, and Linux. Install it from https://t3.codes. | Ask the user, or look for `~/.t3/userdata/settings.json`. |
 | At least one provider signed in and enabled in T3 Settings, Providers: Claude Code (`claude auth login`), Codex with a ChatGPT sign-in, or both. | Run `claude auth status` or `codex login status` when the CLI is on `PATH`. Ask the user to confirm the provider is enabled in T3. |
 | One way to install and run omt: `mise`, Node.js 22 or later, or Bun 1.4.4 or later. The release binary that mise installs needs neither Node nor Bun. The `omt` command of the npm package needs Node. | `mise --version`, `node --version`, `bun --version` |
 | git. | `git --version` |

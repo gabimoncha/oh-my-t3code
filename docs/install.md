@@ -14,7 +14,7 @@ If you are a coding agent, follow the [agent quick start](agents/quickstart.md) 
 
 ## Requirements
 
-- T3 Code v0.1.0 or later.
+- The latest T3 Code release. omt is tested only on the latest release.
 - Claude Code, Codex, or both, signed in and enabled in T3 Settings, Providers.
 - git.
 - For the npm package: Node.js 22 or later on `PATH`. On a machine with only Bun 1.4.4 or later, see [Run the npm package with Bun only](#run-the-npm-package-with-bun-only). The release binary needs neither Node nor Bun.
