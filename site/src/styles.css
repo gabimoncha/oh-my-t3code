@@ -1,0 +1,1803 @@
+@import "@fontsource/barlow/400.css";
+@import "@fontsource/barlow/600.css";
+@import "@fontsource/barlow-condensed/700.css";
+@import "@fontsource/barlow-condensed/800.css";
+@import "@fontsource/overpass-mono/500.css";
+
+/* Tokens: the Normal palette (T3 black, one purple) and GitHub's PR state colors. Text has three
+   steps on the ground (APCA): ink for headings and key text (Lc 105), text-2 for body copy (Lc 73),
+   and text-3 for labels and meta (Lc 49). The rule is the lightest gray that still reads as a line. */
+:root {
+  --ground: #0a0a0a;
+  --rule: #2a2a2a;
+  --ink: #ffffff;
+  --text-2: #c8c8c8;
+  --text-3: #9a9a9a;
+  --text-off: #737373;
+  --purple: #ab7df8;
+  --green: #3fb950;
+  --red: #f85149;
+  --sans: "Barlow", system-ui, sans-serif;
+  --display: "Barlow Condensed", system-ui, sans-serif;
+  --mono: "Overpass Mono", ui-monospace, monospace;
+  --gap-section: 96px;
+  --gap-block: 56px;
+  --gap-heading: 24px;
+  --pad: clamp(24px, calc((100vw - 1200px) / 2), 120px);
+  --ease-line: cubic-bezier(0.77, 0, 0.175, 1);
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 24px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  overflow-x: clip;
+  overflow-wrap: anywhere;
+}
+
+h1,
+h2,
+h3,
+p,
+ul,
+ol,
+dl,
+dd,
+figure,
+pre {
+  margin: 0;
+}
+
+ul,
+ol {
+  padding: 0;
+  list-style: none;
+}
+
+img {
+  display: block;
+}
+
+a {
+  color: inherit;
+}
+
+code,
+pre {
+  font-family: var(--mono);
+  font-weight: 500;
+}
+
+:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.skip {
+  position: absolute;
+  left: 16px;
+  top: -64px;
+  z-index: 10;
+  padding: 8px 14px;
+  border-radius: 4px;
+  background: var(--ink);
+  color: var(--ground);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.skip:focus {
+  top: 16px;
+}
+
+.muted {
+  color: var(--text-2);
+}
+
+.meta {
+  color: var(--text-3);
+}
+
+.small {
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.no-ligatures {
+  font-feature-settings: "calt" 0, "dlig" 0, "liga" 0;
+}
+
+.wrap {
+  width: 100%;
+  max-width: calc(1200px + 2 * var(--pad));
+  margin-inline: auto;
+  padding-inline: var(--pad);
+}
+
+/* Type */
+
+h1 {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 52px;
+  line-height: 50px;
+  letter-spacing: -0.01em;
+}
+
+h1 br {
+  display: none;
+}
+
+h2 {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 36px;
+  line-height: 40px;
+}
+
+h3 {
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.figure-text {
+  font-size: 18px;
+  line-height: 28px;
+}
+
+.body-large {
+  font-size: 18px;
+  line-height: 28px;
+}
+
+/* Header */
+
+.header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-block: 16px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 22px;
+  line-height: 26px;
+  text-decoration: none;
+}
+
+.menu-button {
+  padding: 6px 12px;
+  border: 1.5px solid var(--ink);
+  border-radius: 4px;
+  background: none;
+  color: var(--ink);
+  font: 600 15px/20px var(--sans);
+  cursor: pointer;
+}
+
+.nav-links {
+  display: none;
+}
+
+.nav-links[data-open="true"] {
+  position: absolute;
+  inset-inline: 0;
+  top: 100%;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  padding: 8px var(--pad) 24px;
+  border-bottom: 1px solid var(--rule);
+  background: var(--ground);
+}
+
+.nav-links a {
+  display: block;
+  padding-block: 10px;
+  color: var(--text-2);
+  font-size: 18px;
+  text-decoration: none;
+}
+
+.nav-links a:hover {
+  color: var(--ink);
+}
+
+/* Hero */
+
+.hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  padding-top: 56px;
+  padding-bottom: 40px;
+  text-align: center;
+}
+
+.lead {
+  max-width: 680px;
+  color: var(--text-2);
+  font-size: 18px;
+  line-height: 28px;
+}
+
+.hero-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+
+.quiet-link {
+  color: var(--text-2);
+  text-decoration: underline 1px;
+  text-underline-position: from-font;
+}
+
+.quiet-link:hover {
+  color: var(--ink);
+}
+
+.plate {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 240px;
+  padding: 8px 8px 8px 20px;
+  border-radius: 8px;
+  background: var(--ink);
+  color: var(--ground);
+  font-size: 15px;
+  line-height: 22px;
+  text-align: left;
+}
+
+.plate:has(.copy:focus-visible) {
+  outline: 3px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.plate .copy:focus-visible {
+  outline: none;
+}
+
+/* Copy buttons */
+
+.copy {
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 4px;
+  font: 600 15px/20px var(--sans);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.copy-plate {
+  padding: 10px 16px;
+  background: var(--ground);
+  color: var(--ink);
+}
+
+.copy-plate[data-state="copied"] {
+  color: var(--purple);
+}
+
+.copy-outline {
+  width: 80px;
+  padding-block: 10px;
+  border: 1.5px solid var(--ink);
+  background: none;
+  color: var(--ink);
+}
+
+.copy-outline[data-state="copied"] {
+  border-color: var(--purple);
+  color: var(--purple);
+}
+
+.copy-outline[data-state="blocked"],
+.copy-plate[data-state="blocked"] {
+  font-size: 13px;
+}
+
+.copy-solid {
+  padding: 10px 16px;
+  background: var(--ink);
+  color: var(--ground);
+}
+
+.copy-solid[data-state="copied"] {
+  background: var(--purple);
+}
+
+/* Labels of the state chart */
+
+.st-label,
+.code-label,
+.event-label,
+.verdict {
+  position: absolute;
+  white-space: nowrap;
+}
+
+.st-label {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 24px;
+  line-height: 28px;
+}
+
+.st-label.small {
+  font-size: 18px;
+  line-height: 22px;
+}
+
+.st-label.tiny {
+  font-size: 16px;
+  line-height: 20px;
+}
+
+.st-label.center {
+  text-align: center;
+}
+
+.st-label.right {
+  text-align: right;
+}
+
+.code-label {
+  font-family: var(--mono);
+  font-weight: 500;
+  font-size: 15px;
+  line-height: 22px;
+}
+
+.event-label {
+  color: var(--text-3);
+  font-size: 14px;
+  line-height: 20px;
+  white-space: normal;
+}
+
+.verdict {
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.verdict.open {
+  color: var(--green);
+}
+
+.verdict.closed {
+  color: var(--red);
+}
+
+.verdict.right {
+  text-align: right;
+}
+
+@keyframes draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes appear {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+/* The hero: two runs side by side, ulw on the left and swarm on the right. The run that plays has
+   a progress bar (the clock) under its name; when the clock ends, the next run plays. The run that
+   waits shows its last frame, dimmed. */
+
+.hero-runs {
+  display: grid;
+  gap: 40px;
+  padding-top: 8px;
+}
+
+.hero-run {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.hero-run-head {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--rule);
+  color: var(--text-2);
+  font-size: 15px;
+  line-height: 22px;
+}
+
+.hero-run-head code {
+  color: var(--ink);
+  font-size: 15px;
+}
+
+.hero-run-head .m-clock {
+  bottom: -1px;
+}
+
+.hero-art svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.hero-art {
+  transition: opacity 400ms ease;
+}
+
+.hero-art.still {
+  opacity: 0.35;
+}
+
+.hero-run-goal code {
+  font-size: 15px;
+}
+
+.hero-run-note {
+  color: var(--text-2);
+  font-size: 15px;
+  line-height: 22px;
+}
+
+.hero-replay {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+/* A run that waits shows its last frame. !important: it must win over the play rules below. */
+.still .m-seg {
+  stroke-dashoffset: 0 !important;
+  animation: none !important;
+}
+
+.still .m-pop {
+  opacity: 1 !important;
+  animation: none !important;
+}
+
+.still .m-dim {
+  opacity: 0.3 !important;
+}
+
+.hero-replay:focus-visible,
+.skill-row:focus-visible {
+  outline: 2px solid var(--purple);
+  outline-offset: 2px;
+}
+
+.skill-art {
+  animation: stage-in 400ms ease both;
+}
+
+@keyframes stage-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.m-clock {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  background: var(--purple);
+  transform: scaleX(0);
+  transform-origin: left;
+}
+
+.anim[data-play] .m-clock {
+  animation: clock var(--total-m) linear forwards;
+}
+
+@keyframes clock {
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* Metro scenes (components/metro.tsx). Lines draw at one speed; stations and labels fade in when the
+   line reaches them; the lanes that a scene drops dim. Without JavaScript, the last frame shows. */
+
+.m-seg {
+  stroke-dasharray: 1 1;
+}
+
+.js .anim:not([data-play]) .m-seg {
+  stroke-dashoffset: 1;
+}
+
+.js .anim:not([data-play]) .m-pop {
+  opacity: 0;
+}
+
+.anim[data-play] .m-seg {
+  stroke-dashoffset: 1;
+  animation: draw var(--dur) linear var(--at) forwards;
+}
+
+.anim[data-play] .m-seg.m-dim {
+  animation:
+    draw var(--dur) linear var(--at) forwards,
+    dim 320ms ease var(--dim) both;
+}
+
+.anim[data-play] .m-pop {
+  animation: appear 240ms ease-out var(--at) both;
+}
+
+.anim[data-play] .m-pop.m-dim {
+  animation:
+    appear 240ms ease-out var(--at) both,
+    dim 320ms ease var(--dim) forwards;
+}
+
+html:not(.js) .m-dim {
+  opacity: 0.3;
+}
+
+/* !important: the animation shorthands above have a higher specificity and reset the play state. */
+.anim[data-paused="true"] * {
+  animation-play-state: paused !important;
+}
+
+@keyframes dim {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0.3;
+  }
+}
+
+.m-station {
+  fill: var(--ink);
+  font-family: var(--display);
+  font-weight: 700;
+}
+
+.m-code {
+  fill: var(--ink);
+  font-family: var(--mono);
+  font-weight: 500;
+}
+
+.m-note {
+  fill: var(--text-3);
+  font-family: var(--sans);
+}
+
+.m-verdict {
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 13px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .js .anim:not([data-play]) :is(.m-seg, .m-pop),
+  .anim[data-play] :is(.m-seg, .m-pop) {
+    stroke-dashoffset: 0;
+    opacity: 1;
+    animation: none;
+  }
+
+  .js .anim:not([data-play]) .m-dim,
+  .anim[data-play] .m-dim {
+    opacity: 0.3;
+  }
+
+  .m-clock {
+    display: none;
+  }
+
+  .skill-art {
+    animation: none;
+  }
+
+  .hero-art.still {
+    opacity: 1;
+  }
+}
+
+/* Sections */
+
+/* One rhythm: --gap-section between sections, --gap-block between the parts of one section, and
+   --gap-heading under each section heading. */
+.section {
+  padding-top: var(--gap-section);
+}
+
+.section-tight {
+  padding-top: var(--gap-block);
+}
+
+.section > h2,
+.how h2 {
+  margin-bottom: var(--gap-heading);
+}
+
+.section h3,
+.section-tight h3 {
+  margin-bottom: 12px;
+}
+
+.split {
+  display: flex;
+  flex-direction: column;
+  gap: 48px;
+}
+
+/* Rows: install commands, names, skills, files */
+
+.rows {
+  border-top: 1px solid var(--rule);
+}
+
+.rows > li,
+.rows > div {
+  border-bottom: 1px solid var(--rule);
+  padding-block: 12px;
+}
+
+.rows dt code,
+.rows > li > code {
+  font-size: 15px;
+  line-height: 22px;
+}
+
+.rows dd {
+  margin-top: 2px;
+}
+
+.install-steps {
+  display: grid;
+  gap: 32px;
+}
+
+.install-steps > li {
+  min-width: 0;
+}
+
+.install-after {
+  margin-top: 28px;
+  font-size: 15px;
+  line-height: 22px;
+}
+
+.install-after a {
+  color: var(--ink);
+}
+
+.install-steps h3 {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.step-no {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--ground);
+  font: 700 16px/1 var(--display);
+}
+
+.step-note {
+  margin-top: 10px;
+  color: var(--text-3);
+  font-size: 15px;
+  line-height: 22px;
+}
+
+.step-note code {
+  color: var(--ink);
+}
+
+/* A code block with tabs: the tab list and the copy button share the head. */
+
+.tabbed {
+  position: relative;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+}
+
+.tabbed-head {
+  border-bottom: 1px solid var(--rule);
+}
+
+.tab-list {
+  display: flex;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tab-list [role="tab"] {
+  position: relative;
+  flex-shrink: 0;
+  padding: 14px 10px 12px;
+  border: 0;
+  background: none;
+  color: var(--text-3);
+  font: 600 15px/20px var(--sans);
+  cursor: pointer;
+}
+
+.tab-list [role="tab"]:first-child {
+  padding-left: 16px;
+}
+
+.tab-list [role="tab"]::after {
+  content: "";
+  position: absolute;
+  inset: auto 10px -1px;
+  height: 2px;
+  background: var(--purple);
+  opacity: 0;
+}
+
+.tab-list [role="tab"]:first-child::after {
+  left: 16px;
+}
+
+.tab-list [role="tab"]:hover {
+  color: var(--ink);
+}
+
+.tab-list [aria-selected="true"] {
+  color: var(--ink);
+}
+
+.tab-list [aria-selected="true"]::after {
+  opacity: 1;
+}
+
+.tab-list [aria-disabled="true"] {
+  color: var(--text-off);
+  cursor: not-allowed;
+}
+
+.tab-list [aria-disabled="true"]:hover {
+  color: var(--text-off);
+}
+
+.tab-list [role="tab"]:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: -6px;
+  border-radius: 6px;
+}
+
+.tab-panel {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 12px;
+}
+
+.tab-panel .copy {
+  align-self: flex-end;
+  margin-right: 12px;
+}
+
+.tab-panel pre {
+  overflow-x: auto;
+  padding: 16px;
+  font-size: 14px;
+  line-height: 24px;
+}
+
+.tab-panel .comment {
+  color: var(--text-3);
+}
+
+/* How it works */
+
+.how-roles,
+.how-line {
+  display: none;
+}
+
+.how-steps > li {
+  display: flex;
+  gap: 0;
+}
+
+.how-rail {
+  position: relative;
+  flex-shrink: 0;
+  width: 44px;
+}
+
+.how-rail::before {
+  content: "";
+  position: absolute;
+  left: 10px;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  background: var(--ink);
+}
+
+.how-steps > li:first-child .how-rail::before {
+  top: 14px;
+}
+
+.how-steps > li.is-done .how-rail::before {
+  bottom: auto;
+  height: 14px;
+}
+
+.how-steps > li.is-review .how-rail::after {
+  content: "";
+  position: absolute;
+  left: calc(-1 * var(--pad));
+  top: 10px;
+  width: calc(var(--pad) + 36px);
+  height: 8px;
+  background: var(--purple);
+}
+
+.how-rail-station {
+  position: relative;
+  z-index: 1;
+  width: 28px;
+  height: 28px;
+}
+
+.is-review .how-rail-station {
+  width: 36px;
+  height: 36px;
+  margin: -4px 0 0 -4px;
+}
+
+.how-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding-bottom: 40px;
+}
+
+.how-text h3 {
+  margin: 0;
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 22px;
+  line-height: 28px;
+}
+
+.prompt {
+  padding: 10px 12px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.how-role {
+  flex-shrink: 0;
+  width: 64px;
+  height: 64px;
+  margin-left: 16px;
+}
+
+/* Skills: a pointer goes down the list, and the picture of the skill plays in the stage. On a
+   narrow screen, the stage sticks to the top while the list scrolls under it. */
+
+.skill-tour {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.skill-list {
+  border-top: 1px solid var(--rule);
+}
+
+.skill-name {
+  display: flex;
+  flex-direction: column;
+}
+
+.skill-tag {
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.skill-row {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 12px 0 12px 28px;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.skill-row::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 2px;
+  border-style: solid;
+  border-width: 7px 0 7px 12px;
+  border-color: transparent transparent transparent var(--purple);
+  opacity: 0;
+  translate: -8px -50%;
+  transition:
+    opacity 200ms ease,
+    translate 200ms ease;
+}
+
+.skill-row[aria-selected="true"]::before {
+  opacity: 1;
+  translate: 0 -50%;
+}
+
+.skill-row code {
+  color: var(--text-3);
+  font-size: 15px;
+  line-height: 22px;
+}
+
+.skill-row:hover code,
+.skill-row[aria-selected="true"],
+.skill-row[aria-selected="true"] code {
+  color: var(--ink);
+}
+
+.skill-row .m-clock {
+  bottom: -1px;
+  height: 2px;
+}
+
+.skill-stage {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  order: -1;
+  padding-block: 12px;
+  background: var(--ground);
+}
+
+.skill-art svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.skill-stage figcaption {
+  min-height: 66px;
+  color: var(--text-2);
+  font-size: 15px;
+  line-height: 22px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skill-row::before {
+    transition: none;
+  }
+}
+
+/* States, evidence */
+
+.chart {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.chart-desktop {
+  display: none;
+}
+
+.chart-mobile {
+  position: relative;
+  width: 342px;
+  height: 400px;
+}
+
+/* The state chart plays two trips while it is in view, one after the other. In the first, the
+   review requests changes, the unit goes back to Delegated, and its second pass draws in yellow;
+   the next review approves it. In the second, the review blocks the unit. The verdict of each
+   review lights up. */
+
+.unit-token,
+.second-pass {
+  display: none;
+}
+
+.chart[data-play] .second-pass {
+  display: inline;
+  stroke-dasharray: 1 1;
+  stroke-dashoffset: 1;
+  animation: second-pass 18s linear infinite;
+}
+
+.chart[data-play] .unit-token {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  width: 18px;
+  height: 18px;
+  border: 3px solid var(--ground);
+  border-radius: 50%;
+  background: var(--purple);
+  opacity: 0;
+  offset-rotate: 0deg;
+  animation: 18s ease-in-out infinite;
+}
+
+.chart[data-play] .unit-token.fixed {
+  animation-name: trip-fixed;
+}
+
+.chart[data-play] .unit-token.blocked {
+  animation-name: trip-blocked;
+}
+
+.chart-art svg {
+  display: block;
+}
+
+.chart[data-play] :is(.verdict, .request, .approve, .block) {
+  opacity: 0.35;
+}
+
+.chart[data-play] .request {
+  animation: verdict-request 18s ease infinite;
+}
+
+.chart[data-play] .approve {
+  animation: verdict-approve 18s ease infinite;
+}
+
+.chart[data-play] .block {
+  animation: verdict-block 18s ease infinite;
+}
+
+.chart[data-paused="true"] :is(.unit-token, .second-pass, .request, .approve, .block) {
+  animation-play-state: paused;
+}
+
+@keyframes trip-fixed {
+  0% {
+    offset-distance: 0%;
+    opacity: 0;
+  }
+
+  2%,
+  4% {
+    offset-distance: 0%;
+    opacity: 1;
+  }
+
+  7%,
+  9.5% {
+    offset-distance: var(--p1);
+  }
+
+  13%,
+  16.5% {
+    offset-distance: var(--p2);
+  }
+
+  22%,
+  24% {
+    offset-distance: var(--p3);
+  }
+
+  27.5%,
+  30.5% {
+    offset-distance: var(--p4);
+  }
+
+  34%,
+  36% {
+    offset-distance: var(--p5);
+  }
+
+  39.5%,
+  46% {
+    offset-distance: 100%;
+    opacity: 1;
+  }
+
+  48.5%,
+  100% {
+    offset-distance: 100%;
+    opacity: 0;
+  }
+}
+
+@keyframes trip-blocked {
+  0%,
+  50% {
+    offset-distance: 0%;
+    opacity: 0;
+  }
+
+  52%,
+  54% {
+    offset-distance: 0%;
+    opacity: 1;
+  }
+
+  59%,
+  62% {
+    offset-distance: var(--p1);
+  }
+
+  68%,
+  72% {
+    offset-distance: var(--p2);
+  }
+
+  80%,
+  94% {
+    offset-distance: 100%;
+    opacity: 1;
+  }
+
+  97%,
+  100% {
+    offset-distance: 100%;
+    opacity: 0;
+  }
+}
+
+@keyframes second-pass {
+  0%,
+  24% {
+    stroke-dashoffset: 1;
+    opacity: 1;
+  }
+
+  27.5%,
+  46% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+
+  49%,
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 0;
+  }
+}
+
+@keyframes verdict-request {
+  0%,
+  13%,
+  21%,
+  100% {
+    opacity: 0.35;
+  }
+
+  14.5%,
+  19% {
+    opacity: 1;
+  }
+}
+
+@keyframes verdict-approve {
+  0%,
+  27.5%,
+  35.5%,
+  100% {
+    opacity: 0.35;
+  }
+
+  29%,
+  33.5% {
+    opacity: 1;
+  }
+}
+
+@keyframes verdict-block {
+  0%,
+  72%,
+  92%,
+  100% {
+    opacity: 0.35;
+  }
+
+  74%,
+  90% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chart[data-play] :is(.unit-token, .second-pass) {
+    display: none;
+  }
+
+  .chart[data-play] :is(.verdict, .request, .approve, .block) {
+    opacity: 1;
+    animation: none;
+  }
+}
+
+.chart figcaption {
+  font-size: 15px;
+  line-height: 22px;
+}
+
+.two-parts {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.two-parts h3 {
+  margin: 0;
+}
+
+.evidence {
+  gap: 32px;
+}
+
+.evidence-files {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.evidence-runs {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  order: -1;
+}
+
+.run-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.files dt code {
+  font-size: 15px;
+}
+
+.strong-link {
+  font-weight: 600;
+  text-decoration: underline 1px;
+  text-underline-position: from-font;
+}
+
+.h2-wide {
+  max-width: 860px;
+}
+
+.plain {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.requirements {
+  gap: 8px;
+}
+
+.requirements + .small {
+  margin-top: 16px;
+}
+
+.credit-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  margin-top: 16px;
+  font-weight: 600;
+}
+
+.credit-links a,
+.plain a {
+  text-decoration: none;
+}
+
+.credit-links a:hover,
+.plain a:hover,
+.footer a:hover {
+  text-decoration: underline 1px;
+  text-underline-position: from-font;
+}
+
+.split .col-even + .col-even h3 {
+  margin-top: 0;
+}
+
+.closing {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  padding-top: var(--gap-section);
+  text-align: center;
+}
+
+.closing h2 {
+  font-weight: 800;
+  font-size: 40px;
+  line-height: 40px;
+  text-wrap: balance;
+}
+
+.footer {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding-top: 64px;
+  padding-bottom: 40px;
+  font-size: 15px;
+  line-height: 22px;
+}
+
+.footer hr {
+  width: 100%;
+  height: 1px;
+  margin: 0;
+  border: 0;
+  background: var(--rule);
+}
+
+.footer-row {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.footer-row p {
+  display: flex;
+  gap: 16px;
+}
+
+.footer-row ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+}
+
+.footer a {
+  color: var(--text-2);
+  text-decoration: none;
+}
+
+/* Desktop */
+
+@media (min-width: 1100px) {
+  :root {
+    --gap-section: 144px;
+    --gap-block: 72px;
+    --gap-heading: 40px;
+  }
+
+  .hero-runs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 56px;
+  }
+
+  .hero-replay {
+    grid-column: 1 / -1;
+  }
+
+  .skill-tour {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 48px;
+  }
+
+  .skill-list {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .skill-row {
+    flex-direction: row;
+    gap: 16px;
+    padding-block: 14px;
+  }
+
+  .skill-name {
+    flex: 0 0 132px;
+  }
+
+  .skill-row code {
+    font-size: 16px;
+    line-height: 24px;
+  }
+
+  .skill-tour {
+    align-items: center;
+  }
+
+  .skill-stage {
+    position: static;
+    flex: 0 0 600px;
+    order: 0;
+    padding-block: 0;
+  }
+
+  .header {
+    padding-block: 24px;
+  }
+
+  .brand {
+    gap: 12px;
+    font-size: 24px;
+    line-height: 28px;
+  }
+
+  .menu-button {
+    display: none;
+  }
+
+  .nav-links,
+  .nav-links[data-open="true"] {
+    position: static;
+    display: flex;
+    flex-direction: row;
+    gap: 32px;
+    padding: 0;
+    border: 0;
+  }
+
+  .nav-links a {
+    padding: 0;
+    font-size: 16px;
+  }
+
+  h1 br {
+    display: inline;
+  }
+
+  h1 {
+    max-width: 1000px;
+    font-size: 96px;
+    line-height: 92px;
+  }
+
+  h2 {
+    font-size: 48px;
+    line-height: 52px;
+  }
+
+  h3 {
+    font-size: 21px;
+    line-height: 28px;
+  }
+
+  .hero {
+    gap: 32px;
+    padding-top: 112px;
+    padding-bottom: 72px;
+  }
+
+  .lead {
+    font-size: 21px;
+    line-height: 32px;
+  }
+
+  .hero-actions {
+    flex-direction: row;
+  }
+
+  .hero .plate,
+  .closing .plate {
+    width: 220px;
+  }
+
+  .plate code {
+    font-size: 16px;
+    line-height: 24px;
+  }
+
+  .copy-plate,
+  .copy-solid {
+    padding: 8px 14px;
+  }
+
+  .copy-outline {
+    padding-block: 6px;
+  }
+
+
+  .split {
+    flex-direction: row;
+    justify-content: space-between;
+    gap: 40px;
+  }
+
+  .col-wide {
+    flex: 0 1 620px;
+    min-width: 0;
+  }
+
+  .col-even {
+    flex: 0 1 560px;
+    min-width: 0;
+  }
+
+  .col-narrow {
+    flex: 0 1 480px;
+    min-width: 0;
+  }
+
+  .install-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 48px;
+  }
+
+  .tab-panel {
+    padding-bottom: 0;
+  }
+
+  .tab-panel .copy {
+    position: absolute;
+    top: 7px;
+    right: 8px;
+    margin: 0;
+    padding: 6px 12px;
+  }
+
+  .tab-list [role="tab"] {
+    padding-inline: 12px;
+  }
+
+  .tab-list [role="tab"]::after {
+    inset-inline: 12px;
+  }
+
+  .tab-panel pre {
+    padding: 20px 24px;
+    font-size: 16px;
+    line-height: 28px;
+  }
+
+  .rows > li,
+  .rows > div {
+    padding-block: 14px;
+  }
+
+  .rows dt code,
+  .rows > li > code {
+    font-size: 16px;
+    line-height: 24px;
+  }
+
+  .rows > div {
+    display: flex;
+  }
+
+  .rows dt {
+    flex-shrink: 0;
+    width: 160px;
+  }
+
+  .rows dd {
+    margin-top: 0;
+  }
+
+  .files dt {
+    width: 200px;
+  }
+
+  /* How it works: a horizontal flowchart with one column per station. */
+
+  .how-roles {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    height: 112px;
+    padding-bottom: 16px;
+  }
+
+  .how-line {
+    display: block;
+  }
+
+  .how-line-inner {
+    position: relative;
+    height: 80px;
+  }
+
+  .how-route {
+    position: absolute;
+    top: 36px;
+    left: calc((100% - 100vw) / 2);
+    width: calc((100vw - 100%) / 2 + 100% * 5 / 6 + 14px);
+    height: 8px;
+    background: var(--ink);
+  }
+
+  .how-review {
+    position: absolute;
+    top: 0;
+    left: calc(100% * 3 / 6 + 10px);
+    width: 8px;
+    height: 80px;
+    background: var(--purple);
+  }
+
+  .how-station {
+    position: absolute;
+    top: 26px;
+    left: calc(100% * var(--col) / 6);
+    width: 28px;
+    height: 28px;
+  }
+
+  .how-station.interchange {
+    top: 22px;
+    left: calc(100% * var(--col) / 6 - 4px);
+    width: 36px;
+    height: 36px;
+  }
+
+  .how-steps {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    padding-top: 8px;
+  }
+
+  .how-steps > li {
+    display: block;
+    padding-right: 24px;
+  }
+
+  .how-rail,
+  .how-role {
+    display: none;
+  }
+
+  .how-text {
+    gap: 10px;
+    padding-bottom: 0;
+  }
+
+  .how-text h3 {
+    font-size: 24px;
+  }
+
+  .how-text > .muted {
+    font-size: 16px;
+  }
+
+  /* Charts at their drawn size. */
+
+  .chart-mobile {
+    display: none;
+  }
+
+  .chart-desktop {
+    position: relative;
+    display: block;
+    width: 560px;
+    height: 272px;
+  }
+
+  .chart figcaption {
+    max-width: 520px;
+    font-size: 16px;
+    line-height: 24px;
+  }
+
+  .two-parts p:not(.small) {
+    font-size: 18px;
+    line-height: 28px;
+  }
+
+  .evidence {
+    gap: 40px;
+  }
+
+  .evidence-runs {
+    order: 0;
+    gap: 28px;
+  }
+
+  .run-row {
+    gap: 12px;
+  }
+
+  .run-row .figure-text,
+  .figure-text {
+    font-size: 21px;
+    line-height: 32px;
+  }
+
+  .closing {
+    gap: 32px;
+  }
+
+  .closing h2 {
+    font-size: 56px;
+    line-height: 56px;
+  }
+
+  .footer {
+    gap: 28px;
+    padding-bottom: 48px;
+  }
+
+  .footer-row {
+    flex-direction: row;
+    justify-content: space-between;
+  }
+
+  .footer-row ul {
+    gap: 32px;
+  }
+}

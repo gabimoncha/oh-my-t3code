@@ -1,4 +1,4 @@
-<img src="assets/icon.svg" width="64" height="64" alt="">
+<img src="assets/banner.png" width="1280" alt="omt3, oh-my-t3code. Give the agent a goal. Get back reviewed work. A metro line climbs through the stations Plan, Delegate, Review, Verify, and Done.">
 
 # oh-my-t3code
 
@@ -69,7 +69,7 @@ Do not use omt in these cases:
 
 ## Requirements
 
-- [T3 Code](https://t3.codes) v0.1.0 or later.
+- The latest [T3 Code](https://t3.codes) release. omt is tested only on the latest release.
 - Claude Code, Codex, or both, enabled in T3 under **Settings** > **Providers**. Design and UI work needs Claude Code.
 - git.
 - Node 22 or later for the npm package. The release binary needs neither Node nor Bun.
