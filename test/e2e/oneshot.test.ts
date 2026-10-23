@@ -37,7 +37,13 @@ test("bunx omt3 keeps its install folder inside the isolated temp root", async (
   const before = installFolders(realTmp);
   const output = await run(tool.bun, ["x", `omt3@${registry.version}`, "roles"], registry.root, env);
   assert.match(output, /^ROLE\s+STATUS\s+TARGET\s+ACCESS\s+MODE\s+CROSS$/m);
-  assert.ok(installFolders(isolatedTmp).size > 0, "bunx must write its omt3 install folder inside the test root");
+  // Bun 1.4.4 and later keep the bunx install folder in the install cache (.bunx-<uid>/omt3@<version>);
+  // older Bun put it in TMPDIR (bunx-<uid>-omt3@<version>). Either place is inside the test root.
+  const cache = env.BUN_INSTALL_CACHE_DIR!;
+  const inCache = readdirSync(cache, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && entry.name.startsWith(".bunx-"))
+    .some((entry) => readdirSync(join(cache, entry.name)).some((name) => name.startsWith("omt3@")));
+  assert.ok(inCache || installFolders(isolatedTmp).size > 0, "bunx must write its omt3 install folder inside the test root");
   const added = [...installFolders(realTmp)].filter((name) => !before.has(name));
   assert.deepEqual(added, [], "bunx must leave no new omt3 install folder in the real temp directory");
 }, 240_000);
