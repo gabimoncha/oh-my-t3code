@@ -149,7 +149,7 @@ The [walkthrough](docs/walkthrough.md) follows two real runs on this repository.
 
 ## Limits
 
-- This is version 0.1. The config format and the CLI output can change.
+- This is version 0.2. The config format and the CLI output can change.
 - A run can start 24 child tasks by default, which is enough for 3 to 4 units. To raise the limit, run `omt plan limit <slug> --tasks <n>`.
 - The `ulw` keyword works only in Claude Code. In Codex, type `$omt-ulw`.
 - `omt-swarm` needs a thread in `full-access` runtime mode and `default` interaction mode.
