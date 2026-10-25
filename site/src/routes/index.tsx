@@ -439,7 +439,7 @@ function Details() {
           <li>git.</li>
           <li>Node 22 or later, except for the release binary.</li>
         </ul>
-        <p className="meta small">This is version 0.2. The config format and the CLI output can change.</p>
+        <p className="meta small">This is version 0.3. The config format and the CLI output can change.</p>
       </div>
       <div className="col-even">
         <h3>Credits</h3>
