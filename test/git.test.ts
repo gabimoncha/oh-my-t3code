@@ -11,8 +11,8 @@ function project() {
   const git = gitRepo(root, cwd);
   const env = gitEnv(root);
   const config = (value: unknown) => writeFile(join(cwd, ".omt", "config.jsonc"), JSON.stringify(value));
-  const check = async (action: string, directory = cwd) => {
-    const ctx = fakeContext({ root, cwd: directory, env, argv: ["check", action, "--json"] });
+  const check = async (action: string, directory = cwd, ...flags: string[]) => {
+    const ctx = fakeContext({ root, cwd: directory, env, argv: ["check", action, ...flags, "--json"] });
     assert.equal(await run(ctx), 0);
     assert.equal(ctx.err(), "");
     return JSON.parse(ctx.out()) as {
@@ -61,7 +61,8 @@ for (const scenario of ["detached HEAD", "no repo", "no default branch"] as cons
 
 test("git pr asks on the default branch", async () => {
   const p = project();
-  const result = await p.check("pr");
+  p.git(["remote", "add", "origin", "git@github.com:alice/app.git"]);
+  const result = await p.check("pr", p.cwd, "--user", "alice");
   assert.equal(result.decision, "ask");
   assert.equal(result.value, "auto");
   assert.match(result.reason, /default branch/);
@@ -70,9 +71,10 @@ test("git pr asks on the default branch", async () => {
 test("git pullRequests off disables push and pr", async () => {
   const p = project();
   p.git(["checkout", "-q", "-b", "feat/x"]);
+  p.git(["remote", "add", "origin", "git@github.com:alice/app.git"]);
   p.config({ profiles: { normal: { workflow: { git: { pullRequests: "off" } } } } });
   for (const action of ["push", "pr"]) {
-    const result = await p.check(action);
+    const result = await p.check(action, p.cwd, "--user", "alice");
     assert.equal(result.decision, "off", action);
     assert.equal(result.value, "off", action);
   }

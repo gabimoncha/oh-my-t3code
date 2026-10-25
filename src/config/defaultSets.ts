@@ -223,7 +223,7 @@ const SET_2026_11: OmtConfig = {
       ...SET_2026_10.profiles.normal!,
       workflow: {
         ...SET_2026_10.profiles.normal!.workflow,
-        git: { branchCommits: "auto", pullRequests: "auto", defaultBranch: "ask", merge: "ask" },
+        git: { branchCommits: "auto", pullRequests: "auto", defaultBranch: "ask", merge: "ask", owners: [] },
       },
     },
   },

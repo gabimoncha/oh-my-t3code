@@ -77,6 +77,7 @@ export interface GitPolicy {
   pullRequests: "auto" | "ask" | "off";
   defaultBranch: "ask" | "auto";
   merge: "ask" | "auto";
+  owners: string[]; // GitHub owners besides the user whose repos count as the user's own
 }
 
 export type WorkflowLayer = { [K in keyof Workflow]?: Partial<Workflow[K]> };

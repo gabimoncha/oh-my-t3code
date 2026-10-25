@@ -5,6 +5,14 @@ export interface BranchState {
   repo: boolean;
   branch: string | undefined; // undefined on a detached HEAD or outside a repo
   defaultBranch: string | undefined;
+  origin: string | undefined; // the fetch URL of the origin remote
+  pushUrls: string[]; // the push URLs of origin, after insteadOf and pushInsteadOf rewrites
+}
+
+export interface RemoteRepo {
+  host: string;
+  owner: string;
+  repo: string;
 }
 
 function git(ctx: Pick<CliContext, "cwd" | "env">, args: string[]): string | undefined {
@@ -40,10 +48,35 @@ export function findDefaultBranch(ctx: Pick<CliContext, "cwd" | "env">): string 
 }
 
 export function readBranchState(ctx: Pick<CliContext, "cwd" | "env">): BranchState {
-  if (git(ctx, ["rev-parse", "--git-dir"]) === undefined) return { repo: false, branch: undefined, defaultBranch: undefined };
+  if (git(ctx, ["rev-parse", "--git-dir"]) === undefined) {
+    return { repo: false, branch: undefined, defaultBranch: undefined, origin: undefined, pushUrls: [] };
+  }
+  const origin = git(ctx, ["remote", "get-url", "origin"]);
   return {
     repo: true,
     branch: symbolicRef(ctx, "HEAD", "refs/heads/"),
     defaultBranch: findDefaultBranch(ctx),
+    origin,
+    pushUrls: origin === undefined ? [] : git(ctx, ["remote", "get-url", "--push", "--all", "origin"])?.split(/\r?\n/) ?? [],
   };
+}
+
+const OWNER = "([A-Za-z0-9][A-Za-z0-9-]{0,38})";
+const REPO = "([A-Za-z0-9._-]+?)(?:\\.git)?";
+const REMOTE_FORMS = [
+  new RegExp(`^git@([^/:@\\s]+):${OWNER}/${REPO}$`),
+  new RegExp(`^ssh://git@([^/@\\s]+)/${OWNER}/${REPO}$`),
+  new RegExp(`^https://([^/@\\s]+)/${OWNER}/${REPO}$`),
+];
+
+// `git@<host>:<owner>/<repo>`, `ssh://git@<host>/<owner>/<repo>`, or `https://<host>/<owner>/<repo>`,
+// each with an optional `.git`. Any other form gives undefined, so the owner is unknown.
+export function parseRemote(url: string): RemoteRepo | undefined {
+  for (const form of REMOTE_FORMS) {
+    const match = form.exec(url);
+    if (match?.[1] !== undefined && match[2] !== undefined && match[3] !== undefined) {
+      return { host: match[1], owner: match[2], repo: match[3] };
+    }
+  }
+  return undefined;
 }

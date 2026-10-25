@@ -165,7 +165,7 @@ Add the profile under `profiles` in either config file. The starter configs hold
 | --- | --- |
 | `description` | Text of at most 300 characters. Required for a new profile. Without it, omt drops the profile and `omt config validate` reports the error. |
 | `extends` | The name of the parent profile. A profile without `extends` inherits `normal`. |
-| `workflow` | Switches of the plan, design, build, and review steps, per group and key. The `git` group sets when the skills commit, push, open a PR, or merge without a question (`auto`) and when they ask first (`ask`). The [spec](spec.md#67-profiles-and-workflow) lists every key and its values. |
+| `workflow` | Switches of the plan, design, build, and review steps, per group and key. The `git` group sets when the skills commit, push, open a PR, or merge without a question (`auto`) and when they ask first (`ask`). Its `owners` key lists the GitHub orgs whose repos count as your own; the default is none, so an org repo asks. The [spec](spec.md#67-profiles-and-workflow) lists every key and its values. |
 | `limits` | Limits for runs with this profile. See [Set limits](#set-limits). |
 | `roles` | Role overrides, with the fields of [Add a custom role](#add-a-custom-role). |
 | `models` | Settings per model id. The only setting is `fast`. |
