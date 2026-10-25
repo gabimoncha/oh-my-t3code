@@ -86,6 +86,8 @@ export interface ProfileConfig {
   models?: Record<string, ModelConfig>;
 }
 
+export type UpdateMode = "off" | "check" | "apply";
+
 export interface OmtConfig {
   version: 1;
   defaults: string; // the selected default set, for example "2026-10"
@@ -96,6 +98,7 @@ export interface OmtConfig {
   limits: Limits;
   visuals: Visuals;
   harnesses?: string[]; // the driver kinds that routing may use; absent means every driver
+  update?: UpdateMode; // absent means "off"
 }
 
 export interface ConfigLayer {
@@ -108,6 +111,7 @@ export interface ConfigLayer {
   limits?: Partial<Limits>;
   visuals?: Partial<Visuals>;
   harnesses?: string[];
+  update?: UpdateMode;
 }
 
 export type IssueSeverity = "error" | "warning";

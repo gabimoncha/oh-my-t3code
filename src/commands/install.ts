@@ -1,10 +1,14 @@
 import { loadConfig } from "../config/load.ts";
 import { applyInstall } from "../install/apply.ts";
 import { confirmApply } from "../install/confirm.ts";
-import { checkDefaults } from "../install/doctor.ts";
+import { autoUpdate, checkDefaults, updateNote } from "../install/doctor.ts";
+import type { UpdateCheckSeams } from "../install/doctor.ts";
 import { buildInstallPlan, installConflicts, installHasChanges, parseTargets, renderInstallPlan } from "../install/plan.ts";
 import { shimPaths } from "../install/project.ts";
-import type { CommandRun } from "../types.ts";
+import { addProject, projectsWarning } from "../install/projects.ts";
+import { projectsPath } from "../paths.ts";
+import type { CliContext } from "../types.ts";
+import { dailyCheck } from "../update/check.ts";
 import { parseArgs } from "../util/args.ts";
 import { usageError } from "../util/errors.ts";
 import { plural } from "../util/output.ts";
@@ -43,7 +47,16 @@ Options:
   -h, --help        print this help
 `;
 
-export const run: CommandRun = async (ctx) => {
+// Runs after the summary or "Everything is up to date.", never after a refusal, a conflict, or --dry-run.
+async function updateCheck(ctx: CliContext, project: boolean, seams: UpdateCheckSeams): Promise<void> {
+  const { config } = await loadConfig(ctx);
+  const daily = await dailyCheck(ctx, { mode: config.update, ...(seams.fetch === undefined ? {} : { fetch: seams.fetch }) });
+  if (await autoUpdate(ctx, daily, { project, json: false }, seams)) return;
+  const note = updateNote(daily);
+  if (note !== undefined) ctx.stdout(note);
+}
+
+export async function run(ctx: CliContext, seams: UpdateCheckSeams = {}): Promise<number> {
   const { values } = parseArgs(ctx.argv, {
     targets: { type: "string" },
     hooks: { type: "boolean" },
@@ -87,8 +100,14 @@ export const run: CommandRun = async (ctx) => {
   if (changes && !(await confirmApply(ctx, values.yes === true))) return 1;
 
   const result = await applyInstall(plan, ctx.now());
+  if (plan.project !== undefined) {
+    await addProject(projectsPath(ctx.env, ctx.homedir), plan.project.root, ctx.now()).catch((error: unknown) => {
+      ctx.stderr(projectsWarning(error));
+    });
+  }
   if (!changes) {
     ctx.stdout("Everything is up to date.\n");
+    await updateCheck(ctx, scope === "project", seams);
     return 0;
   }
   ctx.stdout(`Applied ${plural(result.changed.length, "change")}.\n`);
@@ -110,5 +129,6 @@ export const run: CommandRun = async (ctx) => {
           "  2. Agents in this project call the CLI as .omt/bin/omt.\n" +
           "  3. Try $omt-ulw <task>.\n",
   );
+  await updateCheck(ctx, scope === "project", seams);
   return 0;
-};
+}

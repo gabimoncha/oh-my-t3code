@@ -3,6 +3,7 @@ import { findProjectRoot, projectConfigPath, userConfigPath } from "../paths.ts"
 import type { ConfigIssue, ConfigLayer, ConfigSource, LoadedConfig, OmtConfig, ProfileConfig } from "../types.ts";
 import { OmtError } from "../util/errors.ts";
 import { readFileIfExists } from "../util/fs.ts";
+import { isRecord } from "../util/json.ts";
 import { defaultSet, LATEST_DEFAULT_SET } from "./defaultSets.ts";
 import { parseJsonc } from "./jsonc.ts";
 import { mergeLayer } from "./merge.ts";
@@ -44,6 +45,12 @@ export async function readConfigLayers(opts: {
     const validated = validateLayer(value, file.path);
     entry.layer = validated.layer;
     entry.issues.push(...validated.issues);
+    if (file.kind === "project" && isRecord(value) && Object.hasOwn(value, "update")) {
+      delete entry.layer.update;
+      const message = `update is read only from the user config; remove it from ${file.path}`;
+      entry.issues = entry.issues.filter((issue) => issue.path !== "update");
+      entry.issues.push({ source: file.path, path: "update", message, severity: "warning" });
+    }
   }
   return layers;
 }
