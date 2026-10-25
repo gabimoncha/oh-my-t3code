@@ -17,7 +17,7 @@ This page is the reference for the code, the skills, and the tests. [`design.md`
 - Comments: only for a non-obvious reason that the code cannot show.
 - File writes: atomic, except the ledger and lock metadata (section 5.11). Write a temp file in the same directory, then rename. Create parent directories as needed. When the target exists, the temp file gets the target's mode before the rename, so a 0600 file stays 0600. Each ledger entry is one `appendFile` call, so concurrent appends do not overwrite each other.
 - When the target of a write is a symlink, write next to its real path (`fs.realpath`) and rename onto the real path, so the symlink stays a symlink.
-- The omt CLI makes no network calls and sends no telemetry. Build scripts may download Bun cross-compile runtimes. The CLI starts no package manager. Only the generated worktree setup runner (section 5.12) starts one, when T3 runs it.
+- The CLI sends no telemetry. It contacts the npm registry only when you run `omt update`, or once a day in `omt install` and `omt doctor` after you set `update` in the user config. `omt update` runs the package manager or mise command of the channel that installed omt. Build scripts may download Bun cross-compile runtimes. The generated worktree setup runner (section 5.12) starts a package manager too, when T3 runs it.
 
 `package.json` scripts:
 
@@ -57,13 +57,15 @@ src/
   ledger/                ledger.ts
   profile/               resolve.ts
   lock/                  lock.ts
-  install/               skills.ts, links.ts, claudeHook.ts, manifest.ts, plan.ts, apply.ts, doctor.ts, confirm.ts, fsops.ts, project.ts, harness.ts (section 5.14)
+  install/               skills.ts, links.ts, claudeHook.ts, manifest.ts, plan.ts, apply.ts, doctor.ts, confirm.ts, fsops.ts, project.ts, harness.ts (section 5.14), projects.ts (section 14.8)
+  update/                channel.ts, check.ts, sync.ts, flow.ts (section 5.15)
   hooks/                 userPromptSubmit.ts
   worktree/              runner.ts, runnerText.ts, check.ts, setup.ts (section 5.12)
   commands/              one file per command, each exports `run: CommandRun`
                          profile.ts and lock.ts add profile and lock commands
                          worktree.ts adds the worktree command
                          defaults.ts and detect.ts add the defaults and detect commands (sections 5.13 and 5.14)
+                         update.ts adds the update command (section 5.15)
                          shared.ts holds the helpers that commands share and exports no `run`
 scripts/
   build-schema.ts        writes schema/omt.schema.json from src/config/schema.ts
@@ -185,6 +187,8 @@ export interface ProfileConfig {
   models?: Record<string, ModelConfig>;
 }
 
+export type UpdateMode = "off" | "check" | "apply";
+
 export interface OmtConfig {
   version: 1;
   defaults: string; // the selected default set, for example "2026-10"
@@ -195,6 +199,7 @@ export interface OmtConfig {
   limits: Limits;
   visuals: Visuals;
   harnesses?: string[]; // the driver kinds that routing may use; absent means every driver
+  update?: UpdateMode; // absent means "off" (section 6.3)
 }
 
 export interface ConfigLayer {
@@ -207,6 +212,7 @@ export interface ConfigLayer {
   limits?: Partial<Limits>;
   visuals?: Partial<Visuals>;
   harnesses?: string[];
+  update?: UpdateMode;
 }
 
 export type IssueSeverity = "error" | "warning";
@@ -447,6 +453,8 @@ export class OmtError extends Error {
 | `configDir(env, homedir)` | `$OMT_CONFIG_DIR`, else `$XDG_CONFIG_HOME/oh-my-t3code`, else `<home>/.config/oh-my-t3code` |
 | `userConfigPath(env, homedir)` | `<configDir>/config.jsonc` |
 | `manifestPath(env, homedir)` | `<configDir>/install.json` |
+| `updateStatePath(env, homedir)` | `<configDir>/update-check.json`, the state of the update check (section 5.15) |
+| `projectsPath(env, homedir)` | `<configDir>/projects.json`, the project list (section 14.8) |
 | `userRolesDir(env, homedir)` | `<configDir>/roles` |
 | `mainCheckoutOf(root)` | the main checkout of a linked worktree. When `<root>/.git` is a file whose first line is `gitdir: <path>`, it resolves `<path>` against `root`, reads `<gitdir>/commondir` (relative or absolute, resolved against `<gitdir>`), and returns `dirname(<common dir>)` when `basename(<common dir>)` is `.git` and the repository is not bare; `undefined` for a normal checkout (`.git` is a directory), a submodule, a bare or unknown layout, or any read error. It reads `core.bare` in the plain form that git writes: the repository is bare when the `[core]` section of `<common dir>/config` sets `bare` to true (`true`, `yes`, `on`, `1`, or no value). Hand-edited forms, such as quoted values, repeated keys, or an entry on the section line, are not supported. A missing `config` counts as not bare. So a bare repository stored at `<repo>/.git` gives `undefined` |
 | `findProjectRoot(cwd)` | the nearest ancestor of `cwd` (or `cwd` itself) that contains `.omt` or `.git` (a directory or a file); when that directory has a `.git` file and `mainCheckoutOf` returns a main checkout, the main checkout, whether or not it has `.omt` yet; `cwd` when none exists |
@@ -491,6 +499,7 @@ Argument parsing uses `node:util` `parseArgs` with `strict: true` and `allowPosi
 | --- | --- |
 | `install` | `omt install [--project [--no-git-exclude]] [--targets <list>] [--hooks] [--capabilities <file>] [--yes] [--dry-run] [--force]` |
 | `uninstall` | `omt uninstall [--project] [--yes] [--dry-run] [--purge] [--force]` |
+| `update` | `omt update [--check] [--dry-run] [--yes] [--skills-only] [--project] [--json]` (section 5.15) |
 | `doctor` | `omt doctor [--project] [--capabilities <file>] [--json]` |
 | `init` | `omt init` |
 | `config` | `omt config [show \| path \| validate \| init] [--json] [--defaults] [--force]` |
@@ -895,7 +904,7 @@ The runner sets no global configuration and no store or cache path, so the user'
 
 `omt defaults` lists, compares, and pins the dated default sets of section 6.4. Every subcommand accepts `--json`. `--user`, `--project`, `--dry-run`, and `--yes` apply only to `use`; with another subcommand they are a usage error. A set name that is not `latest` and not in `DEFAULT_SETS` is a usage error with the hint `known sets: <names>, or latest`.
 
-- `list` prints one line per set: the name, then the marks `latest` and `selected (<source>)`, joined by `, `. `<source>` is `LoadedConfig.defaultsSource`: the config file that selects the set, or `latest`. Config issues go to stderr. `--json` prints `{ "latest", "selected", "source", "sets": [{ "name", "latest", "selected" }] }`.
+- `list` prints one line per set: the name, then the marks `latest` and `selected (<source>)`, joined by `, `. `<source>` is `LoadedConfig.defaultsSource`: the config file that selects the set, or `latest`. Config issues go to stderr. `--json` prints `{ "latest", "selected", "source", "sets": [{ "name", "latest", "selected" }], "pins": [{ "file", "kind": "user" | "project", "set" }] }`, where `pins` has one entry per config file that pins a set with `defaults`.
 - `diff [<from>] [<to>]` compares two sets with `diffDefaultSets` (section 6.4). `<from>` defaults to the selected set and `<to>` to `latest`; each takes a set name or `latest`. The overrides are the present user and project layers, in that order, after `validateLayer`. It prints one line per change, `<path>: <from> -> <to>`, followed by ` (overridden by <file>)` when `overriddenBy` is set. With no change it prints `no changes`. `--json` prints `{ "from", "to", "changes": DefaultsChange[] }`.
 - `use <set|latest>` changes only the `defaults` key of one config file with `setTopLevelValue` (section 7). `latest` writes the concrete set name. The target is the project config with `--project`, the user config with `--user`, and without a flag the project config when it exists, else the user config. Both flags together are a usage error. `configTarget(ctx, flags)` in `src/commands/defaults.ts` exports this rule. An absent target fails with exit 1, the message `<path> does not exist`, and the hint `run omt init` (project) or `run omt config init` (user). A file that does not parse fails with the `jsonc_parse` error. The command prints `<file>: defaults <old|none> -> <new>`. When the value does not change, it prints `Nothing to change.` and writes nothing. `--dry-run` prints `Dry run: nothing was written.` and writes nothing. Otherwise it confirms with `confirmApply` as `omt install` does (`--yes`, refuse without a TTY, else ask), writes the file atomically, and prints `update <file>`. A refused confirmation exits 1. After the confirmation, also with `--yes`, the write goes through `writeConfigTarget(target, snapshot, next)` in `src/commands/defaults.ts`: it reads the target again, and when the text differs from the text that the change was computed from, or the file is gone, it writes nothing and fails with exit 1, the `config_changed` error `<path> changed while omt waited for confirmation; nothing was written`, and the hint `run the command again`. omt does not lock config writes, so a change saved between this read and the atomic rename can still be lost. `--json` prints `{ "file", "from": string | null, "to", "changed", "applied" }` instead of the text lines.
 
@@ -921,6 +930,195 @@ With no driver detected, the command prints the driver lines, writes nothing, an
 
 `--json` prints the `HarnessReport` plus `effects`, `file`, `current` (the target's value or `null`), `wanted` (`null` for no key or when no driver is detected), `changed`, `applied`, and `overriddenBy` (the project file, when it overrides the change), instead of the text lines.
 
+### 5.15 `omt update`
+
+`omt update` updates the omt CLI with the command of the channel that installed it. Then the new CLI syncs the skills in user scope and in each recorded project (section 14.8). A skill that the user edited stays as it is, and the output names it.
+
+```text
+Usage: omt update [--check] [--dry-run] [--yes] [--skills-only] [--project] [--json]
+```
+
+| Flag | Meaning |
+| --- | --- |
+| `--check` | Ask the registry, and print the current version, the latest version, the channel, and its update command or hint. Write nothing. Exit 0. |
+| `--dry-run` | Print the plan and write nothing. |
+| `--yes` | Apply without the confirmation question. It does not move the `defaults` pin. |
+| `--skills-only` | Skip the registry and the CLI update, and sync the skills with the CLI that runs now. No network and no runner: a one-shot project of another version gets a note. |
+| `--project` | Only the current project: the channel of its shim, and its skills. |
+| `--json` | Print one JSON object. Needs `--check`, `--dry-run`, or `--yes`. |
+| `-h`, `--help` | Print the help. |
+
+`--check` with `--dry-run`, `--yes`, `--skills-only`, or `--project` is a usage error (exit 2). `--json` without `--check`, `--dry-run`, or `--yes` is a usage error (exit 2) too.
+
+Apply boundary. `--check` and `--dry-run` write no file: no state file, no project list, no shim, no skill, no manifest, and no config. Every other path shows its plan first, and writes only after `confirmApply` (`src/install/confirm.ts`) or `--yes`. This applies also when the CLI is current or the channel gives a hint. A plan with no change other than manifest versions skips the question, as `omt install` does.
+
+Channels. `src/update/channel.ts` exports:
+
+```ts
+export type ChannelKind =
+  | "npm-global" | "pnpm-global" | "bun-global" | "mise-github" | "mise-npm"
+  | "dev-dependency" | "one-shot" | "source" | "binary" | "unknown";
+export interface Channel {
+  kind: ChannelKind;
+  label: string;              // for people, such as "npm global" or "mise (release binary)"
+  packageName: "oh-my-t3code" | "omt3";
+  key: string;                // the same key means the same install
+  projectRoot?: string;       // dev-dependency: the folder above the first node_modules
+  packageManager?: "npm" | "pnpm" | "bun" | "yarn"; // dev-dependency: from the lockfile
+  runner?: Runner;            // one-shot
+}
+export interface ChannelInput { build: CliBuild; cliPath: string; argv1?: string; cwd: string; packageRoot: string; env: Env; tempRoot?: string }
+export function detectChannel(input: ChannelInput): Channel;
+export async function confirmChannel(channel: Channel, input: ChannelInput, run: RunCommand): Promise<Channel>;
+export function offlineChannel(input: ChannelInput): Channel;
+export function linksProjectCli(channel: Channel, cliPath: string): boolean;
+export function confirmedGlobalEnv(channel: Channel, cli: string[]): Env | undefined;
+export function updateAction(channel: Channel, version: string): { kind: "run"; argv: string[]; display: string } | { kind: "hint"; text: string } | { kind: "repin" };
+export function newCliCommand(channel: Channel, version: string, run: RunCommand): Promise<string[]>;
+export type RunCommand = (argv: string[], opts: { cwd?: string; inherit?: boolean; toStderr?: boolean; env?: Env }) => Promise<{ code: number; stdout: string }>;
+```
+
+`RunCommand` wraps `node:child_process` `spawn` without a shell. Tests pass a fake. `env` adds variables to the environment of omt for that one command. `argv1` is `process.argv[1]`, the path as invoked, such as `<project>/node_modules/.bin/omt`. It keeps the project folder that a real path into a shared store loses. `detectChannel` reads only paths and `package.json` files. `confirmChannel` runs only in `omt update`, never in `install`, `doctor`, or the daily check.
+
+`packageName` is the `name` in `<packageRoot>/package.json` in bundle mode when that name is `omt3`, else `oh-my-t3code`. Below, `<package>` is `packageName`, and `<v>` is the version that the registry check returned. Every update command pins that version.
+
+`detectChannel` tests `cliPath` and its real path with these rules, in order:
+
+1. Source: `build` is `source`. Kind `source`, key `source:<packageRoot>`. Hint: `update the clone with git pull and bun install, then run omt update --skills-only`.
+2. One-shot: a one-shot runner cache (`oneShotRunner`, section 14.2). `oneShotRunner` also matches the Bun 1.4.4 layout `<bun install cache>/.bunx-<uid>/omt3@<version>/node_modules/`, so `install --project` from a current `bunx` writes a runner shim too. Kind `one-shot`, key `one-shot:<runner>:<version>`. Action: `repin`.
+3. mise, release binary: binary mode and a path segment `installs/github-gabimoncha-oh-my-t3code/<version>/`. Kind `mise-github`, key `mise-github`. Command: `mise use -g github:gabimoncha/oh-my-t3code@<v>`.
+4. mise, npm package: a path segment `installs/npm-oh-my-t3code/<version>/` or `installs/npm-omt3/<version>/`. Kind `mise-npm`, key `mise-npm`. Command: `mise use -g npm:<package>@<v>`. This rule comes before rule 5, because the mise npm path also holds `lib/node_modules`.
+5. Global package: the path, with `/` separators, matches one of these patterns, tested in this order:
+   - pnpm: `/global/5/node_modules/(?:\.pnpm/[^/]+/node_modules/)?(oh-my-t3code|omt3)/dist/cli\.js$` (pnpm 9 and 10), `/global/v\d+/[^/]+/node_modules/(oh-my-t3code|omt3)/dist/cli\.js$` (pnpm 11 and later), or a real path under a pnpm store, `/links/(?:[^/]+/)*node_modules/(oh-my-t3code|omt3)/dist/cli\.js$` (the pnpm 11 global virtual store, which projects share).
+   - Bun: `/\.bun/install/global/node_modules/(oh-my-t3code|omt3)/dist/cli\.js$`, or the folder in `BUN_INSTALL_GLOBAL_DIR` or `<BUN_INSTALL>/install/global`.
+   - npm: `/lib/node_modules/(oh-my-t3code|omt3)/dist/cli\.js$`.
+
+   The kind is `pnpm-global`, `bun-global`, or `npm-global`, and the key is `<kind>:<global root>`. Commands: `pnpm add -g <package>@<v>`, `bun add -g <package>@<v>`, and `npm install -g <package>@<v>`. A match gives only a candidate, which `confirmChannel` confirms.
+6. Dev dependency: not binary mode, and `cliPath` or its real path has a `node_modules` segment. A pnpm store path reaches this rule only after a failed `confirmChannel`, or through `offlineChannel` or `pathShimChannel` (below). The project root is the folder above the first `node_modules` in `cliPath`, else in `argv1`, else `findProjectRoot(cwd)`. The first of these roots whose `package.json` lists `oh-my-t3code` or `omt3` in `devDependencies` or `dependencies` gives kind `dev-dependency` and key `dev:<project root>`. When no root qualifies, the kind is `unknown` (rule 8). The lockfile in the project root names the package manager: `pnpm-lock.yaml` gives pnpm, `bun.lock` or `bun.lockb` gives bun, `yarn.lock` gives yarn, else npm. Hint: `run <npm i -D | pnpm add -D | bun add -D | yarn add -D> <package>@<v> in <root>, then run <npx omt | pnpm exec omt | bunx omt | yarn omt> update --skills-only --project there`, with the package manager of the lockfile in both commands. The second command starts the new CLI through the package manager, because the shim can still record the old CLI file, such as an old folder of the shared pnpm store. omt runs nothing in that project.
+7. Release binary elsewhere: binary mode, which skips rule 6. Kind `binary`, key `binary:<real path>`. Hint: `download the release binary from https://github.com/gabimoncha/oh-my-t3code/releases, or install with mise use -g github:gabimoncha/oh-my-t3code@<v>`.
+8. Unknown: any other path. Kind `unknown`, key `unknown:<real path>`. Hint: `omt cannot tell how it was installed (<cliPath>); update it with the command of your channel:`, followed by the channel table of `docs/install.md`.
+
+`updateAction` returns `run` for rules 3 to 5, `repin` for rule 2, and `hint` for the other rules. On Windows (`process.platform === "win32"`), every channel gives the hint action. The `run:` line of a `mise use -g` command adds `(writes <tool>@<v> into your global mise config)`, because the command writes that exact pin there.
+
+Confirmation. `confirmChannel` works on the global kinds only, and returns any other channel unchanged. Before any update, it runs the package manager and computes the package folder:
+
+- npm: `<npm root -g>/<package>`.
+- pnpm 9 and 10: `<pnpm root -g>/<package>`. pnpm 11: the one `<pnpm root -g>/*/node_modules/<package>` folder.
+- Bun: the first line of `bun pm ls -g` is `<global dir> node_modules (<n> installed)`. omt strips the ` node_modules (...)` suffix and uses `<global dir>/node_modules/<package>`.
+
+It confirms the candidate when the real path of `cliPath` equals the real path of `<package folder>/dist/cli.js`. When the command fails or the paths differ, detection continues at rule 6 with `argv1` and `cwd`. When rule 6 finds no project either, the channel is `unknown`.
+
+Offline channel. `--skills-only` starts no package manager, so it takes the channel of the running CLI from `offlineChannel`, not from `confirmChannel`. `offlineChannel` applies the `detectChannel` rules. A candidate under the shared pnpm store, the `/links/` pattern of rule 5, can be the global install or a project dependency, so `offlineChannel` settles it from local files:
+
+- When `argv1` matches another pattern of rule 5, the candidate stays. The pnpm global bin starts the CLI by its path in the pnpm global folder, and so does `newCliCommand`.
+- When the environment variable `OMT_UPDATE_GLOBAL_CLI` names a file whose real path is the real path of `cliPath`, the candidate stays. `omt update` sets this variable only for the new CLI that it starts after a global update (step 5 below), to the CLI file that the package manager reported. A custom pnpm `global-dir` matches no pattern of rule 5, so `argv1` cannot show that folder. A store path that the variable does not name stays unconfirmed.
+- Else, when a root of rule 6 lists `oh-my-t3code` or `omt3`, and its `node_modules/oh-my-t3code/dist/cli.js` or `node_modules/omt3/dist/cli.js` resolves to the real path of `cliPath`, the kind is `dev-dependency`, with key `dev:<root>`. A project that only lists omt is not enough, because a store path of another version can run in that project.
+- Else the kind is `unknown`, so the sync leaves the user scope alone.
+
+With these rules, a project dependency in the shared store never syncs the user scope. The second command of the rule 6 hint starts the project's own CLI, which gets the key `dev:<root>`. `pathShimChannel` gives the project's shim the same key, so the command syncs the project and rewrites a shim that still records an older CLI file.
+
+New CLI. `newCliCommand` returns the argv prefix that runs the CLI after the update:
+
+| Channel | New CLI |
+| --- | --- |
+| `npm-global`, `pnpm-global`, `bun-global` | `<runtimePath> <package folder>/dist/cli.js`. `runtimePath` is the runtime that runs omt now, so a machine with only Bun runs the bundle with Bun, not through the `#!/usr/bin/env node` bin. The package folder comes from the `confirmChannel` rule, run again after the update. |
+| `mise-github` | `mise exec github:gabimoncha/oh-my-t3code@<v> -- omt` |
+| `mise-npm` | `mise exec npm:<package>@<v> -- omt` |
+| `one-shot` | `<project root>/.omt/bin/omt` |
+| the hint kinds | the running CLI |
+
+Version check. `src/update/check.ts` exports:
+
+```ts
+export type LatestResult = { ok: true; version: string } | { ok: false; error: string };
+export async function fetchLatest(opts: { env: Env; fetch?: typeof fetch; timeoutMs: number }): Promise<LatestResult>;
+export function compareVersions(a: string, b: string): number; // x.y.z only
+export interface UpdateState { checkedAt: string; latest?: string; error?: string; applyAttemptedFor?: string }
+export interface DailyResult { current: string; latest?: string; outdated: boolean; checkedAt: string; cached: boolean; error?: string; mode: "check" | "apply"; applyAttempted: boolean }
+export async function dailyCheck(ctx: CliContext, opts: { mode: UpdateMode | undefined; fetch?: typeof fetch }): Promise<DailyResult | undefined>;
+export async function recordApplyAttempt(ctx: CliContext, latest: string): Promise<void>;
+```
+
+- `fetchLatest` sends `GET <registry>/-/package/oh-my-t3code/dist-tags` with the header `accept: application/json`. `<registry>` is `npm_config_registry`, else `NPM_CONFIG_REGISTRY`, else `https://registry.npmjs.org`, without a trailing slash. omt reads no `.npmrc`. The request sends no cookie, token, or id. The response field `latest` must match `^\d+\.\d+\.\d+$`. Any other response is an error. `fetch` is the Node 22 global, and tests pass their own.
+- The timeout is 3000 ms in `dailyCheck` and 10000 ms in `omt update`, through `AbortSignal.timeout`.
+- `dailyCheck` returns `undefined`, and reads no file and sends no request, when `opts.mode` is absent or `off`. Each caller passes the `config.update` of the loaded config. Otherwise it reads `updateStatePath()` (section 4). When `checkedAt` is less than 24 hours before `ctx.now()` and not in the future, it returns the cached result. Else it fetches, writes the state atomically, and returns the result. It writes the state also after a failure, so an offline machine tries once a day. A state file that cannot be read or parsed, or that has no valid `checkedAt`, counts as absent. A failed state write does not throw, and the next run fetches again.
+- `omt update` without `--skills-only` always fetches, because the user asked for it, unless the caller passes a `latest`, as auto-apply does. It writes the state file only on its apply path.
+- `dailyCheck` reads only the user config's `update` key, because the project config's key is dropped (section 6.2). So a cloned repository cannot turn on network calls.
+
+Skill sync. The sync runs the install planner (section 14.2) with `InstallOptions.sync: true`. With `sync`:
+
+- Every `conflict` step becomes `keep`, with the reason `locally modified; omt install --force replaces it` or `not managed by omt`.
+- When the config is absent, the config step is `keep`, with the reason `absent; omt update creates no config`.
+- An absent link to a skill that is kept because omt does not manage it is `keep`, with the reason `points at a skill that omt does not manage`.
+- `planHarnesses` does not run.
+- `force` is ignored.
+
+Ownership. A `keep` step changes no ownership. The project `existing` lists are the previous lists plus what `existingPaths` computes. The manifest `skills` and `links` lists name only the steps that the previous manifest owned, or that this run created, updated, or replaced and that are not existing. A kept conflict that the previous manifest did not own stays unowned. In project scope the sync also adds it to `project.existing` (the skill name or the link path), because `buildUninstallPlan` scans the link roots by itself and keeps a link only when `existing` names it. `omt uninstall --project` then keeps it with `keep (existed before the install)`. User scope has no `existing` list, and its uninstall scan is the same with or without a sync.
+
+Markers. The sync rewrites no marker of an `unchanged` skill. A marker records the version that wrote the files, and every check compares hashes. A scope with no change writes only its manifest (version and timestamp), as `omt install` does, and asks no question.
+
+Options. The manifest of each scope gives the install options: `targets` is `agents`, plus `claude` or `gemini` when the manifest records a link in that root. `hooks` is true when the manifest records a hook. `gitExclude` is false when `project.gitExcludeOff` is true.
+
+Targets. `planSync(ctx, channel, { projectOnly, runners: "delegate" | "skip", targetVersion, run? })` in `src/update/sync.ts` returns one entry per target, and `applySync(ctx, entries)` applies the entries that have changes. `targetVersion` is the version that rule 6 pins. `run` is the `RunCommand` of rule 6; when it is absent, the sync spawns the command itself. Each entry holds `header` and `result` (a `ScopeResult`, below), plus one of these: `plan` (an install plan that this process applies), `runner` (the shim of rule 6), or `gone` (rule 1). `current` marks the current project. The user scope is a target when the running channel is `npm-global`, `pnpm-global`, `bun-global`, `mise-github`, `mise-npm`, `source`, or `binary`, and the user manifest exists. Then each recorded project and the current project are targets. On the apply path, the sync adds the current project to the project list when `<root>/.omt/install.json` exists (section 14.8). `projectOnly` limits the run to the current project.
+
+The sync checks each project with these rules, in order:
+
+1. The folder or the project manifest is gone: `skip`, with the note `gone; removed from the project list`. The root leaves the list only on the apply path.
+2. No managed shim: `skip`, with the note `no managed shim; run omt install --project there`.
+3. A runner shim whose runner and pinned version equal the one-shot runner and version of the running CLI, so the CLI runs through this shim: sync in this process, as in rule 4. The planner keeps the runner shim, because `shimTarget(ctx, runner)` gives the same content.
+4. A path shim whose recorded CLI is the file of the running CLI (by real path), or has the same channel `key` as the running CLI: sync in this process with `buildInstallPlan({ ...ctx, cwd: root }, { scope: "project", sync: true, ... })`. The shim step rewrites the shim to the running CLI, which moves a mise project to the new binary.
+5. Any other runner shim, with `runners: "skip"`: `skip`, with the note `runs <runner command>; run <root>/.omt/bin/omt update --project there`. No pin changes and no child process starts, so `--skills-only` stays offline.
+6. Any other runner shim, with `runners: "delegate"`: when the target version is not newer than the pin, the result is `skip` with the note of rule 5, and nothing runs. When it is newer, first run `<runner command at the target version> --version`, such as `npx --yes omt3@<v> --version`, with cwd `<root>`. When it fails or prints another version, the result is `fail`, with the note `<runner command> did not start; the shim keeps <old pin>`, and nothing changes. Only then write the new pin, run `<root>/.omt/bin/omt update --skills-only --project --yes --json` with cwd `<root>`, and report its exit code. The child runs as the runner at the new pin, so rule 3 applies to it, and it starts no further child. The result has the changed and kept skills of the child's project scope. When the child's stdout is not JSON or holds no project scope for `<root>`, the scope fails with the note `<child command> exited <code>; invalid JSON output` or `<child command> exited <code>; no valid project scope in JSON output`. A non-zero exit fails the scope with the note `<child command> exited <code>`.
+7. A path shim of another channel: `skip`, with the note `runs another omt (<cli>); run <root>/.omt/bin/omt update --project there`.
+
+`pathShimChannel` gives the channel of a path shim, for the sync and for `--project`. It applies the `detectChannel` rules to the recorded CLI path, with `cwd` set to the project root. It never runs `confirmChannel`, so it starts no package manager, also with `--skills-only`. A real path under the shared pnpm store, the `/links/` pattern of `detectChannel` rule 5, can belong to the global install or to a project dependency. So when the project's `package.json` lists `oh-my-t3code` or `omt3` in `dependencies` or `devDependencies`, that path gets `detectChannel` rule 6: kind `dev-dependency` and key `dev:<root>`. This key never equals the key of a global install, so rule 7 skips the project when a global omt runs the sync. Rule 4 still syncs a project whose shim records the running CLI file itself.
+
+The plan of a rule 6 project shows two lines, `pin      <shim> -> <runner command>` and `run      <shim> update --skills-only --project --yes --json`. A skipped or failed scope shows one line, `skip     (<note>)` or `fail     (<note>)`.
+
+Right before it applies the user scope or an in-process project, `applySync` plans that scope again, because the owner can edit a skill while the confirmation question waits. When the skill, link, or shim actions differ from the confirmed plan, the scope fails with the note `changed since the plan; run omt update again`, and nothing in it is written. Else it applies the fresh plan, so the git exclude, `.omt/.gitignore`, and settings hook steps come from the fresh plan. An error while omt finds the current project root fails only that project's scope. An error in any other scope fails only that scope, and a project list that cannot be read gives a `warning:` line and an empty list.
+
+`applyInstall` also checks each skill folder before it replaces it, in `omt install` too. An `update` step records `installedHash`, the hash of the installed skill that the plan read. A `create` step expects no folder, and so does a `replace` step after it moves the old folder to the backups. The apply moves the folder out of place first, then hashes it. When the folder is not what the step expects, the apply moves it back and fails with `<path> changed after the plan was made; it was kept, and nothing more was written`. So omt never deletes an edit that the owner saves after the last plan.
+
+`--skills-only` always uses `runners: "skip"`. The full flow uses `runners: "delegate"` only in the process that ran the registry check.
+
+Each scope gives one result: `{ scope: "user" | "project"; root?: string; status: "synced" | "unchanged" | "skipped" | "failed"; changed: string[]; kept: { name: string; reason: string }[]; note?: string }`. A failed scope does not stop the others, and the run exits 1 at the end. The text output prints one header per scope, `user: ~/.agents/skills` or `project: <root>`, then the install plan lines, then `kept <name>  (<reason>)` for each kept skill.
+
+Project channel. With `--project`, the shim of the current project gives the channel. A runner shim gives `one-shot` with its runner and pin. A path shim gives `pathShimChannel` of its recorded CLI path. No managed shim exits 1 with `no managed shim in <root>` and the hint `run omt install --project`. When the path shim's channel key differs from the key of the running CLI, the command prints `this project runs <cli>; run <root>/.omt/bin/omt update --project` and exits 0 with no change. When the shim is a runner shim and the running CLI is not that runner at that pin, the project channel is that runner, and the flow uses the `repin` action with the shim as the new CLI.
+
+A path shim whose channel is `dev-dependency` gives the project channel before any global confirmation, so `--project` runs no `confirmChannel` for that project. A global install can share its CLI file with the project's dependency, as in the shared pnpm store, and the project still gets the rule 6 hint (decision Q4). The running CLI is the project's own omt when the shim records the running CLI file, or when `linksProjectCli` is true: the project's `node_modules/oh-my-t3code/dist/cli.js` or `node_modules/omt3/dist/cli.js` resolves to the real path of `cliPath`. The second case covers a shim that still records an older file after `pnpm add -D`. Then the dev dependency is the channel for the action and for the sync, and the sync applies rule 4 to the project. Else the command prints the `this project runs` line above.
+
+Without `--check` and `--skills-only`, `omt update` runs these steps:
+
+1. Detect the channel (with `--project`, as above), then run `confirmChannel`. Fetch the latest version, with the 10-second timeout, unless the caller passed one. A failure exits 1 with `cannot reach the npm registry: <reason>` and the hint `run omt update --skills-only to sync the skills without the network`.
+2. Print `omt <current> (<label>); latest <latest>`.
+3. When the latest version is newer and the action is `run` or `repin`: print `run: <display>` (or `pin: <root>/.omt/bin/omt -> <runner command>`) and one `sync:` line per target. With `--dry-run`, print `Dry run: nothing was written.` and exit 0. Confirm unless `--yes`. Write the state file.
+4. Run the command with inherited stdio. For `repin`, run `<runner command at latest> --version`, and write the new pin only when it prints `<latest>`; else exit 1 and keep the old pin. With `--json`, the command's stdout goes to stderr. A non-zero exit stops the run with exit 1, the command, and its exit code. For `mise-github`, the hint adds `the GitHub release can lag npm by a few minutes; try again later`. For npm, pnpm, and Bun, it adds `npm publishes oh-my-t3code and omt3 one after the other; try again in a minute`.
+5. Run the new CLI (`newCliCommand`). First, `<new cli> --version` must print `<latest>`. Otherwise exit 1 with `the update finished, but the new omt prints <x>`. Then run `<new cli> update --skills-only --yes [--project]`. For a global channel, that command gets `OMT_UPDATE_GLOBAL_CLI` (from `confirmedGlobalEnv`), set to the CLI file of `<new cli>`, so its `offlineChannel` keeps the confirmed global channel and syncs the user scope. With `--json`, add `--json`, capture its stdout, and merge its `scopes` into the JSON of this process. The child skips runner projects (rule 5 of the sync).
+6. Runner projects: this process, which ran the registry check, runs rule 6 of the sync for each runner project that the child skipped, with the target version `<latest>`.
+7. Defaults, for the user config and the project config of each synced project. Run `<new cli> defaults list --json` with cwd set to each synced project root, and once in the current folder for the user file. Read `pins` (section 5.13), and dedupe them by file. For each pin whose set is older than the `latest` set of the new CLI, print the output of `<new cli> defaults diff <set> latest`, run in that root. Then, at a TTY and without `--yes` or `--json`, ask `Move the defaults pin in <file> from <set> to <latest>? [y/N] `. On yes, run `<new cli> defaults use latest --yes --user` for the user file, or `--project` with cwd set to that root. Otherwise print `hint: run omt defaults use latest in <dir> to move the pin in <file>`, where `<dir>` is the home folder for the user file and the project root for a project file. The pin never moves without a yes at that question.
+8. When any skill changed, print `Restart agent sessions in T3 Code so they load the new skills.`
+
+After the apply, and before step 7, the text output prints one summary line per scope, `user  <status>` or `project: <root>  <status>`, with `  (<note>)` when the scope has a note. Then it prints `  changed  <name>` for each changed skill and `kept <name>  (<reason>)` for each kept skill.
+
+The `repin` action needs a managed runner shim to rewrite. When the project has none, the action becomes the hint `run <runner command at latest> install --project in <root>`, such as `run npx --yes omt3@<latest> install --project in <root>`.
+
+When the latest version equals the current one, or the action is a hint, the command prints `omt <current> is the latest` or the hint. Then it shows the sync plan of the running CLI (`runners: "delegate"`, with the current version as the target version), confirms, applies, and runs steps 7 and 8 with the running CLI as `<new cli>`.
+
+`--skills-only` shows the sync plan of the running CLI (`runners: "skip"`), confirms, and applies. It sends no request and starts no child process. Then it prints the defaults hint for each older pin. It never asks about a pin.
+
+Exit codes: 0 for success. 1 for a registry failure (not with `--skills-only`), a failed command, a version mismatch, a refused confirmation, or any failed scope. 2 for a usage error.
+
+JSON. With `--yes` or `--dry-run`, `--json` prints `{ "current", "latest", "channel": { "kind", "label", "package" }, "action": "run" | "repin" | "hint" | "none", "command": string | null, "hint": string | null, "updated": boolean, "scopes": ScopeResult[], "defaults": [{ "file", "set", "latest", "moved": false }], "restart": boolean }`. `ScopeResult` is the result per scope of the sync. `--check --json` prints `{ "current", "latest", "outdated", "channel", "action", "command", "hint" }`. With `--json`, all text output goes to stderr, and stdout holds only the JSON. The summary per scope and the restart line are then only in the JSON, as `scopes` and `restart`. A failure (the registry, the update command, or a version mismatch) prints no JSON, only the error and its hint on stderr.
+
+Daily check in install and doctor. The check is on when the user config sets `update` to `check` or `apply` (section 6.2).
+
+- `omt doctor` and `omt doctor --project` add the check `update` after `defaults` (section 14.7). With the check off, there is no `update` line. A failure is never `FAIL`.
+- `omt install` prints `note: omt <latest> is out; run omt update` after the summary or `Everything is up to date.`, when the daily result is outdated. It prints no note after a refusal, a conflict, or `--dry-run`.
+- With `apply`, after the command's own output, when the daily result is outdated, `ctx.isTTY` is true, and `applyAttempted` is false, the command first calls `recordApplyAttempt(latest)`. Then it runs the update flow with `yes: true` and the `latest` of the daily result, so the flow sends no second request. From `omt doctor --project` and `omt install --project`, the flow runs with `project: true`, so the channel of the project's shim decides. From the other forms, it runs with `project: false`. It never moves a pin, because with `--yes` step 7 prints the hint. Without a TTY, or after an earlier attempt for the same version, the command prints only the note. A failed automatic update prints `warning: the automatic update failed: <reason>` and keeps the command's own exit code. The recorded attempt stops a retry until a newer version appears.
+- `omt doctor --json` keeps stdout as the one JSON report of section 14.7. All output of the automatic update, child output included, goes to stderr.
+
+No other command calls `dailyCheck`. The hook and the agent commands (`brief`, `route`, `ledger`, `plan`, `roles`, `profile`, `lock`, `visual`, and `paths`) never contact the network.
+
 ## 6. Config
 
 ### 6.1 Files and layering
@@ -939,7 +1137,8 @@ A missing file is not an error. Each file is JSONC (section 7). Profile selectio
 
 `validateLayer(value, source)` returns `{ layer: ConfigLayer, issues: ConfigIssue[] }`. It prunes invalid parts and keeps valid ones.
 
-- The root must be an object. Allowed keys: `$schema` (string, ignored), `version` (must equal 1), `defaults` (a default set name), `profile` (name), `profiles` (object), `models` (object), `roles` (object), `limits` (object), `visuals` (object), and `harnesses` (array). An unknown key is an error, and the key is dropped.
+- The root must be an object. Allowed keys: `$schema` (string, ignored), `version` (must equal 1), `defaults` (a default set name), `profile` (name), `profiles` (object), `models` (object), `roles` (object), `limits` (object), `visuals` (object), `harnesses` (array), and `update` (string). An unknown key is an error, and the key is dropped.
+- `update` is `"off"`, `"check"`, or `"apply"` (section 5.15). It is valid only in the user config. In the project config it is the warning `update is read only from the user config; remove it from <file>`, and the key is dropped. Any other value is the error `must be "off", "check", or "apply", got <value>`, and the key is dropped.
 - `harnesses` is an array of 1 to 10 unique driver kinds that match `^[a-zA-Z][a-zA-Z0-9_-]{0,63}$`. Any other value is the error `must be an array of 1 to 10 unique driver kinds that match <pattern>, got <value>`, and the key is dropped.
 - `defaults` is valid only when it is a string that matches `DEFAULT_SET_NAME_RE` (`^\d{4}-\d{2}(-[a-z0-9]+)?$`) and names a set in `DEFAULT_SETS`. Otherwise the error is `unknown default set "<name>"; known sets: <names>`, and the key is dropped.
 - A role name matches `^[a-z][a-z0-9-]{0,31}$`. A role value is `null` (remove the role) or an object.
@@ -983,6 +1182,7 @@ A missing file is not an error. Each file is JSONC (section 7). Profile selectio
 - Each limit field replaces the old value.
 - Each `visuals` field replaces the old value.
 - `harnesses` replaces the old value as a whole. Absent in every layer, `config.harnesses` stays unset, which means no filter (section 8.3).
+- `update` replaces the old value. Absent in every layer, `config.update` stays unset, which means `off`. It is not a profile field, and no default set holds it.
 - `profile` replaces the selected name. `models` merges per model and field.
 - Profiles merge per name. An existing profile keeps fields that a layer omits. `workflow` merges per group and key, `limits` per key, `roles` per role and field, and `models` per model and field. Arrays, including `chain` and `testLayers`, replace the old array.
 - A new profile needs `description`. `null` removes a custom profile, with a warning when it does not exist. Removing `normal`, `prototype`, or `pr-review` is an error.
@@ -1064,9 +1264,13 @@ Default visuals: `plan` is `true`. omt-plan then shows a final plan as a page in
 
 `src/config/starter.ts` exports two strings. `omt config init` and `omt install` write the user starter. `omt init` writes the project starter. Both are sparse. They hold `$schema`, `version`, `"defaults": "<LATEST_DEFAULT_SET>"` after `"version": 1` with a comment that names `omt defaults diff`, empty `roles` and `limits` objects, and comments with one example override, a commented `"profile": "prototype"` line, a commented `"visuals": { "plan": false }` line, and a pointer to `omt config show --defaults`. After the `"profile"` line, each starter has a commented `"profiles"` example: a profile `fast-proto` with `description`, `"extends": "prototype"`, `"workflow": { "build": { "checkpoint": "none" } }`, and `"roles": { "execute": { "fast": true } }`, and a comment that points to `omt profile show <name>`. The `$schema` URL is `https://raw.githubusercontent.com/gabimoncha/oh-my-t3code/main/schema/omt.schema.json`.
 
+Only the user starter has a commented `// "update": "check",` line after the `"visuals"` line, with the comment `// Check for a new omt once a day in omt install and omt doctor (asks the npm registry).`
+
 ### 6.6 JSON Schema
 
 `src/config/schema.ts` exports the JSON Schema (draft 2020-12) for a config file as a plain object. `scripts/build-schema.ts` writes it to `schema/omt.schema.json` with 2-space indentation and a final newline. A test fails when the committed file differs from the generated output. Another test checks that the schema allows exactly the keys that `validateLayer` allows. Role and rung definitions include boolean `fast`. The role definition also includes boolean `crossFamily`. The schema defines `profile`, `profiles`, `models`, and all workflow groups. Preset profile values cannot be null. New-profile descriptions and inheritance chains need the runtime merge checks. `visuals` is an object with `additionalProperties: false` and a boolean `plan`. `defaults` has an `enum` of the names in `DEFAULT_SETS`.
+
+`update` has an `enum` of `off`, `check`, and `apply`.
 
 ### 6.7 Profiles and workflow
 
@@ -1553,7 +1757,7 @@ The bundled skills are the directories in `<packageRoot>/skills/` that contain `
 
 The plan first checks where the CLI runs from, because the install records that path. It reads `cliPath` and its real path:
 
-- A one-shot runner cache, matched from the cache root: an npx cache (`<npm cache>/_npx/<hash>/node_modules/`), a pnpm dlx cache (`<pnpm cache>/dlx/<hash>/<id>/node_modules/`, where the cache folder is named `pnpm`, or `pnpm-cache` on Windows, and pnpm 8 has no `<id>`; with a custom `cache-dir` of any name, a `dlx/<hash>/<id>/node_modules/` path counts only when `npm_config_user_agent` starts with `pnpm/`, which pnpm dlx sets, and `dlx/<hash>/pkg` is a symlink that resolves to `dlx/<hash>/<id>`, which pnpm dlx writes for each cache entry; `pnpm exec` sets the same user agent, so the user agent alone does not show a dlx cache), or a bunx cache (`<temp>/bunx-<uid>-<package>/node_modules/`). An older pnpm runs dlx from `<temp>/dlx-<pid>/node_modules/`, which counts as a one-shot cache too. A `_npx`, `dlx`, or `bunx-` directory at another place, such as `<temp>/project/fixtures/dlx-123/`, or `<temp>/project/dlx/x/node_modules/` without the pnpm user agent or without the `pkg` symlink, is no cache. A project install from a one-shot cache writes the runner shim of section 14.8. A user install from it is refused, because it would leave no `omt` command for the skills and the hook.
+- A one-shot runner cache, matched from the cache root: an npx cache (`<npm cache>/_npx/<hash>/node_modules/`), a pnpm dlx cache (`<pnpm cache>/dlx/<hash>/<id>/node_modules/`, where the cache folder is named `pnpm`, or `pnpm-cache` on Windows, and pnpm 8 has no `<id>`; with a custom `cache-dir` of any name, a `dlx/<hash>/<id>/node_modules/` path counts only when `npm_config_user_agent` starts with `pnpm/`, which pnpm dlx sets, and `dlx/<hash>/pkg` is a symlink that resolves to `dlx/<hash>/<id>`, which pnpm dlx writes for each cache entry; `pnpm exec` sets the same user agent, so the user agent alone does not show a dlx cache), or a bunx cache (`<temp>/bunx-<uid>-<package>/node_modules/`, or `<bun install cache>/.bunx-<uid>/omt3@<version>/node_modules/` from Bun 1.4.4). An older pnpm runs dlx from `<temp>/dlx-<pid>/node_modules/`, which counts as a one-shot cache too. A `_npx`, `dlx`, or `bunx-` directory at another place, such as `<temp>/project/fixtures/dlx-123/`, or `<temp>/project/dlx/x/node_modules/` without the pnpm user agent or without the `pkg` symlink, is no cache. A project install from a one-shot cache writes the runner shim of section 14.8. A user install from it is refused, because it would leave no `omt` command for the skills and the hook.
 - Any other path inside the temp directory (`os.tmpdir()` or its real path): every install is refused, because such a path can disappear.
 
 The one-shot check runs first, because the bunx cache is inside the temp directory. A refusal exits 1. It prints `refusing the user install: the omt CLI runs from ...` or `refusing --project: the omt CLI runs from ...` with the path, and a hint that names `npm i -g oh-my-t3code`, `pnpm add -g oh-my-t3code`, `bun add -g oh-my-t3code`, `mise use -g github:gabimoncha/oh-my-t3code`, and `npx omt3 install --project`.
@@ -1672,6 +1876,7 @@ The plan lists the user config and the manifest only when they exist. Two names 
 | `runtime` | binary mode, with the message `omt <version> binary`; otherwise `ctx.runtimeName` is `node` with `ctx.runtimeVersion` 22 or later, or `bun` with 1.4.4 or later | | an older Node or Bun; the message names both minimum versions | |
 | `config` | no issues | warnings only | any error | |
 | `defaults` | a config file pins the latest set: `<set> (pinned, latest)` | | | no file pins a set: `<set> (latest, not pinned); run omt defaults use latest to pin`; or a file pins an older set: `pinned <set> from <file>; omt ships <latest>; run omt defaults diff` |
+| `update` | only when the update check is on (section 5.15), also with `--project`: `omt <v> is the latest (checked <date>)` | | never: a failed check is `INFO` | `omt <latest> is out; run omt update`; or `the update check failed: <reason>` |
 | `harnesses` | the config sets no `harnesses` key: `claudeAgent, codex`; or the key holds both | | | the key leaves out `claudeAgent`: `<list> only; design and ui are unavailable`; or it leaves out `codex`: `<list> only; cross-family review uses the same family` |
 | `skills` | every bundled skill is installed, managed, and current | missing, outdated, or locally modified skills | the CLI has no bundled skills (section 14.1) | |
 | `links` | every Claude link resolves to its canonical directory | a missing link | a broken or conflicting link | |
@@ -1880,7 +2085,13 @@ Every command reads a project manifest relative to the current root. Each record
 
 So the project tree after `uninstall --project`, and the exclude file, are byte for byte as before the install, apart from data that the user created meanwhile (plans, ledger, evidence), what keeps that data out of git (`.omt/.gitignore` and a reduced block), the reduced manifest that records the created files that stay, the exception for an omt entry that was in the settings file before the install, and an existing skill that the install updated. A file that the user edited stays, with its block entry. A backup that the uninstall could not restore exactly stays in `.omt/backups/`, hidden from git by its `.gitignore`. A path that `install --force` replaced stays in `.omt/backups/<stamp>/` too, and the uninstall does not move it back. Git does not show it there, so a replaced path that git showed before the install is gone from `git status`.
 
-User scope and project scope never read or write each other's files.
+Project list. `omt install --project` adds the root to `projectsPath()` (section 4) after a successful apply, also when it prints `Everything is up to date.`, and never with `--dry-run` or after a refusal. `omt uninstall --project` removes the root after an applied uninstall. `omt update` reads the list to sync each project (section 5.15). On its apply path, it adds the current root when `<root>/.omt/install.json` exists, and removes each root whose folder or project manifest is gone. `src/install/projects.ts` exports `readProjects(path)`, `addProject(path, root, now)`, and `removeProjects(path, roots)`. The file is `{ "version": 1, "projects": [{ "root": "<root>", "addedAt": "<ISO timestamp>" }] }`, written with `writeFileAtomic`. `addProject` dedupes roots by real path. An absent file is an empty list. A file that is not valid JSON is the `projects_invalid` error, with a hint to delete the file.
+
+`addProject` and `removeProjects` read and write the list under a lock, `<path>.lock`. The lock is a directory that holds one empty file, named after a random token of its owner. omt builds the directory under a temp name and renames it to `<path>.lock`, so the directory and the token file appear at the same time. While another owner holds the lock, omt tries again with a backoff from 10 ms to 200 ms, for at most 5 seconds. A token file older than 30 seconds is stale, and omt removes it and the empty directory. After 5 seconds, it is the `projects_locked` error, with the hint `another omt command is updating <path>; run the command again`. The owner removes only its own token file and then the empty directory.
+
+Install and uninstall have already changed the project files when they edit the list. So a `projects_invalid` or `projects_locked` error prints `warning: <message>` and `hint: <hint>` on stderr, and the command keeps its normal output and exit code.
+
+User scope and project scope never read or write each other's files, except the project list: `install --project` and `uninstall --project` edit it, and `omt update` reads it and syncs each recorded project.
 
 ## 15. Skills
 

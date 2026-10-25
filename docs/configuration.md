@@ -169,7 +169,7 @@ Add the profile under `profiles` in either config file. The starter configs hold
 | `roles` | Role overrides, with the fields of [Add a custom role](#add-a-custom-role). |
 | `models` | Settings per model id. The only setting is `fast`. |
 
-A profile cannot set `visuals`, `harnesses`, or `defaults`. These keys apply to the whole config file.
+A profile cannot set `visuals`, `harnesses`, `update`, or `defaults`. These keys apply to the whole config file.
 
 This profile builds like `prototype`, with no check-ins, fast `execute` and `ui` workers, a task limit of 12 instead of 24, and GPT-6.1-Sol without fast mode in the other roles:
 
@@ -303,6 +303,26 @@ By default, `omt-plan` shows a final plan as a page in the T3 thread. To get the
   "visuals": { "plan": false }
 }
 ```
+
+## Check for updates
+
+The `update` key turns on a check for a new omt version. Set it in the user config:
+
+```jsonc
+{
+  "update": "check"
+}
+```
+
+| Value | Effect |
+| --- | --- |
+| `off` | No check. An absent key means `off`. |
+| `check` | `omt install` and `omt doctor` ask the npm registry for the latest version, at most once a day. `omt doctor` prints an `update` line. When a new version is out, `omt install` prints `note: omt <version> is out; run omt update`. |
+| `apply` | The same check. When a new version is out and the command runs at a terminal, `omt install` and `omt doctor` then run `omt update --yes`, once for each new version. Without a terminal, they print only the note. The automatic update never moves the `defaults` pin. |
+
+Only the user config can set the key. In the project config, omt prints the warning `update is read only from the user config; remove it from <file>` and ignores the key. So a cloned repository cannot turn on network calls. The user starter config holds the key as a comment.
+
+omt asks the registry only in `omt install`, `omt doctor`, and `omt update`. The hook and the commands that agents call, such as `omt brief` and `omt roles`, never use the network. omt saves the result of the check in `update-check.json`, in the folder of the user config. A failed check, for example when the machine is offline, gives an `INFO` line in `omt doctor` and does not change its exit code. omt tries again the next day. [Update omt](install.md#update-omt) explains the update itself.
 
 ## Inspect the config
 

@@ -127,7 +127,7 @@ The setup works with Bun and pnpm, and never overwrites a file. Commit the new f
 
 ## How it works
 
-omt has two parts. The skills tell the agent how to plan, delegate, review, and verify. The `omt` CLI does the steps that must give the same result each time: it merges the config, picks a model for each role, writes the task briefs, and counts the tasks in the ledger. The CLI has no runtime dependencies, makes no network calls, and sends no telemetry.
+omt has two parts. The skills tell the agent how to plan, delegate, review, and verify. The `omt` CLI does the steps that must give the same result each time: it merges the config, picks a model for each role, writes the task briefs, and counts the tasks in the ledger. The CLI has no runtime dependencies. The CLI sends no telemetry. It contacts the npm registry only when you run `omt update`, or once a day in `omt install` and `omt doctor` after you set `update` in the user config. `omt update` runs the package manager or mise command of the channel that installed omt.
 
 T3 gives each agent session tools to start, check, and cancel child tasks on any provider and model. Each child task is a T3 thread, so you can watch it in T3. omt adds roles, model routing, briefs, review loops, and limits. It does not change T3.
 

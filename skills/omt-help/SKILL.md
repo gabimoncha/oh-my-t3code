@@ -5,7 +5,7 @@ description: Help and a short tour of omt in T3 Code. Use when the user asks for
 
 # Help
 
-You answer questions about omt and give a short tour. You run only read commands and change no files. When the user wants a change made, you hand off to `omt-setup`.
+You answer questions about omt and give a short tour. You run only read commands and change no files, except the update check of `omt doctor` that step 3 names. When the user wants a change made, you hand off to `omt-setup`.
 
 ## Steps
 
@@ -33,7 +33,7 @@ Done when: the question has one kind, or you asked the user one question to choo
 
 ### 3. Answer from the CLI output
 
-Run the commands of the kind before you answer. Each command reads only:
+Run the commands of the kind before you answer. Each command reads only, except `omt doctor` as the paragraph below the table says:
 
 | Command | Tells you |
 | --- | --- |
@@ -45,6 +45,9 @@ Run the commands of the kind before you answer. Each command reads only:
 | `omt config show` | the merged config before profile selection |
 | `omt defaults list` | the default sets, the latest set, and the selected set with its source |
 | `omt detect` | which harnesses (Claude Code, Codex) this machine can run, and the `harnesses` value that omt recommends |
+| `omt update --check` | the current and the latest omt version, the install channel, and its update command; it asks the npm registry and writes nothing |
+
+Before you run `omt doctor`, read the top-level `update` key in the output of `omt config show --json`. With no `update` key, or with `off`, doctor only reads. With `check`, doctor asks the npm registry at most once a day and writes the result to `update-check.json` in the omt config folder. That is the only write, and you can run doctor. With `apply`, doctor can also update the CLI and the skills, so hand off the doctor check to `omt-setup` (step 5).
 
 Run only the commands in this table. A command or flag that writes, such as `--write` or `--yes`, belongs to `omt-setup`. Add `--json` when you need one field; show the user the text form.
 
@@ -73,7 +76,7 @@ Done when: every fact in the answer comes from a command that you ran in this tu
 Give the tour when the user asks for one, or offer it once when the user is new to omt. Show one step per message, and go on when the user says so. The tour has these 5 steps:
 
 1. What omt is. omt turns a T3 thread into a conductor. The conductor plans the work, sends each unit to a child task on the model that suits its role, and has other models review, test, and verify the result. The skills hold the workflows, and the CLI gives them the routes, the briefs, and the plan state.
-2. The doctor check. Run `omt doctor --project` and explain each line. `PASS` needs nothing, `INFO` is a note, and `WARN` and `FAIL` lines print their fix.
+2. The doctor check. Run `omt doctor --project` as step 3 says, and explain each line. `PASS` needs nothing, `INFO` is a note, and `WARN` and `FAIL` lines print their fix.
 3. A first task. Suggest a small task, such as `$omt-ulw add a --version flag to the CLI`. Say what happens: a plan, one child task per unit, a review, and checks. Read the task budget from `omt profile show --json`, in `limits`.
 4. A review. Suggest `$omt-review the uncommitted changes`. For a pull request, `$omt-review --profile pr-review <number>`.
 5. A profile. Run `omt profile list`. Show `$omt-ulw --profile prototype <task>` for one run. To make a profile the default, offer `omt-setup`.
