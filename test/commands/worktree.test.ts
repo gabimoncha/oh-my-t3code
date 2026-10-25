@@ -46,6 +46,7 @@ test("omt paths prints the main checkout's paths from a worktree", async () => {
     root: p.project,
     omt,
     plans: join(omt, "plans"),
+    grills: join(omt, "grills"),
     ledger: join(omt, "ledger.jsonl"),
     evidence: join(omt, "evidence"),
     config: join(omt, "config.jsonc"),
@@ -60,6 +61,7 @@ test("omt paths prints text lines, JSON, or one path per flag", async () => {
     root: p.project,
     omt,
     plans: join(omt, "plans"),
+    grills: join(omt, "grills"),
     ledger: join(omt, "ledger.jsonl"),
     evidence: join(omt, "evidence"),
     config: join(omt, "config.jsonc"),
@@ -67,7 +69,7 @@ test("omt paths prints text lines, JSON, or one path per flag", async () => {
   };
   const text = await p.runOk(["paths"], p.project);
   assert.equal(text.ctx.out(), Object.entries(expected).map(([name, path]) => `${name}: ${path}\n`).join(""));
-  for (const flag of ["root", "plans", "ledger", "evidence", "config", "shim"]) {
+  for (const flag of ["root", "plans", "grills", "ledger", "evidence", "config", "shim"]) {
     const one = await p.runOk(["paths", `--${flag}`], p.project);
     assert.equal(one.ctx.out(), `${expected[flag]}\n`, flag);
   }

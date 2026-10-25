@@ -10,6 +10,7 @@ A role names a kind of work. The config maps each role to a chain of rungs (prov
 | `research` | read-only | research | A question that needs docs, the web, or other repositories. |
 | `plan` | edit | plan | Turning a goal into a plan file. Use it when the plan is large enough to hand off. |
 | `plan-review` | read-only | review | Checking a plan for gaps before any unit runs. Cross-family. Pass the plan author's provider with `--against`. |
+| `grill` | read-only | grill | Testing a goal before it has a plan: edge cases, open questions, and options. Cross-family. One child per family, each with the other family in `--against`. |
 | `execute` | edit | work | One planned unit inside its scope. The default worker. |
 | `quick` | edit | work | A small mechanical change: a rename, a typo, a one-file edit. |
 | `deep` | edit | work | A hard or cross-cutting problem that needs investigation first, also a fix whose cause is unknown, whose previous fix failed for the same reason, or that changes the design. |
@@ -50,6 +51,7 @@ When neither `omt` nor `.omt/bin/omt` is found (see [The CLI](delegation.md#the-
 | `research` | codex / gpt-6.1-sol / low | claudeAgent / claude-opus-5-5 / low | none |
 | `plan` | claudeAgent / claude-opus-5-5 / xhigh | codex / gpt-6-astra / xhigh | none |
 | `plan-review` | codex / gpt-6-astra / high | claudeAgent / claude-opus-5-5 / high | none |
+| `grill` | codex / gpt-6-astra / high | claudeAgent / claude-opus-5-5 / high | none |
 | `execute` | claudeAgent / claude-opus-5-5 / medium | codex / gpt-6.1-sol / xhigh | none |
 | `quick` | codex / gpt-6-luna / high | claudeAgent / claude-sonnet-5-5 / low | none |
 | `deep` | claudeAgent / claude-opus-5-5 / max | codex / gpt-6-astra / xhigh | none |
@@ -62,7 +64,7 @@ When neither `omt` nor `.omt/bin/omt` is found (see [The CLI](delegation.md#the-
 | `design` | claudeAgent / claude-opus-5-5 / high | none | none |
 | `ui` | claudeAgent / claude-opus-5-5 / medium | none | none |
 
-The cross-family roles are `plan-review`, `review`, and `oracle`. For these roles, try the rungs outside the worker's family first, then the rungs in the worker's family, each in table order. When no rung outside the worker's family can run, the same family reviews.
+The cross-family roles are `plan-review`, `grill`, `review`, and `oracle`. For these roles, try the rungs outside the worker's family first, then the rungs in the worker's family, each in table order. When no rung outside the worker's family can run, the same family reviews.
 
 - The family of a provider is the `driver` of the first configured rung that names this provider and a driver, or the provider itself when no such rung exists.
 - The family of a rung is its `driver`, or the family of its `provider` when it names no driver.
@@ -82,7 +84,7 @@ The effort option id depends on the driver:
 | `pi` | `thinking` | unchanged |
 | `opencode` | `variant` | `off` and `minimal` become `low`; `max` becomes `xhigh` |
 
-For any other driver, send no effort option. Set `role` to the T3 role (`research` for explore and research, `design` for plan and design, `review` for plan-review, review, oracle, and guardrail, `implementation` for execute, quick, deep, writing, and ui, `test` for verify and qa). Set `interactionMode` from the Access column (`plan` for read-only, `default` for edit) and `runtimeMode` to `inherit`.
+For any other driver, send no effort option. Set `role` to the T3 role (`research` for explore and research, `design` for plan and design, `review` for plan-review, grill, review, oracle, and guardrail, `implementation` for execute, quick, deep, writing, and ui, `test` for verify and qa). Set `interactionMode` from the Access column (`plan` for read-only, `default` for edit) and `runtimeMode` to `inherit`.
 
 ## Fast mode
 
@@ -94,7 +96,7 @@ A key in `rung.options` wins over the fast mapping. With `fast: false`, add no f
 
 ## Cross-family roles
 
-A role with `crossFamily: true` reviews from the family other than the worker's. The family of a rung is its driver. The defaults set it for `plan-review`, `review`, and `oracle`.
+A role with `crossFamily: true` reviews from the family other than the worker's. The family of a rung is its driver. The defaults set it for `plan-review`, `grill`, `review`, and `oracle`.
 
 - `--against <provider|driver>` names the worker. A provider instance id, in `--against` or in a rung without a `driver`, maps to its driver through `--capabilities`, or through a configured rung that names both the provider and the driver. When no rung is in the worker's family, a note says so and the configured order applies.
 - `--against auto` reads the worker from `.omt/ledger.jsonl` and needs `--plan`. With `--unit`, when that unit has a work or plan dispatch, the worker is the provider of its last one. When the unit has none, or `--unit` is missing, the worker is the provider that most units of the plan ran on.
@@ -121,4 +123,4 @@ A mode escalation error is not a rung problem: stop and report it ([delegation.m
 
 - Add or override a role in `.omt/config.jsonc` (project) or `~/.config/oh-my-t3code/config.jsonc` (user). A new role needs `description`, `access`, and `chain`. `omt config show --defaults` prints the built-in config; `omt config validate` checks a file.
 - A persona file `<role>.md` overrides the bundled one. Lookup order: `.omt/roles/`, then `~/.config/oh-my-t3code/roles/`, then the bundled `roles/`, then [roles/_generic.md](roles/_generic.md).
-- A custom role gets its result block from its `result` field: `work`, `review`, `test`, `research`, `plan`, or `guardrail`.
+- A custom role gets its result block from its `result` field: `work`, `review`, `test`, `research`, `plan`, `guardrail`, or `grill`.

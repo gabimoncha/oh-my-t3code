@@ -14,9 +14,10 @@
     },
     "defaults": {
       "enum": [
-        "2026-10"
+        "2026-10",
+        "2026-11"
       ],
-      "description": "Pinned default set. Without it, omt uses the latest set (2026-10). Run omt defaults diff to see what a newer set changes."
+      "description": "Pinned default set. Without it, omt uses the latest set (2026-11). Run omt defaults diff to see what a newer set changes."
     },
     "profile": {
       "type": "string",
@@ -154,7 +155,8 @@
             "test",
             "research",
             "plan",
-            "guardrail"
+            "guardrail",
+            "grill"
           ]
         },
         "t3Role": {

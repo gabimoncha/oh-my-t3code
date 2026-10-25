@@ -14,6 +14,7 @@ omt turns this T3 thread into a conductor: it plans, delegates each unit to a ro
 | --- | --- |
 | `omt-ulw` | The user wants something built or fixed end to end with subagents ("ulw", "ultrawork"). The default. |
 | `omt-plan` | The user wants a reviewed plan before any code changes, or `omt-ulw` needs one for a HEAVY task. |
+| `omt-grill` | The user wants a goal grilled or stress-tested, its edge cases found, or a brainstorm before a plan, or `omt-plan` offers a grill for a vague goal. |
 | `omt-design` | The user wants designs, mockups, screens, or a design pass, or a plan needs a design spec before its UI units. |
 | `omt-review` | The user wants a review of uncommitted changes, a branch, a commit, or a PR. |
 | `omt-research` | The user wants a cited answer from this repository, docs, or the web, with no code changes. |

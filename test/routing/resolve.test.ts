@@ -361,6 +361,7 @@ test("every default role resolves against the fixture", () => {
     research: ["codex", "gpt-6.1-sol", { reasoningEffort: "low", serviceTier: "priority" }],
     plan: ["claudeAgent", "claude-opus-5-5", { effort: "xhigh" }],
     "plan-review": ["codex", "gpt-6-astra", { reasoningEffort: "high" }],
+    grill: ["codex", "gpt-6-astra", { reasoningEffort: "high" }],
     execute: ["claudeAgent", "claude-opus-5-5", { effort: "medium" }],
     quick: ["codex", "gpt-6-luna", { reasoningEffort: "high" }],
     deep: ["claudeAgent", "claude-opus-5-5", { effort: "max" }],

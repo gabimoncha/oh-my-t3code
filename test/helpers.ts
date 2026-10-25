@@ -38,7 +38,7 @@ export function tempDir(prefix = "omt-test-"): string {
   return path;
 }
 
-export const OMT_GITIGNORE = "ledger.jsonl\nevidence/\nbin/\ninstall.json\nbackups/\nplans/\nlocks/\nguardrails.md\n";
+export const OMT_GITIGNORE = "ledger.jsonl\nevidence/\nbin/\ninstall.json\nbackups/\nplans/\nlocks/\nguardrails.md\ngrills/\n";
 
 export function omtExit(code: number): (error: unknown) => error is OmtError {
   return (error: unknown): error is OmtError => error instanceof OmtError && error.exitCode === code;

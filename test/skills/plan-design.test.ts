@@ -247,3 +247,39 @@ test("omt-design keeps design artifacts and visual-match conditions out of verif
 test("omt-plan keeps the real-data done condition (plan-design)", () => {
   assert.match(section(readSkill("omt-plan"), "### 3. "), /its done condition includes a check on an input shaped like real data/);
 });
+
+test("omt-plan reads the grill file into research (U3)", () => {
+  const explore = section(readSkill("omt-plan"), "### 1. ");
+  assert.match(explore, /When `\$\(omt paths --grills\)\/<slug>\.md` exists, read it\./);
+  assert.match(explore, /Put its goal, its decisions, and its edge cases under `## Research`, with the grill file as the source\./);
+});
+
+test("omt-plan does not ask settled grill decisions again (U3)", () => {
+  const ask = section(readSkill("omt-plan"), "### 2. ");
+  assert.match(ask, /A decision in the grill file is settled\. Do not ask it again\./);
+  assert.match(ask, /From the grill, ask only its open questions and its `pending` edge cases, then the new owner decisions\. The owner accepts, changes, or drops each `pending` edge case\./);
+});
+
+test("omt-plan offers omt-grill first for unclear intent (U3)", () => {
+  const ask = section(readSkill("omt-plan"), "### 2. ");
+  assert.match(ask, /When no grill file exists, and the goal has no done condition that can fail or 4 or more owner decisions remain, offer \[omt-grill\]\(\.\.\/omt-grill\/SKILL\.md\) as the first option in the owner message\./);
+  assert.match(ask, /When the owner picks it, run `omt-grill` with the slug, then come back to this step\./);
+});
+
+test("omt-plan maps accepted grill edge cases to integration or unit lines, never e2e (U3)", () => {
+  const write = section(readSkill("omt-plan"), "### 3. ");
+  assert.match(write, /Map each grill edge case with `State: accepted` or `State: changed`\./);
+  assert.match(write, /A changed edge case uses the user's handling and test layer from the grill file\./);
+  assert.match(write, /A `dropped` edge case gets no line and no done condition\./);
+  assert.match(write, /A `pending` edge case gets no line until the owner answers it\./);
+  assert.match(write, /Each mapped grill edge case with `Test: integration` or `Test: unit` becomes a `## Tests` line of that layer, with `Reason: grill edge case GE<k>`\./);
+  assert.match(write, /When that layer is outside `plan\.testLayers`, put the line in the step 2 message for owner approval, as any other line outside\./);
+  assert.match(write, /A grill edge case never becomes an e2e line\./);
+  assert.match(write, /A mapped edge case with `Test: none`, and every mapped edge case when `build\.qa` is `off`, goes into the done condition of the unit that owns its handling\./);
+});
+
+test("omt-plan allows grill in plan mode and reads its final message (U3)", () => {
+  const mode = section(readSkill("omt-plan"), "### 0. ");
+  assert.match(mode, /In `plan` mode, dispatch only `explore`, `grill`, and `plan-review`,/);
+  assert.match(mode, /In `plan` mode no grill file exists: take the grill text from the final message of `omt-grill` in this conversation\./);
+});

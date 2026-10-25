@@ -26,6 +26,10 @@ The skill does these steps in order:
 
 The first-round reviewers and the oracle read the saved PR commits. Reviews after a fix read the working tree. The skill posts no GitHub comment and no GitHub review. Other profiles can skip steps with `workflow.review`. The [spec](spec.md#154-pull-request-review) lists the switches and the rules.
 
+## Grill a goal before you plan
+
+Use the `omt-grill` skill when your goal is vague or you do not know its edge cases yet. In each round, one Claude task and one Codex task read the goal and the code, and they do not see each other. The models decide the areas that you do not know and give a reason for each decision. You answer the questions in the areas that you know, and you accept or change each edge case, in one reply per round. The skill writes the result to a grill file, and `omt-plan` reads it, asks no settled question again, and turns the accepted and changed edge cases into integration or unit tests.
+
 ## Add tests only from the plan
 
 Workers add no tests on their own. The plan lists each proposed test under `## Tests`, with its flow, its file, and the reason for it. You approve these lines when you approve the plan. An empty list means no new tests.

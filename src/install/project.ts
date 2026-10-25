@@ -15,7 +15,7 @@ export const INSTALL_CHANNELS: readonly string[] = [
   "bun add -g oh-my-t3code",
   "mise use -g github:gabimoncha/oh-my-t3code",
 ];
-export const OMT_GITIGNORE_LINES: readonly string[] = ["ledger.jsonl", "evidence/", "bin/", "install.json", "backups/", "plans/", "locks/", "guardrails.md"];
+export const OMT_GITIGNORE_LINES: readonly string[] = ["ledger.jsonl", "evidence/", "bin/", "install.json", "backups/", "plans/", "locks/", "guardrails.md", "grills/"];
 export const BACKUPS_GITIGNORE = "*\n";
 
 // The markers carry the project root, because worktrees of one repository share one exclude file.

@@ -10,6 +10,7 @@ Every role ends with a fixed result block. `task_status.summary` is the child's 
 | `research` | explore, research | [results/research.md](results/research.md) | `ANSWER:` |
 | `plan` | plan | [results/plan.md](results/plan.md) | `PLAN:` |
 | `guardrail` | guardrail | [results/guardrail.md](results/guardrail.md) | `VERDICT: PROPOSALS \| NONE` |
+| `grill` | grill | [results/grill.md](results/grill.md) | `VERDICT: OPEN \| CLEAR` |
 
 ## A claim is not evidence
 

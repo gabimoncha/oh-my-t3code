@@ -1546,7 +1546,7 @@ can dispatch: yes</code></pre>
         <tr><th scope="row"><code>src/profile/</code>, <code>src/lock/</code>, <code>src/visual/</code></th><td>Profile resolution, the shared build lock, and the HTML page builder (spec, inline, flow, plan, page).</td></tr>
         <tr><th scope="row"><code>src/commands/</code></th><td>One file per command (15), plus <code>shared.ts</code>.</td></tr>
         <tr><th scope="row"><code>src/util/</code></th><td>args, errors (<code>OmtError</code>), fs (<code>writeFileAtomic</code>), ids, json, output</td></tr>
-        <tr><th scope="row"><code>skills/</code></th><td>The 11 skills and <code>omt/references/</code>.</td></tr>
+        <tr><th scope="row"><code>skills/</code></th><td>The 12 skills and <code>omt/references/</code>.</td></tr>
         <tr><th scope="row"><code>scripts/</code>, <code>schema/</code></th><td><code>build-schema.ts</code> writes <code>schema/omt.schema.json</code> from <code>src/config/schema.ts</code>. Run <code class="cmd"><span class="nw">bun</span> <span class="nw">run</span> <span class="nw">schema</span></code> after you change validation. <code>build.ts</code> writes the bundle and the binary, and <code>release.ts</code> writes the npm packages and the release archives.</td></tr>
         <tr><th scope="row"><code>test/</code></th><td><code>bun:test</code> suites with temp-dir helpers and <code>fakeContext()</code>. Child-process tests point <code>HOME</code> and the <code>OMT_*</code>, <code>XDG_*</code>, <code>CLAUDE_*</code>, and <code>T3CODE_*</code> variables at temp paths.</td></tr>
       </tbody>

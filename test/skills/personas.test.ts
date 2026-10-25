@@ -268,9 +268,9 @@ test("roles explains verify, qa, guardrail, and device ownership (personas)", ()
   assert.match(text, /Only `verify` drives a device, a Simulator UI, a browser, or a computer\./);
   assert.match(text, /Every other role in `default` mode delegates device checks with `omt brief verify`\./);
   assert.match(text, /A read-only role lists the steps and expected results for the conductor\./);
-  assert.match(text, /`review` for plan-review, review, oracle, and guardrail/);
+  assert.match(text, /`review` for plan-review, grill, review, oracle, and guardrail/);
   assert.match(text, /`test` for verify and qa/);
-  assert.match(text, /A custom role gets its result block from its `result` field: `work`, `review`, `test`, `research`, `plan`, or `guardrail`\./);
+  assert.match(text, /A custom role gets its result block from its `result` field: `work`, `review`, `test`, `research`, `plan`, `guardrail`, or `grill`\./);
 });
 
 test("roles pins fast defaults, precedence, mappings, and explicit overrides (personas)", () => {

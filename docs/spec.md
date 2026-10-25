@@ -105,8 +105,8 @@ export type Access = "read-only" | "edit";
 export type InteractionMode = "inherit" | "default" | "plan";
 export type RuntimeMode = "inherit" | "approval-required" | "auto-accept-edits" | "auto" | "full-access";
 export type T3Role = "implementation" | "research" | "review" | "design" | "test" | "general";
-export type ResultKind = "work" | "review" | "test" | "research" | "plan" | "guardrail";
-export const RESULT_KINDS: readonly ResultKind[] = ["work", "review", "test", "research", "plan", "guardrail"];
+export type ResultKind = "work" | "review" | "test" | "research" | "plan" | "guardrail" | "grill";
+export const RESULT_KINDS: readonly ResultKind[] = ["work", "review", "test", "research", "plan", "guardrail", "grill"];
 
 export interface Rung {
   provider?: string; // T3 provider instance id, for example "claudeAgent"
@@ -457,6 +457,8 @@ export class OmtError extends Error {
 | `projectRolesDir(root)` | `<root>/.omt/roles` |
 | `plansDir(root)` | `<root>/.omt/plans` |
 | `planPath(root, slug)` | `<root>/.omt/plans/<slug>.md` |
+| `grillsDir(root)` | `<root>/.omt/grills` |
+| `grillPath(root, slug)` | `<root>/.omt/grills/<slug>.md` |
 | `ledgerPath(root)` | `<root>/.omt/ledger.jsonl` |
 | `evidenceDir(root)` | `<root>/.omt/evidence` |
 | `projectManifestPath(root)` | `<root>/.omt/install.json` |
@@ -503,7 +505,7 @@ Argument parsing uses `node:util` `parseArgs` with `strict: true` and `allowPosi
 | `ledger` | `omt ledger add [options]`, `omt ledger list [--plan <slug>] [--json]`, `omt ledger stats [--plan <slug>] [--json]`, `omt ledger request-id --plan <slug> --unit <id> --role <role> [--round <n>] [--attempt <n>]` |
 | `profile` | `omt profile list [--json]`, `omt profile show [<name>] [--plan <slug>] [--profile <name>] [--json]` |
 | `lock` | `omt lock run <name> [--wait <seconds>] -- <command> [args...]`, `omt lock list` |
-| `paths` | `omt paths [--json] [--root \| --plans \| --ledger \| --evidence \| --config \| --shim]` |
+| `paths` | `omt paths [--json] [--root \| --plans \| --grills \| --ledger \| --evidence \| --config \| --shim]` |
 | `visual` | `omt visual [--plan <slug\|file.md>] [--spec <file\|->] [--out <path\|->] [--json]` |
 | `worktree` | `omt worktree [check] [--json]`, `omt worktree setup [--dry-run] [--yes]` |
 | `hook` | `omt hook user-prompt-submit` |
@@ -546,7 +548,7 @@ Creates, in the project root, only what is missing:
 
 - `.omt/config.jsonc` with the starter project config (section 6.5)
 - `.omt/plans/`
-- `.omt/.gitignore` with the eight lines `ledger.jsonl`, `evidence/`, `bin/`, `install.json`, `backups/`, `plans/`, `locks/`, and `guardrails.md`. A live plan is shared state of all worktrees (section 4), not source, so git does not see it.
+- `.omt/.gitignore` with the nine lines `ledger.jsonl`, `evidence/`, `bin/`, `install.json`, `backups/`, `plans/`, `locks/`, `guardrails.md`, and `grills/`. A live plan is shared state of all worktrees (section 4), not source, so git does not see it.
 
 When `.omt/.gitignore` exists and lacks some of these lines, `init` appends the missing lines and keeps every other line. An older omt wrote fewer lines, so this brings an existing project up to date. A symlinked `.gitignore` is updated through its target, and a dangling symlink is left alone.
 
@@ -698,9 +700,9 @@ See section 13.
 
 Prints the absolute paths of the project state, resolved through `findProjectRoot`. So from a linked worktree it prints the paths in the main checkout.
 
-- Without a flag it prints one `name: path` line for each path. The order is `root` (the project root), `omt` (`omtDir`), `plans` (`plansDir`), `ledger` (`ledgerPath`), `evidence` (`evidenceDir`), `config` (`projectConfigPath`), and `shim` (`projectShimPath`).
+- Without a flag it prints one `name: path` line for each path. The order is `root` (the project root), `omt` (`omtDir`), `plans` (`plansDir`), `grills` (`grillsDir`), `ledger` (`ledgerPath`), `evidence` (`evidenceDir`), `config` (`projectConfigPath`), and `shim` (`projectShimPath`).
 - `--json` prints an object with the same keys.
-- One of `--root`, `--plans`, `--ledger`, `--evidence`, `--config`, or `--shim` prints only that path and a newline, for use as `$(omt paths --evidence)`.
+- One of `--root`, `--plans`, `--grills`, `--ledger`, `--evidence`, `--config`, or `--shim` prints only that path and a newline, for use as `$(omt paths --evidence)`.
 - Two path flags, a path flag with `--json`, or a positional argument is a usage error (exit 2).
 - The command creates no path. Root resolution can read the worktree metadata from section 4.
 
@@ -946,7 +948,7 @@ A missing file is not an error. Each file is JSONC (section 7). Profile selectio
 - Allowed role keys and values:
   - `description`: a non-empty string of at most 300 characters.
   - `access`: `read-only` or `edit`.
-  - `result`: `work`, `review`, `test`, `research`, `plan`, or `guardrail`.
+  - `result`: `work`, `review`, `test`, `research`, `plan`, `guardrail`, or `grill`.
   - `t3Role`: `implementation`, `research`, `review`, `design`, `test`, or `general`.
   - `interactionMode`: `inherit`, `default`, or `plan`.
   - `runtimeMode`: `inherit`, `approval-required`, `auto-accept-edits`, `auto`, or `full-access`.
@@ -1001,8 +1003,8 @@ A JSONC syntax error in a file becomes one error issue, and that file is skipped
 
 `src/config/defaultSets.ts` exports the dated default sets:
 
-- `DEFAULT_SETS: Readonly<Record<string, OmtConfig>>`. Each set is a whole `OmtConfig`, and its `defaults` field holds its own name. The only set is `"2026-10"`, with the values of this section. A set never changes after a release; a change to the defaults goes into a new set with a later name.
-- `LATEST_DEFAULT_SET = "2026-10"` and `DEFAULT_SET_NAME_RE = /^\d{4}-\d{2}(-[a-z0-9]+)?$/`.
+- `DEFAULT_SETS: Readonly<Record<string, OmtConfig>>`. Each set is a whole `OmtConfig`, and its `defaults` field holds its own name. The sets are `"2026-10"` and `"2026-11"`. `"2026-11"` has the values of this section, and `"2026-10"` has the same values without the `grill` role. A set never changes after a release; a change to the defaults goes into a new set with a later name.
+- `LATEST_DEFAULT_SET = "2026-11"` and `DEFAULT_SET_NAME_RE = /^\d{4}-\d{2}(-[a-z0-9]+)?$/`.
 - `isDefaultSet(name)`, `defaultSetNames()`, and `defaultSet(name)`, which returns the named set, or the latest set for a name that omt does not ship.
 - `diffDefaultSets(from: OmtConfig, to: OmtConfig, overrides: { source: string; layer: ConfigLayer }[]): DefaultsChange[]`.
 
@@ -1022,6 +1024,7 @@ For a role without `crossFamily`, rung 2 runs only when T3 refuses rung 1. For a
 | `research` | read-only | research | research | plan | false | codex/gpt-6.1-sol low, claudeAgent/claude-opus-5-5 low |
 | `plan` | edit | plan | design | default | false | claudeAgent/claude-opus-5-5 xhigh, codex/gpt-6-astra xhigh |
 | `plan-review` | read-only | review | review | plan | true | codex/gpt-6-astra high, claudeAgent/claude-opus-5-5 high |
+| `grill` | read-only | grill | review | plan | true | codex/gpt-6-astra high, claudeAgent/claude-opus-5-5 high |
 | `execute` | edit | work | implementation | default | false | claudeAgent/claude-opus-5-5 medium, codex/gpt-6.1-sol xhigh |
 | `quick` | edit | work | implementation | default | false | codex/gpt-6-luna high, claudeAgent/claude-sonnet-5-5 low |
 | `deep` | edit | work | implementation | default | false | claudeAgent/claude-opus-5-5 max, codex/gpt-6-astra xhigh |
@@ -1042,6 +1045,7 @@ Role descriptions (shown to agents in `omt roles` and in skills):
 - `research`: Answer a question from docs, the web, and code, with cited sources.
 - `plan`: Turn a goal into a plan file whose units have a scope, a done condition, and a verify command.
 - `plan-review`: Check a plan for gaps, ambiguity, and steps that cannot be verified.
+- `grill`: Test a goal before it has a plan: find its edge cases, open questions, and options.
 - `execute`: Implement one planned unit inside its scope and run its verify commands.
 - `quick`: Make a small, mechanical change, such as a rename, a typo, or a one-file edit.
 - `deep`: Solve a hard or cross-cutting problem that needs investigation before the change.
@@ -1418,6 +1422,25 @@ NOTES:
 - <each finding with no proposal and why, or none>
 ```
 
+`grill.md`:
+
+```text
+VERDICT: OPEN | CLEAR
+SUMMARY: <one or two sentences>
+DIRECTIONS:
+- <direction>: <what the user gets>; cost: <what it costs>; or none
+DECISIONS:
+- <area>: <choice>. Why: <reason>; or none
+EDGE CASES:
+- [blocking|minor] <area>: when <trigger>, <effect>. Handle: <proposed handling>. Test: integration | unit | none; or none
+QUESTIONS:
+- [blocking|minor] <area>: <question>. Options: <2 to 4 options>. Recommend: <option>, because <reason>; or none
+NOTES:
+- <non-blocking note, or none>
+```
+
+A grill returns `OPEN` when at least one blocking edge case or question remains that `Prior rounds` does not hold, and `CLEAR` otherwise. An edge case is blocking when, without a decision on its handling, the build would do the wrong thing, lose data, or break a flow of the goal; a question is blocking when its answer changes what the user gets.
+
 `qa` lists every new test under `TESTS`. `verify` can omit that section and names each checked flow's covering test file, or `none`, under `CHECKS`. Worker `NOTES` are optional. A review or oracle finding needs a concrete failure scenario. When CRAP is requested, a CRAP finding instead names the changed function and its complexity, coverage, and CRAP values. This exception applies in every round.
 
 Severity meanings for review findings: P0 breaks the build, loses data, or opens a security hole. P1 is a wrong result in a normal path. P2 is a wrong result in an edge case, a named missing test, or a requested CRAP finding above 30. P3 is style or clarity.
@@ -1791,7 +1814,7 @@ exec "$node" "<cliPath>" "$@"
 
 The shim is `create` (absent), `update` (managed, different content), `unchanged`, or `conflict` (a path without the signature). With `--force`, a conflict becomes `replace`, and the old file moves to `<root>/.omt/backups/<stamp>/bin/omt`. The check of section 14.2 decides whether `--project` may run from a one-shot cache or a temp directory. A runtime or CLI path that contains `"`, `$`, a backquote, a backslash, or a newline is refused.
 
-`.omt/.gitignore` holds the lines `ledger.jsonl`, `evidence/`, `bin/`, `install.json`, `backups/`, `plans/`, `locks/`, and `guardrails.md`. When the file is missing, the install creates it with these lines. A dangling symlink at that path is the user's, the same as a dangling settings link: the install leaves it alone, with `keep (a dangling symlink; left alone)`, and never writes its target. With the git exclude step on, the install never edits an existing `.omt/.gitignore`, because the repository may track it. One exception upgrades an unedited file: when the previous manifest lists the file in `project.files` and the file's SHA-256 equals the recorded hash, an earlier install created it and nobody edited it. Then the install appends the missing lines, the plan shows `update` for the file, and the manifest records the new hash. With `--no-git-exclude`, a setup meant to be committed, the install appends the missing lines and never removes a line. The manifest then records the file's old content and the hash of what the install wrote, as `gitignoreRestore`, and the uninstall writes the old content back while the file still has that hash.
+`.omt/.gitignore` holds the lines `ledger.jsonl`, `evidence/`, `bin/`, `install.json`, `backups/`, `plans/`, `locks/`, `guardrails.md`, and `grills/`. When the file is missing, the install creates it with these lines. A dangling symlink at that path is the user's, the same as a dangling settings link: the install leaves it alone, with `keep (a dangling symlink; left alone)`, and never writes its target. With the git exclude step on, the install never edits an existing `.omt/.gitignore`, because the repository may track it. One exception upgrades an unedited file: when the previous manifest lists the file in `project.files` and the file's SHA-256 equals the recorded hash, an earlier install created it and nobody edited it. Then the install appends the missing lines, the plan shows `update` for the file, and the manifest records the new hash. With `--no-git-exclude`, a setup meant to be committed, the install appends the missing lines and never removes a line. The manifest then records the file's old content and the hash of what the install wrote, as `gitignoreRestore`, and the uninstall writes the old content back while the file still has that hash.
 
 The git exclude step is on by default. `--no-git-exclude` turns it off: the install writes no block, removes a block that an earlier install wrote for this root (the plan shows `remove managed block in <file>  (--no-git-exclude)`), and the manifest records `"gitExcludeOff": true`. The installer finds the exclude file without running git:
 
@@ -1910,6 +1933,7 @@ User scope and project scope never read or write each other's files.
 | `omt` | user | Router. Lists the omt workflows, when to use each, and the shared references. |
 | `omt-ulw` | model | Ultrawork loop: mode and branch check, frame, route, explore, plan, dispatch, review, test, fix, final gate, report. Trigger words: ulw, ultrawork, build or fix with subagents in T3. |
 | `omt-plan` | model | Explore, ask owner decisions in one message, write the plan and approved test list, set its task budget, review by `plan.review`, and show the final plan. |
+| `omt-grill` | model | Test a goal before its plan: frame it with a knowledge map, run blind panel rounds of one Claude and one Codex `grill` child, ask the user one message per round with decisions, questions, and edge cases, and write the grill file that `omt-plan` reads. Trigger words: grill, stress-test, edge cases, brainstorm, vague goal, before a plan. |
 | `omt-design` | model | Dispatch `design.variants` options per screen in a new Paper file, show screenshots by screen, carry owner steering through fresh design tasks, and write `docs/design/<slug>.md` after approval. |
 | `omt-review` | model | Review uncommitted changes, a branch, a commit, or a PR. The profile controls group count, families, oracle, and fix offers. PRs use the eleven steps in section 15.4. |
 | `omt-research` | model | Parallel read-only research into a cited report. |
@@ -1952,6 +1976,8 @@ Rules that the skills must carry:
 - `plan-review`, `review`, and `oracle` are cross-family relative to the worker. A reviewer comes from the family other than the worker's; when that family is not available, the same family reviews. The `oracle` is the whole-change gate from the family other than the main implementer's.
 - `omt-ulw` builds the review briefs (step 7) and the oracle brief (step 10) with `--against auto`.
 - `omt-plan` applies `plan.review`. `owner` dispatches no plan reviewer and waits for owner approval of the plan and test list. `two-families` uses two round-1 tasks, `plan.claude --against codex` and `plan.codex --against claudeAgent`. Both must approve. `one` uses one reviewer from the family other than the plan author in every round. From round 2, both reviewed modes use `plan --against <plan author provider>`. The author is the step-0 `modelSelection.instanceId`, or the provider of a plan worker. Every required family must be available. Each dispatch passes the effective `plan.testLayers` in the task. Round 1 freezes the union of blockers. Later rounds count frozen blockers, fix regressions, or findings with a requirement, regression, or concrete risk. The limit is the profile's `maxReviewRounds`.
+- `omt-plan` step 1 reads `$(omt paths --grills)/<slug>.md` when it exists and puts its goal, decisions, and edge cases under `## Research`. Step 2 asks no grill decision again, asks each pending edge case with the grill's open questions, and offers `omt-grill` first when no grill file exists and the goal has no done condition that can fail or 4 or more owner decisions remain. Step 3 turns each accepted or changed edge case with `Test: integration` or `Test: unit` into a `## Tests` line of that layer, never an e2e line, and maps no dropped or pending edge case. A changed edge case uses the user's handling from the grill file. In `plan` mode, step 0 also allows `grill` dispatches and takes the grill text from the conversation.
+- `omt-grill` runs each panel round as two fresh `delegate_task` calls, never `t3_thread_send`: `--unit grill.claude --against codex` and `--unit grill.codex --against claudeAgent`, with no fallback to the other family. Explore tasks use units `GX<k>`. When `omt roles --role grill --json` fails with `unknown_role`, it stops, shows `omt defaults diff`, and offers `omt-setup`. It writes the grill file at `$(omt paths --grills)/<slug>.md`, and stops when a round adds no counted blocking item, at `limits.maxReviewRounds`, or when the user stops. In `plan` mode it dispatches only `explore` and `grill`, builds briefs without `--save`, writes no grill file and no ledger entry, and delivers the grill text in the final message.
 - `omt-review` uses `review.reviewers` for the number of file groups. `auto` gives 1 below 200 changed lines, 2 below 1,000, 3 below 3,000, and 4 otherwise. `review.families: one` uses one reviewer per group. `both` uses one reviewer per family per group and requires both families to be available. Round 1 passes no `--against` unless selecting both families. `review.oracle: on` uses the family other than the provider that ran most reviewers of that round. `review.fixLoop: offer` asks before each fix loop. Later rounds review each fix under `F<k> --against auto`, against that fix's worker. Every round is a fresh task.
 - `omt-ulw`, `omt-plan`, and `omt-design` read `omt profile show --plan <slug> --json` when the plan file exists. Otherwise they use `omt profile show <name> --json`, or omit the name for the config selection. Before plan creation, every brief, roles, and route call carries the selected `--profile`. `omt-plan` creates a HEAVY plan with `--profile <name>` to store the effective profile. A LIGHT plan stores a profile only when the run has an explicit `--profile`. Otherwise, it has no `profile=` header and follows the current config. The planner creates a missing file before a plan worker starts and tells that worker to edit the existing file without `--force`.
 - `omt-ulw` reloads the profile on each wake, switch, and context reset. `build.review: every-round` reviews every round, `first-round` reviews only the first implementation round, and `off` skips unit reviews. `build.oracle: heavy` requires the final oracle only for HEAVY, `always` for both tiers, and `off` for neither. After plan creation and profile switches, the conductor adds or removes the `F2` oracle item to match that rule.
@@ -2038,7 +2064,7 @@ Required coverage:
 - Project install: the files of section 14.8, an idempotent rerun, `--dry-run`, the exclude file for a `.git` directory and a worktree `.git` file, block replacement, no `.git`, `--no-git-exclude` (also on a reinstall, and its `.omt/.gitignore` restore), the conditional `.omt` and `settings.local.json` lines, the hook in `settings.local.json`, uninstall with a locally modified skill and `--purge`, `--targets gemini` (exit 2), a temp `cliPath`, and the shim conflict and update. Also: a copied project, a moved clone round trip, a tracked manifest with paths outside the root, a symlinked path to the root, the home directory as the root (exit 2), a dangling settings symlink, a failed scratch delete, glob characters in a package path, worktrees, a block whose root is gone, the exact bytes of the exclude file, a kept created `settings.local.json`, and a kept ledger. Also: a reinstall that appends `plans/`, `locks/`, and `guardrails.md` to an unedited `.omt/.gitignore` that an earlier install created, and one that leaves an edited file alone. Also: uninstall, reinstall, and a second uninstall after each kind of kept created file, each with an empty `git status`; an uninstall that fails midway; a symlinked exclude file and `.omt/.gitignore`; a crafted tracked manifest that names project files; a package copied inside the same repository; and the exact paths that stay after a failed install and its uninstall.
 - Doctor: each status that the table in section 14.7 defines, with `runtimeName` and `runtimeVersion` injected through the context.
 - Worktree setup: `test/commands/worktree-setup.test.ts` covers the cases in section 5.12: init, `install --project --dry-run`, setup dry run and apply, check, and `doctor --project` from a linked worktree (shared `.omt`, setup files in the worktree); a Bun and a pnpm runner with controlled executables (versions, flags, environment, lockfiles, failure exit codes, a failed linker query, CI warning); existing, invalid, and partial `t3.json`, ambiguous and unsupported managers, linker settings with TOML comments, each persistent-store status with the created, kept, and incomplete `pnpm-workspace.yaml`, symlinked and dangling `.t3` folders and runners, a home-directory alias, conflicting output paths, idempotency, and a dry run that writes nothing; and `launchSpec` for Windows. Tests never start a real package manager. They start the runner with `node`, the command in `t3.json`, and with Bun when no `node` is on `PATH`. `test/e2e/binary.test.ts` (Bun project) and `test/e2e/packages.test.ts` (pnpm and Bun projects) run `worktree setup --yes` through the shim and compare the written runner with `templates/worktree-setup.mjs`, so the binary and the bundle prove that they carry the runner.
-- Skills: `test/skills/*.test.ts` replaces `test/skills.test.ts`. `common` checks frontmatter and links. `personas` checks role and result files, test policy, CRAP, and guardrails. `plan-design` checks profile selection, planned test lines, shared-build rules, budgets, review modes, and variant counts. `ulw` checks dispatch, profile reloads, check-ins, verify then qa, locks, heartbeat retention, and loop waits. `review` checks each PR step, commit-based round-1 reads, working-tree fix reviews, offers, linking, and watches.
+- Skills: `test/skills/*.test.ts` replaces `test/skills.test.ts`. `common` checks frontmatter and links. `personas` checks role and result files, test policy, CRAP, and guardrails. `plan-design` checks profile selection, planned test lines, shared-build rules, budgets, review modes, and variant counts. `grill` (`test/skills/grill.test.ts`) checks the mode check, the branch-check link, the stop on a missing `grill` role with the `omt-setup` offer, the two panel units with their `--against` values, a fresh `delegate_task` per round, `GX<k>` explore units, the stop rule with `limits.maxReviewRounds`, the path from `omt paths --grills`, and no writes in plan mode. `ulw` checks dispatch, profile reloads, check-ins, verify then qa, locks, heartbeat retention, and loop waits. `review` checks each PR step, commit-based round-1 reads, working-tree fix reviews, offers, linking, and watches.
 - Visual: spec errors with JSON paths, unknown keys, escaping of every text field (also an SVG label `<script>alert(1)</script>`), inline markup, byte-identical output, back edges, no edge that crosses a node on any fixture flow, label sides at a shared stub, row centering with and without a pinned column, the transitive reduction, the 6 layers of a plan shaped like `workflow-profiles`, non-unit dependency tokens, a plan with no `## Summary`, and the command: `--out -`, `--json`, the default paths, a plan file path, and the usage errors.
 - Schema: the committed schema equals the generated one, and it allows the same keys as the validator.
 - CLI: `--help`, `--version`, an unknown command (exit 2), and an unknown flag (exit 2), run as a child process.
