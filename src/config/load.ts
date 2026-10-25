@@ -17,6 +17,31 @@ export interface ConfigFileLayer {
   issues: ConfigIssue[]; // parse and validation issues
 }
 
+// Parses and validates one config file; `text` is undefined when the file is absent.
+export function layerFromText(kind: "user" | "project", path: string, text: string | undefined): ConfigFileLayer {
+  const entry: ConfigFileLayer = { kind, path, present: text !== undefined, layer: {}, issues: [] };
+  if (text === undefined) return entry;
+  let value: unknown;
+  try {
+    value = parseJsonc(text, path);
+  } catch (error) {
+    if (!(error instanceof OmtError) || error.code !== "jsonc_parse") throw error;
+    const message = error.message.startsWith(`${path}:`) ? error.message.slice(path.length + 1) : error.message;
+    entry.issues.push({ source: path, path: "", message, severity: "error" });
+    return entry;
+  }
+  const validated = validateLayer(value, path);
+  entry.layer = validated.layer;
+  entry.issues.push(...validated.issues);
+  if (kind === "project" && isRecord(value) && Object.hasOwn(value, "update")) {
+    delete entry.layer.update;
+    const message = `update is read only from the user config; remove it from ${path}`;
+    entry.issues = entry.issues.filter((issue) => issue.path !== "update");
+    entry.issues.push({ source: path, path: "update", message, severity: "warning" });
+  }
+  return entry;
+}
+
 // Reads, parses, and validates the user and the project config files, in that order.
 export async function readConfigLayers(opts: {
   cwd: string;
@@ -28,31 +53,16 @@ export async function readConfigLayers(opts: {
     { kind: "project", path: projectConfigPath(findProjectRoot(opts.cwd)) },
   ];
   const layers: ConfigFileLayer[] = [];
-  for (const file of files) {
-    const text = await readFileIfExists(file.path);
-    const entry: ConfigFileLayer = { ...file, present: text !== undefined, layer: {}, issues: [] };
-    layers.push(entry);
-    if (text === undefined) continue;
-    let value: unknown;
-    try {
-      value = parseJsonc(text, file.path);
-    } catch (error) {
-      if (!(error instanceof OmtError) || error.code !== "jsonc_parse") throw error;
-      const message = error.message.startsWith(`${file.path}:`) ? error.message.slice(file.path.length + 1) : error.message;
-      entry.issues.push({ source: file.path, path: "", message, severity: "error" });
-      continue;
-    }
-    const validated = validateLayer(value, file.path);
-    entry.layer = validated.layer;
-    entry.issues.push(...validated.issues);
-    if (file.kind === "project" && isRecord(value) && Object.hasOwn(value, "update")) {
-      delete entry.layer.update;
-      const message = `update is read only from the user config; remove it from ${file.path}`;
-      entry.issues = entry.issues.filter((issue) => issue.path !== "update");
-      entry.issues.push({ source: file.path, path: "update", message, severity: "warning" });
-    }
-  }
+  for (const file of files) layers.push(layerFromText(file.kind, file.path, await readFileIfExists(file.path)));
   return layers;
+}
+
+// The config after one merge step: the cloned default set first, then each present file layer.
+export interface MergeStep {
+  kind: "defaults" | "user" | "project";
+  path?: string;
+  layer: ConfigLayer;
+  config: OmtConfig;
 }
 
 export async function loadConfig(opts: {
@@ -60,7 +70,11 @@ export async function loadConfig(opts: {
   env: Record<string, string | undefined>;
   homedir: string;
 }): Promise<LoadedConfig> {
-  const layers = await readConfigLayers(opts);
+  const { steps: _steps, ...loaded } = mergeConfigLayers(await readConfigLayers(opts));
+  return loaded;
+}
+
+export function mergeConfigLayers(layers: ConfigFileLayer[]): LoadedConfig & { steps: MergeStep[] } {
   // The project layer's set wins over the user layer's, before any layer merges.
   let defaultsSource = "latest";
   let selected = LATEST_DEFAULT_SET;
@@ -71,6 +85,7 @@ export async function loadConfig(opts: {
   }
   let config: OmtConfig = structuredClone(defaultSet(selected));
   config.defaults = selected;
+  const steps: MergeStep[] = [{ kind: "defaults", layer: {}, config }];
   const sources: ConfigSource[] = [{ kind: "defaults", present: true }];
   const issues: ConfigIssue[] = [];
   const profileSources = new Map<string, string>();
@@ -90,6 +105,7 @@ export async function loadConfig(opts: {
     const merged = mergeLayer(config, layer, file.path);
     issues.push(...merged.issues);
     config = merged.config;
+    steps.push({ kind: file.kind, path: file.path, layer, config });
     if (layer.profile !== undefined) selectionSource = file.path;
     for (const name of Object.keys(layer.profiles ?? {})) {
       if (Object.hasOwn(config.profiles, name)) profileSources.set(name, file.path);
@@ -107,5 +123,5 @@ export async function loadConfig(opts: {
     issues.push(...chainIssues.filter((issue) => issue.path === `profiles.${name}.extends`));
     issues.push(...profileIssues(copy, sources, [name]));
   }
-  return { config, sources, issues, defaultsSource };
+  return { config, sources, issues, defaultsSource, steps };
 }

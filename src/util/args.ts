@@ -4,6 +4,13 @@ import { errorMessage, OmtError, usageError } from "./errors.ts";
 
 export type ArgOptions = NonNullable<ParseArgsConfig["options"]>;
 
+let observer: ((options: ArgOptions) => void) | undefined;
+
+// Tests set an observer to record each command's flags; production code never sets one.
+export function observeParseArgs(next: ((options: ArgOptions) => void) | undefined): void {
+  observer = next;
+}
+
 export function checkPositionals(positionals: string[], max: number): void {
   if (positionals.length > max) throw usageError(`unexpected argument "${positionals[max]}"`);
 }
@@ -15,6 +22,7 @@ export function positiveInt(flag: string, value: string | undefined): number | u
 }
 
 export function parseArgs<T extends ArgOptions>(args: string[], options: T, opts: { maxPositionals?: number } = {}) {
+  observer?.(options);
   let parsed;
   try {
     parsed = nodeParseArgs({ args, options, strict: true, allowPositionals: true });

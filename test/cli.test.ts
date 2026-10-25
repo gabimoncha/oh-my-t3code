@@ -35,6 +35,21 @@ test("--help lists every command and exits 0", () => {
   }
 });
 
+test("help and help config match --help and config -h", () => {
+  const cases: [string[], string[]][] = [
+    [["help"], ["--help"]],
+    [["help", "config"], ["config", "-h"]],
+  ];
+  for (const [alias, flags] of cases) {
+    const expected = runCli(flags);
+    const actual = runCli(alias);
+    assert.equal(expected.code, 0);
+    assert.equal(actual.code, 0);
+    assert.equal(actual.stdout, expected.stdout);
+    assert.equal(actual.stderr, expected.stderr);
+  }
+});
+
 test("no command prints the command list", () => {
   const result = runCli([]);
   assert.equal(result.code, 0);
@@ -53,6 +68,13 @@ test("an unknown command is a usage error with exit 2", () => {
   assert.equal(result.code, 2);
   assert.equal(result.stdout, "");
   assert.match(result.stderr, /^omt: unknown command "nope"\nhint: /);
+});
+
+test("help with an unknown command is a usage error with exit 2", () => {
+  const result = runCli(["help", "nope"]);
+  assert.equal(result.code, 2);
+  assert.equal(result.stdout, "");
+  assert.equal(result.stderr, `omt: unknown command "nope"\nhint: run "omt --help" to see the commands\n`);
 });
 
 test("an unknown global option is a usage error with exit 2", () => {

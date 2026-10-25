@@ -43,10 +43,21 @@ function profileChain(config: OmtConfig, name: string): { name: string; profile:
   return chain.reverse();
 }
 
-function applyChain(config: OmtConfig, chain: { name: string; profile: ProfileConfig }[]) {
-  // Keep the workflow in a temporary profile so mergeLayer also merges its groups and keys.
-  let applied: OmtConfig = { ...config, profiles: { normal: structuredClone(defaultSet(config.defaults).profiles.normal!) } };
-  const issues: { profile: string; issue: ConfigIssue }[] = [];
+export interface ProfileStep {
+  name: string;
+  config: OmtConfig;
+  issues: ConfigIssue[];
+}
+
+// The config before the first chain step: the workflow sits in a temporary profile, so that
+// mergeLayer also merges its groups and keys.
+export function profileBase(config: OmtConfig): OmtConfig {
+  return { ...config, profiles: { normal: structuredClone(defaultSet(config.defaults).profiles.normal!) } };
+}
+
+function chainSteps(config: OmtConfig, chain: { name: string; profile: ProfileConfig }[]): ProfileStep[] {
+  let applied = profileBase(config);
+  const steps: ProfileStep[] = [];
   for (const entry of chain) {
     const { roles, limits, models, workflow } = entry.profile;
     const merged = mergeLayer(applied, {
@@ -56,13 +67,19 @@ function applyChain(config: OmtConfig, chain: { name: string; profile: ProfileCo
       ...(workflow === undefined ? {} : { profiles: { normal: { workflow } } }),
     }, `profile "${entry.name}"`);
     applied = merged.config;
-    issues.push(...merged.issues.map((issue) => ({ profile: entry.name, issue })));
+    steps.push({ name: entry.name, config: applied, issues: merged.issues });
   }
-  return { applied, issues };
+  return steps;
+}
+
+// The config after each step of the profile's chain, from normal to the named profile.
+export function profileSteps(config: OmtConfig, name: string): ProfileStep[] {
+  return chainSteps(config, profileChain(config, name));
 }
 
 export function resolveProfile(config: OmtConfig, name: string): ResolvedProfile {
-  const { applied, issues } = applyChain(config, profileChain(config, name));
+  const steps = profileSteps(config, name);
+  const applied = steps.at(-1)?.config ?? profileBase(config);
   return {
     name,
     source: "argument",
@@ -70,7 +87,7 @@ export function resolveProfile(config: OmtConfig, name: string): ResolvedProfile
     limits: applied.limits,
     roles: applied.roles,
     models: applied.models,
-    issues: issues.map((entry) => entry.issue),
+    issues: steps.flatMap((step) => step.issues),
   };
 }
 
@@ -90,13 +107,11 @@ export function profileIssues(
       if (error instanceof OmtError) continue;
       throw error;
     }
-    for (const entry of applyChain(config, chain).issues) {
-      if (entry.profile !== name) continue;
-      issues.push({
-        ...entry.issue,
-        source: profileSources.get(name) ?? "defaults",
-        path: `profiles.${name}.${entry.issue.path}`,
-      });
+    for (const step of chainSteps(config, chain)) {
+      if (step.name !== name) continue;
+      for (const issue of step.issues) {
+        issues.push({ ...issue, source: profileSources.get(name) ?? "defaults", path: `profiles.${name}.${issue.path}` });
+      }
     }
   }
   return issues;

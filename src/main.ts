@@ -26,7 +26,7 @@ import * as visual from "./commands/visual.ts";
 import * as worktree from "./commands/worktree.ts";
 import type { CliBuild, CliContext, CommandRun } from "./types.ts";
 import { findProjectRoot, hasProjectMarker, omtDir, shadowedWorktreeState } from "./paths.ts";
-import { errorMessage, OmtError } from "./util/errors.ts";
+import { errorMessage, OmtError, usageError } from "./util/errors.ts";
 
 export interface CommandModule {
   summary: string;
@@ -142,9 +142,10 @@ export function createContext(overrides: Partial<CliContext> = {}): CliContext {
 }
 
 export function mainUsage(): string {
-  const names = Object.keys(COMMANDS);
-  const width = Math.max(...names.map((name) => name.length));
-  const lines = names.map((name) => `  ${name.padEnd(width)}  ${COMMANDS[name]?.summary ?? ""}`);
+  const rows = Object.keys(COMMANDS).map((name): [string, string] => [name, COMMANDS[name]?.summary ?? ""]);
+  rows.push(["help [<command>]", "print this help, or one command's help"]);
+  const width = Math.max(...rows.map(([name]) => name.length));
+  const lines = rows.map(([name, summary]) => `  ${name.padEnd(width)}  ${summary}`);
   return [
     "Usage: omt <command> [options]",
     "",
@@ -156,6 +157,20 @@ export function mainUsage(): string {
     "  -v, --version  print the version",
     "",
   ].join("\n");
+}
+
+function unknownCommand(name: string, isHelpTarget = false): OmtError {
+  const what = name.startsWith("-") && !isHelpTarget ? `unknown option "${name}"` : `unknown command "${name}"`;
+  return new OmtError("usage", what, { exitCode: 2, hint: `run "omt --help" to see the commands` });
+}
+
+function helpText(args: string[]): string {
+  const [name, extra] = args;
+  if (extra !== undefined) throw usageError(`unexpected argument "${extra}"`);
+  if (name === undefined || name === "--help" || name === "-h") return mainUsage();
+  const command = Object.hasOwn(COMMANDS, name) ? COMMANDS[name] : undefined;
+  if (command === undefined) throw unknownCommand(name, true);
+  return command.usage;
 }
 
 function wantsHelp(args: string[]): boolean {
@@ -197,11 +212,12 @@ export async function main(argv: string[], overrides: Partial<CliContext> = {}):
       ctx.stdout(`${ctx.version}\n`);
       return 0;
     }
-    const command = Object.hasOwn(COMMANDS, first) ? COMMANDS[first] : undefined;
-    if (command === undefined) {
-      const what = first.startsWith("-") ? `unknown option "${first}"` : `unknown command "${first}"`;
-      throw new OmtError("usage", what, { exitCode: 2, hint: `run "omt --help" to see the commands` });
+    if (first === "help") {
+      ctx.stdout(helpText(rest));
+      return 0;
     }
+    const command = Object.hasOwn(COMMANDS, first) ? COMMANDS[first] : undefined;
+    if (command === undefined) throw unknownCommand(first);
     if (wantsHelp(rest)) {
       ctx.stdout(command.usage);
       return 0;
