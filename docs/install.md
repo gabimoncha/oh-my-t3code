@@ -311,6 +311,36 @@ omt uninstall
 
 `omt uninstall` does not remove the CLI. To remove it, use the command of its channel, such as `mise unuse -g github:gabimoncha/oh-my-t3code`, `npm rm -g oh-my-t3code`, `pnpm rm -g oh-my-t3code`, or `bun rm -g oh-my-t3code`.
 
+## Update omt
+
+Run `omt update`. In a project install without `omt` on `PATH`, run `.omt/bin/omt update`:
+
+```sh
+omt update --dry-run
+omt update
+```
+
+`omt update` asks the npm registry for the latest version. Then it runs the update command of the channel that installed omt, and the new CLI syncs the skills in user scope and in each project that `omt install --project` recorded. It shows its plan first and asks before it writes. Add `--yes` to skip the question. `--dry-run` prints the plan and writes nothing, and `--check` prints the current version, the latest version, the channel, and its update command, and writes nothing.
+
+| Channel | What `omt update` does |
+| --- | --- |
+| mise, release binary | Runs `mise use -g github:gabimoncha/oh-my-t3code@<version>`. |
+| mise, npm package | Runs `mise use -g npm:oh-my-t3code@<version>`. |
+| npm, pnpm, or Bun, global | Runs `npm install -g`, `pnpm add -g`, or `bun add -g` with `oh-my-t3code@<version>`. |
+| Dev dependency | Prints two commands of the project's package manager. The first updates the dependency, such as `pnpm add -D oh-my-t3code@<version>`. The second syncs the skills with the new CLI, such as `pnpm exec omt update --skills-only --project`. omt runs neither, because the first command changes `package.json` and the lockfile. |
+| One-shot | Writes the new version into the shim `.omt/bin/omt`, after the runner starts that version. |
+| Release binary elsewhere, or a clone | Prints a hint. |
+
+Each command installs the exact version that the registry returned. So the mise channels write an exact pin, such as `github:gabimoncha/oh-my-t3code@0.3.0`, into your global mise config. A later `omt update` moves that pin. An exact version also skips the 24-hour wait of `minimum_release_age`.
+
+The sync keeps a skill that you edited, and prints `kept <skill>  (<reason>)`. `omt install --force` replaces it. A project that runs another omt, such as a dev dependency, gets the command to run in that project. The `defaults` pin of a config moves only when you answer yes to its own question, at a terminal. `--yes` never moves it, and prints the `omt defaults use latest` command instead. When any skill changed, restart your agent sessions in T3 Code.
+
+`--project` updates only the current project. `--skills-only` syncs the skills with the CLI that runs now. It sends no request, so it works without the network.
+
+To update by hand, run the install command of your channel from [Install the CLI](#install-the-cli) with `@latest` or a version, such as `npm i -g oh-my-t3code@latest`. For a one-shot install, run the project install again with the new version, such as `npx omt3@<version> install --project`. Then run `omt update --skills-only` to sync the skills.
+
+To get a note when a new version is out, set `"update": "check"` in the user config. [The `update` key](configuration.md#check-for-updates) explains it.
+
 ## Set the Codex unload delay
 
 Do this if you use Codex children, with either install mode. Open T3 Code Settings, Providers, Codex, and set Launch arguments to `-c thread_unload_delay_secs=60`, with no quotes.

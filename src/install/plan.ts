@@ -61,6 +61,7 @@ export interface SkillStep {
   source: string;
   path: string;
   sourceHash: string;
+  installedHash?: string; // update: the hash of the installed skill; the apply replaces only a folder that still has it
   action: PlanAction;
   reason?: string;
   backup?: boolean; // uninstall --force: move a locally modified skill to the backups before removal
@@ -188,6 +189,7 @@ export interface ProjectInstallSteps {
 
 export interface InstallPlan {
   scope: InstallScope;
+  sync?: boolean; // omt update: conflicts are kept, and a kept path changes no ownership
   version: string;
   targets: TargetName[];
   agentsRoot: string;
@@ -264,6 +266,7 @@ export interface InstallOptions {
   scope?: InstallScope;
   gitExclude?: boolean; // project scope only; default true
   capabilities?: Capabilities | undefined; // for the harness detection
+  sync?: boolean; // omt update: keep each conflict, create no config, detect no harness, ignore force
 }
 
 async function isRegularFile(path: string): Promise<boolean> {
@@ -406,6 +409,32 @@ function existingPaths(plan: InstallPlan): ManifestExisting {
   };
 }
 
+// A sync keeps the earlier `existing` entries, and adds each conflict that it keeps and that no earlier
+// install owned. The uninstall scan keeps a managed skill or link only when `existing` names it, and the
+// exclude block leaves an existing path visible to git.
+function syncExistingPaths(plan: InstallPlan): ManifestExisting {
+  const previous = plan.previous;
+  const ownedSkills = new Set(previous?.skills ?? []);
+  const ownedLinks = new Set((previous?.links ?? []).map((link) => link.path));
+  const found = existingPaths(plan);
+  return {
+    skills: [
+      ...new Set([
+        ...(previous?.project?.existing?.skills ?? []),
+        ...found.skills,
+        ...plan.skills.filter((step) => step.action === "conflict" && !ownedSkills.has(step.name)).map((step) => step.name),
+      ]),
+    ],
+    links: [
+      ...new Set([
+        ...(previous?.project?.existing?.links ?? []),
+        ...found.links,
+        ...plan.links.filter((link) => (link.action === "conflict" || link.action === "keep") && !ownedLinks.has(link.path)).map((link) => link.path),
+      ]),
+    ],
+  };
+}
+
 async function planProjectInstall(
   ctx: CliContext,
   plan: InstallPlan,
@@ -413,6 +442,7 @@ async function planProjectInstall(
   gitExclude: boolean,
   from: string | undefined,
   runner: Runner | undefined,
+  sync: boolean,
 ): Promise<ProjectInstallSteps> {
   const previous = plan.previous?.project;
   const previousDirs = new Set(previous?.dirs ?? []);
@@ -468,7 +498,7 @@ async function planProjectInstall(
     settingsCreated,
     configCreated,
     gitignoreCreated,
-    existing: existingPaths(plan),
+    existing: sync ? syncExistingPaths(plan) : existingPaths(plan),
     ...(gitignoreRestore === undefined ? {} : { gitignoreRestore }),
     missingDirs,
   };
@@ -538,7 +568,11 @@ export async function buildInstallPlan(ctx: CliContext, options: InstallOptions)
   for (const skill of bundled) {
     const path = join(paths.agentsRoot, skill.name);
     const result = await classifySkill(skill.dir, path);
-    skills.push({ name: skill.name, source: skill.dir, path, ...result });
+    const step: SkillStep = { name: skill.name, source: skill.dir, path, ...result };
+    // classifySkill returns update only for an unmodified skill, so its marker records the hash of its files.
+    const installedHash = result.action === "update" ? (await readMarker(path))?.hash : undefined;
+    if (installedHash !== undefined) step.installedHash = installedHash;
+    skills.push(step);
   }
   const linkRoots: LinkRoot[] = [];
   for (const name of options.targets) {
@@ -552,8 +586,15 @@ export async function buildInstallPlan(ctx: CliContext, options: InstallOptions)
     bundled.map((skill) => skill.name),
   );
   const links: LinkStep[] = linkPlan.links.map(({ canonical: _canonical, ...link }) => link);
+  const sync = options.sync === true;
+  const config: ConfigStep = { path: paths.configPath, action: (await pathExists(paths.configPath)) ? "unchanged" : "create" };
+  if (sync && config.action === "create") {
+    config.action = "keep";
+    config.reason = "absent; omt update creates no config";
+  }
   const plan: InstallPlan = {
     scope,
+    ...(sync ? { sync } : {}),
     version: ctx.version,
     targets: options.targets,
     agentsRoot: paths.agentsRoot,
@@ -562,15 +603,30 @@ export async function buildInstallPlan(ctx: CliContext, options: InstallOptions)
     skills,
     links,
     skippedRoots: linkPlan.skipped,
-    config: { path: paths.configPath, action: (await pathExists(paths.configPath)) ? "unchanged" : "create" },
+    config,
     scratch: paths.root === undefined ? [] : await listScratch(paths.agentsRoot),
   };
   const { manifest: previous, from } = await loadScopeManifest(paths);
   if (previous !== undefined) plan.previous = previous;
-  plan.harnesses = await planHarnesses(ctx, plan.config, options.capabilities);
+  if (sync) {
+    const unmanaged = new Set(skills.filter((step) => step.action === "conflict" && step.reason !== "locally modified").map((step) => step.name));
+    for (const link of links) {
+      if (link.action !== "create" || !unmanaged.has(link.name)) continue;
+      link.action = "keep";
+      link.reason = "points at a skill that omt does not manage";
+    }
+  }
+  if (!sync) plan.harnesses = await planHarnesses(ctx, plan.config, options.capabilities);
   if (command !== undefined) plan.hook = await planHookInstall(paths.settingsPath, command);
-  if (paths.root !== undefined) plan.project = await planProjectInstall(ctx, plan, paths.root, options.gitExclude !== false, from, runner);
-  if (options.force) {
+  if (paths.root !== undefined) plan.project = await planProjectInstall(ctx, plan, paths.root, options.gitExclude !== false, from, runner, sync);
+  if (sync) {
+    // An update runs with --yes or from an automatic check, so it never replaces what the user owns or edited.
+    for (const step of replaceableSteps(plan)) {
+      if (step.action !== "conflict") continue;
+      step.action = "keep";
+      step.reason = step.reason === "locally modified" ? "locally modified; omt install --force replaces it" : "not managed by omt";
+    }
+  } else if (options.force) {
     for (const step of replaceableSteps(plan)) {
       if (step.action === "conflict") step.action = "replace";
     }
@@ -578,7 +634,7 @@ export async function buildInstallPlan(ctx: CliContext, options: InstallOptions)
   return plan;
 }
 
-export function replaceableSteps(plan: InstallPlan): { action: PlanAction; path: string }[] {
+export function replaceableSteps(plan: InstallPlan): { action: PlanAction; path: string; reason?: string }[] {
   return [...plan.skills, ...plan.links, ...(plan.project === undefined ? [] : [plan.project.shim])];
 }
 
@@ -966,7 +1022,7 @@ export function renderInstallPlan(plan: InstallPlan): string {
   }
   for (const skipped of plan.skippedRoots) text += `  skip     ${skipped.path}  (${skipped.reason})\n`;
   text += "Config:\n";
-  text += line(plan.config.action, plan.config.path);
+  text += line(plan.config.action, plan.config.path, plan.config.reason);
   if (plan.harnesses !== undefined) text += renderHarnesses(plan.harnesses, plan.config);
   text += "Hooks:\n";
   text +=

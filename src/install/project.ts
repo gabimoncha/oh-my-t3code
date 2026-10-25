@@ -33,7 +33,8 @@ const RUNNER_COMMANDS: Readonly<Record<Runner, string>> = { npx: "npx --yes", pn
 
 // The runner that a one-shot cache path names. Each pattern starts at the cache root:
 // npx: `<npm cache>/_npx/<hash>/node_modules/`. pnpm 9 and later: `<pnpm cache>/dlx/<hash>/<id>/node_modules/`
-// (`pnpm`, or `pnpm-cache` on Windows), and pnpm 8 has no `<id>`. bunx: `<temp>/bunx-<uid>-<package>/node_modules/`.
+// (`pnpm`, or `pnpm-cache` on Windows), and pnpm 8 has no `<id>`. bunx: `<temp>/bunx-<uid>-<package>/node_modules/`,
+// and from Bun 1.4.4 `<bun install cache>/.bunx-<uid>/omt3@<version>/node_modules/`.
 // An older pnpm and yarn use `<temp>/dlx-<pid>/node_modules/`, which names no runner (null).
 // A custom pnpm cache-dir can have any name, so `<any>/dlx/<hash>/<id>/node_modules/` counts only when
 // pnpm runs the CLI, as npm_config_user_agent shows, and `<hash>/pkg` is the symlink to `<id>` that pnpm
@@ -57,6 +58,7 @@ function cacheRunner(path: string, temps: string[], agent: Runner | undefined): 
   if (/\/_npx\/[0-9a-f]+\/node_modules\//i.test(normalized)) return "npx";
   if (/\/pnpm(?:-cache)?\/dlx\/[^/]+\/(?:[^/]+\/)?node_modules\//i.test(normalized)) return "pnpm";
   if (agent === "pnpm" && isPnpmDlxEntry(normalized)) return "pnpm";
+  if (/\/\.bunx-\d+\/omt3@[^/]+\/node_modules\//.test(normalized)) return "bunx";
   for (const temp of temps) {
     if (!isWithin(temp, path)) continue;
     const rel = relative(temp, path).replaceAll("\\", "/");

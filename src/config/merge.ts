@@ -107,5 +107,6 @@ export function mergeLayer(
   Object.assign(config.limits, layer.limits ?? {});
   Object.assign(config.visuals, layer.visuals ?? {});
   if (layer.harnesses !== undefined) config.harnesses = [...layer.harnesses];
+  if (layer.update !== undefined) config.update = layer.update;
   return { config, issues };
 }

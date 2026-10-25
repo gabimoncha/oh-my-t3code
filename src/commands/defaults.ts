@@ -87,12 +87,26 @@ function setName(value: string, what: string): string {
   return name;
 }
 
+export interface DefaultsPin {
+  file: string;
+  kind: "user" | "project";
+  set: string;
+}
+
+// The config files whose "defaults" key pins a set, user file first.
+export async function defaultsPins(ctx: Pick<CliContext, "cwd" | "env" | "homedir">): Promise<DefaultsPin[]> {
+  return (await readConfigLayers(ctx)).flatMap((file) =>
+    file.layer.defaults === undefined ? [] : [{ file: file.path, kind: file.kind, set: file.layer.defaults }],
+  );
+}
+
 async function list(ctx: CliContext, json: boolean): Promise<number> {
   const loaded = await loadConfigReporting(ctx);
   const selected = loaded.config.defaults;
   const sets = defaultSetNames().map((name) => ({ name, latest: name === LATEST_DEFAULT_SET, selected: name === selected }));
   if (json) {
-    ctx.stdout(formatJson({ latest: LATEST_DEFAULT_SET, selected, source: loaded.defaultsSource, sets }));
+    const pins = await defaultsPins(ctx);
+    ctx.stdout(formatJson({ latest: LATEST_DEFAULT_SET, selected, source: loaded.defaultsSource, sets, pins }));
     return 0;
   }
   for (const set of sets) {

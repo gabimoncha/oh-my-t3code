@@ -35,7 +35,7 @@ With the default policy, on a branch that is not the default branch:
 - `omt-ulw` makes one commit for the run after the final checks pass. Then it pushes the branch and opens a ready PR, or the push updates the branch's open PR.
 - `omt-review` commits the approved fixes and qa tests and pushes them to the PR branch with no further question. For a PR by another author, it asks you first.
 
-A commit or push on the default branch asks you first. Each merge and each force push also asks you first. A config pinned to the default set `2026-10` has no `git` group, so each action that the config does not set asks. To change the policy, set `workflow.git` in a profile ([Write a custom profile](configuration.md#write-a-custom-profile)). The [spec](spec.md#515-omt-git) lists the rules.
+A commit or push on the default branch asks you first. Each merge and each force push also asks you first. A config pinned to the default set `2026-10` has no `git` group, so each action that the config does not set asks. To change the policy, set `workflow.git` in a profile ([Write a custom profile](configuration.md#write-a-custom-profile)). The [spec](spec.md#516-omt-git) lists the rules.
 
 ## Grill a goal before you plan
 

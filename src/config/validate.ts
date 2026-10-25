@@ -10,6 +10,7 @@ import type {
   ProfileConfig,
   RoleConfig,
   Rung,
+  UpdateMode,
   Visuals,
   Workflow,
   WorkflowLayer,
@@ -18,7 +19,8 @@ import { usageError } from "../util/errors.ts";
 import { defaultSetNames, isDefaultSet } from "./defaultSets.ts";
 import { isRecord } from "../util/json.ts";
 
-export const ROOT_KEYS: readonly string[] = ["$schema", "version", "defaults", "profile", "profiles", "models", "roles", "limits", "visuals", "harnesses"];
+export const ROOT_KEYS: readonly string[] = ["$schema", "version", "defaults", "profile", "profiles", "models", "roles", "limits", "visuals", "harnesses", "update"];
+export const UPDATE_VALUES: readonly UpdateMode[] = ["off", "check", "apply"];
 export const ROLE_KEYS: readonly string[] = [
   "description",
   "access",
@@ -486,6 +488,10 @@ export function validateLayer(value: unknown, source: string): { layer: ConfigLa
     } else if (key === "harnesses") {
       const harnesses = validateHarnesses(item, out);
       if (harnesses !== undefined) layer.harnesses = harnesses;
+    } else if (key === "update") {
+      const mode = UPDATE_VALUES.find((value) => value === item);
+      if (mode !== undefined) layer.update = mode;
+      else out.error(key, `must be "off", "check", or "apply", got ${describe(item)}`);
     }
   }
   return { layer, issues: out.issues };

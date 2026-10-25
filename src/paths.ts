@@ -37,6 +37,14 @@ export function manifestPath(env: Env, homedir: string): string {
   return join(configDir(env, homedir), "install.json");
 }
 
+export function updateStatePath(env: Env, homedir: string): string {
+  return join(configDir(env, homedir), "update-check.json");
+}
+
+export function projectsPath(env: Env, homedir: string): string {
+  return join(configDir(env, homedir), "projects.json");
+}
+
 export function userRolesDir(env: Env, homedir: string): string {
   return join(configDir(env, homedir), "roles");
 }

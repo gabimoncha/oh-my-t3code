@@ -1,5 +1,6 @@
-import { formatDoctor, runDoctor } from "../install/doctor.ts";
-import type { CommandRun } from "../types.ts";
+import { autoUpdate, formatDoctor, runDoctor } from "../install/doctor.ts";
+import type { UpdateCheckSeams } from "../install/doctor.ts";
+import type { CliContext } from "../types.ts";
 import { parseArgs } from "../util/args.ts";
 import { formatJson } from "../util/output.ts";
 import { readCapabilities } from "./shared.ts";
@@ -21,13 +22,16 @@ Options:
   -h, --help             print this help
 `;
 
-export const run: CommandRun = async (ctx) => {
+export async function run(ctx: CliContext, seams: UpdateCheckSeams = {}): Promise<number> {
   const { values } = parseArgs(ctx.argv, {
     capabilities: { type: "string" },
     json: { type: "boolean" },
     project: { type: "boolean" },
   }, { maxPositionals: 0 });
-  const report = await runDoctor(ctx, await readCapabilities(ctx, values.capabilities), values.project === true ? "project" : "user");
-  ctx.stdout(values.json ? formatJson(report) : formatDoctor(report));
+  const project = values.project === true;
+  const json = values.json === true;
+  const { report, daily } = await runDoctor(ctx, await readCapabilities(ctx, values.capabilities), project ? "project" : "user", seams);
+  ctx.stdout(json ? formatJson(report) : formatDoctor(report));
+  await autoUpdate(ctx, daily, { project, json }, seams);
   return report.ok ? 0 : 1;
-};
+}

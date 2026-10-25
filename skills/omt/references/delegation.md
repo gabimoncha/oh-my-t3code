@@ -231,6 +231,16 @@ Record a fallback dispatch with the fallback's provider and model, not the provi
 
 A failed child run (a provider error in `summary`) counts as a failed attempt. Record it as `failed`, then dispatch the same round again with the next attempt number, on the next rung if the error names the provider.
 
+## Pull requests
+
+When you create a pull request, also after the run ends, watch it at once. Do not wait for the user to ask.
+
+1. Call `link_pull_request` with the PR URL, then `watch_pull_request`, and end the turn.
+2. On each wake, read the checks with `gh pr checks <number>`. When a check fails, find the cause in its log, fix it, push the fix by the [Git actions](#git-actions) rules, and keep the watch.
+3. When every check has passed or was skipped, call `unwatch_pull_request` and tell the user the result.
+
+Without the watch tool, run `gh pr checks <number> --watch` instead, and apply steps 2 and 3. `omt-review` and `omt-swarm` have their own PR rules; follow those inside those skills.
+
 ## Top-level threads
 
 `delegate_task` makes children. Two other tools make ordinary top-level threads; use them only when the user explicitly asks for separate threads. Invoking `omt-swarm` is that request.

@@ -6,6 +6,9 @@ import { loadConfig } from "../config/load.ts";
 import { projectShimPath, skillRoots, t3SettingsPath } from "../paths.ts";
 import { resolveAll } from "../routing/resolve.ts";
 import type { Capabilities, CliContext, LoadedConfig } from "../types.ts";
+import { dailyCheck, recordApplyAttempt } from "../update/check.ts";
+import type { DailyResult } from "../update/check.ts";
+import { runUpdate } from "../update/flow.ts";
 import { errorMessage } from "../util/errors.ts";
 import { pathExists, readFileIfExists } from "../util/fs.ts";
 import { isRecord } from "../util/json.ts";
@@ -42,6 +45,12 @@ export interface DoctorCheck {
 export interface DoctorReport {
   ok: boolean;
   checks: DoctorCheck[];
+}
+
+// Each seam defaults to the real one; tests pass a counting fetch and a fake update flow.
+export interface UpdateCheckSeams {
+  fetch?: typeof fetch;
+  runUpdate?: typeof runUpdate;
 }
 
 type ScopeManifest = { manifest: Manifest | undefined } | { error: unknown };
@@ -357,15 +366,66 @@ function checkRoles(report: ReturnType<typeof resolveAll>): DoctorCheck {
   return check("roles", "PASS", `${plural(resolutions.length, "role")} resolve against orchestrator_capabilities`);
 }
 
-export async function runDoctor(ctx: CliContext, caps?: Capabilities, scope: InstallScope = "user"): Promise<DoctorReport> {
+export function checkUpdate(daily: DailyResult): DoctorCheck {
+  if (daily.error !== undefined) return check("update", "INFO", `the update check failed: ${daily.error}`);
+  if (daily.outdated) return check("update", "INFO", `omt ${daily.latest} is out; run omt update`);
+  return check("update", "PASS", `omt ${daily.current} is the latest (checked ${daily.checkedAt.slice(0, 10)})`);
+}
+
+export function updateNote(daily: DailyResult | undefined): string | undefined {
+  return daily?.outdated === true ? `note: omt ${daily.latest} is out; run omt update\n` : undefined;
+}
+
+// With `update: "apply"`, runs the update flow once per version, after the command's own output.
+// Returns true only after a successful update; otherwise the caller prints the note. The command keeps its exit code.
+export async function autoUpdate(
+  ctx: CliContext,
+  daily: DailyResult | undefined,
+  opts: { project: boolean; json: boolean },
+  seams: UpdateCheckSeams = {},
+): Promise<boolean> {
+  const latest = daily?.latest;
+  if (daily === undefined || !daily.outdated || latest === undefined) return false;
+  if (daily.mode !== "apply" || !ctx.isTTY || daily.applyAttempted) return false;
+  // With --json, stdout holds only the command's report, so the flow writes everything to stderr.
+  const flowCtx: CliContext = opts.json ? { ...ctx, stdout: ctx.stderr } : ctx;
+  const update = seams.runUpdate ?? runUpdate;
+  try {
+    await recordApplyAttempt(ctx, latest);
+    const code = await update(
+      flowCtx,
+      { check: false, dryRun: false, yes: true, skillsOnly: false, project: opts.project, json: opts.json },
+      { latest, ...(seams.fetch === undefined ? {} : { fetch: seams.fetch }) },
+    );
+    if (code === 0) return true;
+    ctx.stderr(`warning: the automatic update failed: omt update exited ${code}\n`);
+  } catch (error) {
+    ctx.stderr(`warning: the automatic update failed: ${errorMessage(error)}\n`);
+  }
+  return false;
+}
+
+export interface DoctorRun {
+  report: DoctorReport;
+  daily: DailyResult | undefined;
+}
+
+export async function runDoctor(
+  ctx: CliContext,
+  caps?: Capabilities,
+  scope: InstallScope = "user",
+  seams: UpdateCheckSeams = {},
+): Promise<DoctorRun> {
   const paths = scopePaths(ctx, scope);
   const loadedConfig = await loadConfig(ctx);
   const bundled = await listBundledSkills(ctx.packageRoot);
   const names = bundled.map((skill) => skill.name);
+  const daily = await dailyCheck(ctx, { mode: loadedConfig.config.update, ...(seams.fetch === undefined ? {} : { fetch: seams.fetch }) });
   const checks = [
     checkRuntime(ctx),
     checkConfig(loadedConfig),
     checkDefaults(loadedConfig),
+    ...(daily === undefined ? [] : [checkUpdate(daily)]),
     checkHarnesses(loadedConfig),
     await checkSkills(ctx, paths, bundled),
     await checkLinks(ctx, paths, names),
@@ -390,7 +450,7 @@ export async function runDoctor(ctx: CliContext, caps?: Capabilities, scope: Ins
   if (caps !== undefined) {
     checks.push(checkRoles(resolveAll(loadedConfig.config, caps, undefined, loadedConfig.config.harnesses)));
   }
-  return { ok: !checks.some((c) => c.status === "FAIL"), checks };
+  return { report: { ok: !checks.some((c) => c.status === "FAIL"), checks }, daily };
 }
 
 export function formatDoctor(report: DoctorReport): string {

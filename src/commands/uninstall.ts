@@ -1,6 +1,8 @@
 import { applyUninstall } from "../install/apply.ts";
 import { confirmApply } from "../install/confirm.ts";
 import { buildUninstallPlan, renderUninstallPlan, uninstallHasChanges } from "../install/plan.ts";
+import { projectsWarning, removeProjects } from "../install/projects.ts";
+import { projectsPath } from "../paths.ts";
 import type { CommandRun } from "../types.ts";
 import { parseArgs } from "../util/args.ts";
 import { plural } from "../util/output.ts";
@@ -51,6 +53,11 @@ export const run: CommandRun = async (ctx) => {
   if (!(await confirmApply(ctx, values.yes === true))) return 1;
 
   const result = await applyUninstall(plan, ctx.now());
+  if (plan.project !== undefined) {
+    await removeProjects(projectsPath(ctx.env, ctx.homedir), [plan.project.root]).catch((error: unknown) => {
+      ctx.stderr(projectsWarning(error));
+    });
+  }
   ctx.stdout(`Removed ${plural(result.changed.length, "path")}.\n`);
   for (const backup of result.backups) ctx.stdout(`backup   ${backup}\n`);
   ctx.stdout("Restart agent sessions in T3 Code so they stop loading the skills.\n");

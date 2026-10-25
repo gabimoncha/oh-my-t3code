@@ -36,6 +36,8 @@ export const USER_STARTER_CONFIG = `// oh-my-t3code user config. It applies to e
   },
   // Example: write the plan summary as text instead of showing the plan as a page.
   // "visuals": { "plan": false },
+  // Check for a new omt once a day in omt install and omt doctor (asks the npm registry).
+  // "update": "check",
 }
 `;
 

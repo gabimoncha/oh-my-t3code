@@ -17,6 +17,7 @@ import {
   ROLE_NAME_PATTERN,
   RUNTIME_MODE_VALUES,
   T3_ROLE_VALUES,
+  UPDATE_VALUES,
   WORKFLOW_RULES,
 } from "./validate.ts";
 
@@ -91,6 +92,10 @@ export const CONFIG_SCHEMA = {
           description: "Show a final plan as a page in the T3 thread. Default true.",
         },
       },
+    },
+    update: {
+      enum: [...UPDATE_VALUES],
+      description: "Check for a new omt once a day in omt install and omt doctor (asks the npm registry). apply also applies a found update. Read only from the user config. Default off.",
     },
     harnesses: {
       type: "array",

@@ -21,6 +21,7 @@ import * as profile from "./commands/profile.ts";
 import * as roles from "./commands/roles.ts";
 import * as route from "./commands/route.ts";
 import * as uninstall from "./commands/uninstall.ts";
+import * as update from "./commands/update.ts";
 import * as visual from "./commands/visual.ts";
 import * as worktree from "./commands/worktree.ts";
 import type { CliBuild, CliContext, CommandRun } from "./types.ts";
@@ -36,6 +37,7 @@ export interface CommandModule {
 export const COMMANDS: Readonly<Record<string, CommandModule>> = {
   install,
   uninstall,
+  update,
   doctor,
   init,
   config,
