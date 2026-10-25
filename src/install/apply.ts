@@ -10,7 +10,7 @@ import { movePath, newBackupDir, writeTargetFor } from "./fsops.ts";
 import { mergeManifest, writeManifest } from "./manifest.ts";
 import type { Manifest, ManifestFile, ManifestHook } from "./manifest.ts";
 import { replaceableSteps, sha256 } from "./plan.ts";
-import type { FileStep, HookStep, InstallPlan, SkillStep, UninstallPlan } from "./plan.ts";
+import type { FileStep, HookStep, InstallPlan, PlanAction, SkillStep, UninstallPlan } from "./plan.ts";
 import { BACKUPS_GITIGNORE } from "./project.ts";
 import { PACKAGE_NAME, writeMarker } from "./skills.ts";
 
@@ -68,7 +68,8 @@ async function removeScratchDirs(dirs: string[], result: ApplyResult): Promise<v
   }
 }
 
-// Builds the new skill directory next to the agents root, then swaps it into place.
+// Builds the new skill directory next to the agents root, then swaps it into place. The old folder must
+// still have the hash that the plan read. Else the old folder goes back, so an edit saved after the plan stays.
 async function installSkill(step: SkillStep, plan: InstallPlan): Promise<void> {
   const temp = scratchPath(plan.agentsRoot, "tmp");
   let old: string | undefined;
@@ -85,6 +86,12 @@ async function installSkill(step: SkillStep, plan: InstallPlan): Promise<void> {
     if (await pathExists(step.path)) {
       old = scratchPath(plan.agentsRoot, "old");
       await rename(step.path, old);
+      // The hash runs after the move, so a later write to the skill path cannot reach the folder that this run deletes.
+      if (step.installedHash === undefined || (await hashDir(old).catch(() => undefined)) !== step.installedHash) {
+        throw new OmtError("file_changed", `${step.path} changed after the plan was made; it was kept, and nothing more was written`, {
+          hint: "run the command again",
+        });
+      }
     }
     await rename(temp, step.path);
   } catch (error) {
@@ -228,7 +235,16 @@ function skipsHookBackup(plan: InstallPlan): boolean {
   return plan.project !== undefined && hook?.action === "update" && hook.before !== undefined && isOmtLayout(hook.before, hook.settingsPath);
 }
 
+// A sync owns only what the previous manifest owned, or what this run wrote. A kept conflict changes no
+// ownership: the merge keeps the previous record of an owned one, and an unowned one stays unowned.
+function owns(plan: InstallPlan, action: PlanAction, owned: boolean, existing: boolean): boolean {
+  if (plan.sync !== true) return !existing;
+  return action !== "keep" && (owned || ((action === "create" || action === "update" || action === "replace") && !existing));
+}
+
 function installManifest(plan: InstallPlan, now: Date, fields: Pick<Manifest, "config" | "hooks" | "backups" | "project">): Manifest {
+  const ownedSkills = new Set(plan.previous?.skills ?? []);
+  const ownedLinks = new Set((plan.previous?.links ?? []).map((link) => link.path));
   return {
     ...(plan.project === undefined ? {} : { scope: "project" as const, root: plan.project.root }),
     package: PACKAGE_NAME,
@@ -236,9 +252,11 @@ function installManifest(plan: InstallPlan, now: Date, fields: Pick<Manifest, "c
     installedAt: now.toISOString(),
     skillsRoot: plan.agentsRoot,
     // A project manifest lists only what an install owns; `project.existing` lists the rest.
-    skills: plan.skills.filter((step) => plan.project?.existing.skills.includes(step.name) !== true).map((step) => step.name),
+    skills: plan.skills
+      .filter((step) => owns(plan, step.action, ownedSkills.has(step.name), plan.project?.existing.skills.includes(step.name) === true))
+      .map((step) => step.name),
     links: plan.links
-      .filter((link) => plan.project?.existing.links.includes(link.path) !== true)
+      .filter((link) => owns(plan, link.action, ownedLinks.has(link.path), plan.project?.existing.links.includes(link.path) === true))
       .map((link) => ({ path: link.path, target: link.target })),
     ...fields,
   };

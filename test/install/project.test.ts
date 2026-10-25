@@ -123,7 +123,7 @@ test("install --project writes copies, relative links, config, shim, .gitignore,
   });
 
   assert.equal(readFileSync(f.exclude, "utf8"), `${GIT_EXCLUDE_DEFAULT}${block(f.project, ...SKILL_ENTRIES, ...CREATED_OMT)}\n`);
-  assert.deepEqual(snapshot(f.home), { "": "dir" }, "the home directory stays untouched");
+  assert.deepEqual(Object.keys(snapshot(f.home)), ["", ".config", ".config/oh-my-t3code", ".config/oh-my-t3code/projects.json"], "the home directory holds only the project list");
 
   const again = await f.runOk(["install", "--project", "--yes"]);
   assertAllUnchanged(again.ctx.out(), { ignoreNone: true });
@@ -270,7 +270,7 @@ test("uninstall --project removes what the install added and keeps plans and the
   assert.deepEqual(readdirSync(f.project).sort(), [".git", ".omt"]);
   assert.deepEqual(readdirSync(join(f.project, ".omt")).sort(), [".gitignore", "install.json", "ledger.jsonl", "plans"]);
   assert.deepEqual(readdirSync(join(f.project, ".omt", "plans")), ["demo.md"]);
-  assert.deepEqual(snapshot(f.home), { "": "dir" });
+  assert.deepEqual(readJson(join(f.home, ".config", "oh-my-t3code", "projects.json")), { version: 1, projects: [] });
 
   const g = projectFixture();
   await g.runOk(["install", "--project", "--hooks", "--yes"]);

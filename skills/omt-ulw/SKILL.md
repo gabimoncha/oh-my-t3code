@@ -203,6 +203,6 @@ Tell the user:
 
 Delete the stall heartbeat with `delete_scheduled_task`.
 
-Commit only when the user asked for a commit.
+Commit only when the user asked for a commit. When you create a pull request, also after the run ends, follow [delegation.md](../omt/references/delegation.md#pull-requests).
 
 Done when: every done condition from step 1 appears in the report with evidence or as an open item.

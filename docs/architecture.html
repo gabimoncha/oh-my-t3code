@@ -1552,7 +1552,7 @@ can dispatch: yes</code></pre>
       </tbody>
     </table>
   </div>
-  <p>The package has no runtime dependencies. The dev dependencies are <code>@types/bun</code> and <code>tsrs</code>. <code>src/</code> uses only <code>node:</code> built-in modules, because the npm bundle runs on Node. The CLI makes no network calls and sends no telemetry. All file writes are atomic, except the ledger append. <code>bun run verify</code> runs the type check and all tests.</p>
+  <p>The package has no runtime dependencies. The dev dependencies are <code>@types/bun</code> and <code>tsrs</code>. <code>src/</code> uses only <code>node:</code> built-in modules, because the npm bundle runs on Node. The CLI sends no telemetry. It contacts the npm registry only when you run <code>omt update</code>, or once a day in <code>omt install</code> and <code>omt doctor</code> after you set <code>update</code> in the user config. <code>omt update</code> runs the package manager or mise command of the channel that installed omt. All file writes are atomic, except the ledger append. <code>bun run verify</code> runs the type check and all tests.</p>
 </section>
 
 <!-- 12. Where to make a change -->

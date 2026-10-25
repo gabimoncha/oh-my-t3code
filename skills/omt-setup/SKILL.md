@@ -40,7 +40,7 @@ Run `omt doctor --project` for a project install, or `omt doctor` for a global i
 | `defaults` | 4 |
 | `worktree` | 5 |
 | `config` | 6 |
-| `skills` with `outdated`, or `hooks` | 7 |
+| `skills` with `outdated`, `hooks`, or `update` with `is out` | 7 |
 
 For another `WARN` or `FAIL` line, tell the user the fix that the line prints.
 
@@ -91,10 +91,10 @@ Done when: `omt config validate` exits 0, and `omt profile show <name>` shows th
 
 ### 7. Update omt
 
-1. Update the CLI with the update command of its channel, from [Update omt](https://github.com/gabimoncha/oh-my-t3code/blob/main/docs/agents/quickstart.md#update-omt). Show the command and ask. A one-shot install needs no update command.
-2. Run the install command of the channel again, with the flags of the first install. Run it with `--dry-run` first, then with `--yes` after the user agrees. Add `--capabilities <file>` when you have the file from step 3. For example: `omt install --project --hooks --yes --capabilities <file>`. For a one-shot install, add the new version, such as `npx omt3@<version> install --project --yes`.
-3. Run `omt defaults diff` and explain each line. When the user wants the new set, run step 4.
-4. The check: `omt doctor --project` for a project install, or `omt doctor` for a global install, as in step 2. Tell the user to close the T3 threads of this project and start new ones, because a running session keeps the old skills.
+1. Run `omt update --dry-run` and show the output. It names the channel and its update command (`run:`), the new shim pin of a one-shot install (`pin:`), or a `hint:`, and it lists each scope that the skills sync reaches. For a dev dependency, the hint names the package manager command; run it only after the user agrees.
+2. After the user agrees, run `omt update --yes`. Tell the user each `kept <skill>  (<reason>)` line: that skill stays as the user edited it. When it fails with `cannot reach the npm registry`, update by hand as [Update omt](https://github.com/gabimoncha/oh-my-t3code/blob/main/docs/agents/quickstart.md#update-omt) says.
+3. `--yes` never moves the `defaults` pin. For each `hint: run omt defaults use latest in <dir> to move the pin in <file>` line, explain the diff lines above it. When the user wants the new set, run step 4 for that file.
+4. The check: `omt doctor --project` for a project install, or `omt doctor` for a global install, as in step 2. When any skill changed, tell the user to close the T3 threads of this project and start new ones, because a running session keeps the old skills.
 
 Done when: the doctor command of item 4, with the scope of the install, prints a `PASS` line for `skills`, and the user knows to start new threads.
 

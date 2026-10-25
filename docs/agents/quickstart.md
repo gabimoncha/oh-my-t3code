@@ -4,7 +4,7 @@ Read this page when your user asks you to evaluate, install, or use oh-my-t3code
 
 ## What omt is
 
-omt is a set of skills and a small CLI for agents that run in [T3 Code](https://t3.codes). A T3 thread that runs an omt skill becomes a conductor: it writes a plan, sends each unit to a role-routed model as a T3 child task, and reviews and verifies the result. The CLI has no runtime dependencies, makes no network calls, and sends no telemetry.
+omt is a set of skills and a small CLI for agents that run in [T3 Code](https://t3.codes). A T3 thread that runs an omt skill becomes a conductor: it writes a plan, sends each unit to a role-routed model as a T3 child task, and reviews and verifies the result. The CLI has no runtime dependencies. The CLI sends no telemetry. It contacts the npm registry only when you run `omt update`, or once a day in `omt install` and `omt doctor` after you set `update` in the user config. `omt update` runs the package manager or mise command of the channel that installed omt.
 
 ## 1. Check the fit
 
@@ -267,58 +267,105 @@ Check: the user knows the budget and how to raise it.
 
 ## Update omt
 
-Do this when the user asks to update omt. After the CLI updates, the project keeps its copies of the old skills. Doctor then prints `WARN  skills   outdated: <skill> in <project>/.agents/skills; ...` and still exits 0.
+Do this when the user asks to update omt. `omt update` asks the npm registry for the latest version and runs the update command of the channel that installed omt. Then the new CLI syncs the skills in user scope and in each project that `omt install --project` recorded. A skill that the user edited stays as it is.
 
-1. Update the CLI with the command of its channel:
+In these steps, `omt` means the command of the install. With a project install, it is `.omt/bin/omt`, and you run it in the project root. With only a global install, it is `omt` from `PATH`.
 
-   | Channel | Update command |
-   | --- | --- |
-   | mise, release binary | `mise use -g github:gabimoncha/oh-my-t3code@latest` |
-   | mise, npm package | `mise use -g npm:oh-my-t3code@latest` |
-   | npm, global | `npm i -g oh-my-t3code@latest` |
-   | pnpm, global | `pnpm add -g oh-my-t3code@latest` |
-   | Bun, global | `bun add -g oh-my-t3code@latest` |
-   | npm dev dependency | `npm i -D oh-my-t3code@latest` |
-   | pnpm dev dependency | `pnpm add -D oh-my-t3code@latest` |
-   | Bun dev dependency | `bun add -D oh-my-t3code@latest` |
-   | One-shot | Nothing. Step 2 downloads the new version. |
-
-   Check: the command exits 0.
-
-2. In the project root, run the project install again with `--yes`. Use the install command of the channel from step 4, and the same flags as the first install. Drop `--hooks` if the user does not run Claude Code. For a one-shot install, add the new version to the package name, such as `npx omt3@<version>`. Without a version, the runner can reuse the version in its cache.
+1. Show the plan:
 
    ```sh
-   omt install --project --hooks --yes
+   omt update --dry-run
    ```
 
-   In a T3 thread, add `--capabilities <file>` as in step 4. The install does not change the existing config. When its `Harnesses` section ends with `run omt detect --write`, show the user the output of `.omt/bin/omt detect --capabilities <file> --write --dry-run` (leave out `--capabilities` outside a T3 thread). Run the same command with `--yes` instead of `--dry-run` only after the user agrees.
+   Show the output to the user. The output names the channel, such as `omt 0.2.0 (npm global); latest 0.3.0`. It then shows one of these lines:
 
-   Check: the command exits 0.
+   - `run: <command>`: the update command that omt runs. The mise channels write an exact pin into the global mise config, such as `github:gabimoncha/oh-my-t3code@0.3.0`, and the line says so.
+   - `pin: <project>/.omt/bin/omt -> <runner command>`: a one-shot install. omt writes the new version into the shim.
+   - `hint: <text>`: omt runs no update command. For a dev dependency, the hint names two commands of the project's package manager. The first updates the dependency, such as `pnpm add -D oh-my-t3code@0.3.0`, and changes `package.json` and the lockfile. The second syncs the skills with the new CLI, such as `pnpm exec omt update --skills-only --project`. Run the commands of the hint only after the user agrees, then go to step 3.
+   - `omt <version> is the latest`: only the skills sync.
 
-3. Check the skills:
+   Check: the command exits 0 and prints `Dry run: nothing was written.` If it fails with `cannot reach the npm registry`, update by hand as the last part of this section says.
+
+2. After the user agrees, apply the plan:
 
    ```sh
-   .omt/bin/omt doctor --project | grep -E '^PASS +skills '
+   omt update --yes
    ```
 
-   Check: the command prints `PASS  skills     11 skills installed in <project>/.agents/skills`. If it prints nothing, read the `skills` line of `.omt/bin/omt doctor --project` and fix it as "4. Install omt into the project" says.
+   Check: the command exits 0. Show the user each `kept <skill>  (<reason>)` line. These skills stay as they are. `omt install --project --force` replaces a locally modified skill.
 
-4. Compare the default sets. The update does not change the config.
+3. Check the skills. With only a global install, run `omt doctor` instead of `omt doctor --project`:
 
    ```sh
-   .omt/bin/omt defaults list
+   omt doctor --project | grep -E '^PASS +skills '
    ```
 
-   Read the `selected` mark. `selected (<file>)` means that `<file>` pins the set, and the config stays on that set. `selected (latest)` means that no config pins a set, so the config already follows the latest set, with any new defaults of this release.
+   Check: the command prints `PASS  skills     11 skills installed in <folder>`. If it prints nothing, run the doctor command without the pipe, and do the fix that its `skills` line prints.
 
-   - When a file pins the set, run `.omt/bin/omt defaults diff`. When it prints `no changes`, go to the next step. Otherwise show the lines to the user. A line that ends with `(overridden by <file>)` has no effect, because the user's config sets that value. When the user wants the new set, show the user the output of `.omt/bin/omt defaults use latest --dry-run`. Run the same command with `--yes` instead of `--dry-run` only after the user agrees.
-   - When no file pins the set, tell the user that the config follows the latest set. To keep the defaults fixed through later updates, show the user the output of `.omt/bin/omt defaults use latest --dry-run`. Run the same command with `--yes` instead of `--dry-run` only after the user agrees.
+4. Compare the default sets. `--yes` and `--skills-only` never move the `defaults` pin. For each config file that pins an older set, the command that synced the skills printed `hint: run omt defaults use latest in <dir> to move the pin in <file>`. That command is `omt update --yes` in step 2, the `--skills-only` command of a dev-dependency hint in step 1, or the `--skills-only` command of a manual update. When it printed no such hint, go to the next step.
 
-   Check: the user decided, and `.omt/bin/omt config validate` reports no errors.
+   Only `omt update` prints the diff before the hint. `--skills-only` prints the hint only. So do these steps for each hint, and run each command in the `<dir>` of the hint. `<dir>` can be another project. Use the `<cli>` and `<scope>` of the config file:
+
+   | Config file | `<dir>` | `<cli>` | `<scope>` |
+   | --- | --- | --- | --- |
+   | User config | the home folder | the absolute path of `omt`, such as `<project root>/.omt/bin/omt`. With only a global install, `omt`. | `--user` |
+   | Project config | a project root | `.omt/bin/omt` | `--project` |
+
+   `--project` selects the config of the project that holds the current folder, so the `cd` is necessary.
+
+   1. Show the user the dry run:
+
+      ```sh
+      (cd <dir> && <cli> defaults use latest <scope> --dry-run)
+      ```
+
+      Check that the first line is `<file>: defaults <set> -> <latest set>`, with the `<file>` of the hint. If it names another file, stop and show the user both paths. `<set>` is the pinned set.
+
+   2. Show the user the changes from the pinned set to the latest set:
+
+      ```sh
+      (cd <dir> && <cli> defaults diff <set> latest)
+      ```
+
+      A line that ends with `(overridden by <file>)` has no effect, because that config file sets the value.
+
+   3. Ask the user whether to move the pin. Only after the user agrees, run the dry-run command with `--yes` instead of `--dry-run`.
+
+   Check: the user decided for each file. In each folder where a pin moved, `omt config validate` reports no errors. For a project in `<dir>`, run `(cd <dir> && .omt/bin/omt config validate)`.
 
 5. Tell the user to close the T3 threads of this project and start new ones. A running session keeps the old skills.
 
    Check: the user confirms that the new threads are open.
+
+To update by hand, for example without network access to the npm registry, do these steps:
+
+1. Run the update command of the channel:
+
+   | Channel | Update command | New CLI |
+   | --- | --- | --- |
+   | mise, release binary | `mise use -g github:gabimoncha/oh-my-t3code@latest` | `mise exec github:gabimoncha/oh-my-t3code@<version> -- omt` |
+   | mise, npm package | `mise use -g npm:oh-my-t3code@latest` | `mise exec npm:oh-my-t3code@<version> -- omt` |
+   | npm, global | `npm i -g oh-my-t3code@latest` | `omt` |
+   | pnpm, global | `pnpm add -g oh-my-t3code@latest` | `omt` |
+   | Bun, global | `bun add -g oh-my-t3code@latest` | `omt` |
+   | npm dev dependency | `npm i -D oh-my-t3code@latest` | `npx omt` |
+   | pnpm dev dependency | `pnpm add -D oh-my-t3code@latest` | `pnpm exec omt` |
+   | Bun dev dependency | `bun add -D oh-my-t3code@latest` | `bunx omt` |
+   | One-shot | Run the project install again with the new version, such as `npx omt3@<version> install --project --yes`. Without a version, the runner can reuse the version in its cache. | `.omt/bin/omt` |
+
+   For mise, `<version>` is the version in the `tools:` line that `mise use -g` prints. The project shim of a mise install records the path of the old version, and mise keeps that version. So until the sync in step 2 rewrites the shim, `.omt/bin/omt` still runs the old CLI. The shim of a dev dependency can also record an old CLI file, such as an old folder of the shared pnpm store. So for a dev dependency, the new CLI runs through the package manager.
+
+   Check: `<new CLI> --version` prints the new version.
+
+2. In the project root, sync the skills with the new CLI from the table. For a global install with no project install, run it in any folder:
+
+   ```sh
+   <new CLI> update --skills-only --yes
+   ```
+
+   It uses no network. It syncs the user scope of a global install and each recorded project that runs the same channel, and rewrites the shim of each of these projects to run the new CLI. A project of another channel or another one-shot pin shows a `skip` line, with the command to run in that project.
+
+   Check: the command exits 0. Then do steps 3 to 5 above with `omt` as the start of this section says.
 
 ## Uninstall
 
