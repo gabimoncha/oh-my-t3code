@@ -1,6 +1,6 @@
 # How the omt workflows run
 
-This page tells you what omt does in a pull request review, how it adds tests, how parallel workers share builds, and what a plan page shows. To change these steps, see [Configure roles and profiles](configuration.md).
+This page tells you what omt does in a pull request review, when it commits and opens a PR, how it adds tests, how parallel workers share builds, and what a plan page shows. To change these steps, see [Configure roles and profiles](configuration.md).
 
 ## Review a pull request
 
@@ -22,9 +22,24 @@ The skill does these steps in order:
 8. It proposes deterministic checks, rule corrections, or new rules. It saves new proposals in `.omt/guardrails.md`, which git ignores, for separate work.
 9. It reports CRAP for the changed functions. CRAP combines complexity and test coverage. A value above 30 becomes a P2 finding. Without coverage data, the calculation uses zero coverage.
 10. It reports the findings, the CI fixes, the screenshots, the flows without tests, the proposals, and the command that returns you to your branch.
-11. It offers a fix loop, the exact e2e test lines for verified flows without tests, and a commit and push. Each offer needs your approval. If the project has no e2e framework, qa reports `INCONCLUSIVE`.
+11. It offers a fix loop and the exact e2e test lines for verified flows without tests. Each offer needs your approval. If the project has no e2e framework, qa reports `INCONCLUSIVE`. Then it commits the approved changes and pushes them by the [git policy](#commit-push-and-open-a-pr).
 
 The first-round reviewers and the oracle read the saved PR commits. Reviews after a fix read the working tree. The skill posts no GitHub comment and no GitHub review. Other profiles can skip steps with `workflow.review`. The [spec](spec.md#154-pull-request-review) lists the switches and the rules.
+
+## Commit, push, and open a PR
+
+The git policy in your config decides each commit, push, PR, and merge. Before each one, the skill runs `omt git check <commit|push|pr|merge>` and acts on its answer: on `auto` it acts, on `ask` it asks you first, and on `off` it skips the action and says so.
+
+With the default policy, on a branch that is not the default branch:
+
+- `omt-ulw` makes one commit for the run after the final checks pass. Then it pushes the branch and opens a ready PR, or the push updates the branch's open PR.
+- `omt-review` commits the approved fixes and qa tests and pushes them to the PR branch with no further question. For a PR by another author, it asks you first.
+
+A commit or push on the default branch asks you first. Each merge and each force push also asks you first. A config pinned to the default set `2026-10` has no `git` group, so each action that the config does not set asks. To change the policy, set `workflow.git` in a profile ([Write a custom profile](configuration.md#write-a-custom-profile)). The [spec](spec.md#516-omt-git) lists the rules.
+
+## Grill a goal before you plan
+
+Use the `omt-grill` skill when your goal is vague or you do not know its edge cases yet. In each round, one Claude task and one Codex task read the goal and the code, and they do not see each other. The models decide the areas that you do not know and give a reason for each decision. You answer the questions in the areas that you know, and you accept or change each edge case, in one reply per round. The skill writes the result to a grill file, and `omt-plan` reads it, asks no settled question again, and turns the accepted and changed edge cases into integration or unit tests.
 
 ## Add tests only from the plan
 

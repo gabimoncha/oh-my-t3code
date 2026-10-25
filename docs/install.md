@@ -8,7 +8,7 @@ You install omt in two parts. First, install the `omt` CLI from a package regist
 - The project install puts omt into one repository. It does not change `~/.agents/skills`, `~/.claude`, or your `PATH`. Start here.
 - The global install installs the skills for your user, so every project gets them.
 
-Both modes install the same 11 skills, including `omt-help`, which answers questions about omt, and `omt-setup`, which changes the setup for you. After either install, restart your agent sessions in T3 Code. A running session does not load new skills.
+Both modes install the same 12 skills, including `omt-help`, which answers questions about omt, and `omt-setup`, which changes the setup for you. After either install, restart your agent sessions in T3 Code. A running session does not load new skills.
 
 If you are a coding agent, follow the [agent quick start](agents/quickstart.md) instead. It has the same project install as steps with checks.
 

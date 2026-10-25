@@ -142,11 +142,11 @@ Expect these lines, with paths in the user's project:
 
 ```text
 PASS  runtime    <runtime>
-PASS  config     15 roles
-PASS  defaults   2026-10 (pinned, latest)
+PASS  config     16 roles
+PASS  defaults   2026-11 (pinned, latest)
 PASS  harnesses  claudeAgent, codex
-PASS  skills     11 skills installed in <project>/.agents/skills
-PASS  links      11 links in <project>/.claude/skills
+PASS  skills     12 skills installed in <project>/.agents/skills
+PASS  links      12 links in <project>/.claude/skills
 PASS  hooks      Claude UserPromptSubmit hook in <project>/.claude/settings.local.json
 PASS  shim       <project>/.omt/bin/omt
 PASS  exclude    omt block in <project>/.git/info/exclude
@@ -247,7 +247,7 @@ Tell the user how to change them:
 
 - Pick a profile for one run: `$omt-ulw --profile prototype <task>`. Pick a default: set `"profile": "<name>"` in `.omt/config.jsonc`. Switch a running plan: `.omt/bin/omt plan profile <slug> <name>`.
 - Write a profile: add it under `profiles` in `.omt/config.jsonc` (this project) or `~/.config/oh-my-t3code/config.jsonc` (all projects). A profile `extends` a preset and can switch workflow steps and override roles, models, and limits. A profile without `extends` inherits `normal`. [Configure roles and profiles](../configuration.md#write-a-custom-profile) has an example.
-- Add a custom role: add it under `roles` in the same config files. A new role needs `description`, `access`, and `chain`. Its `result` field picks the result block: `work`, `review`, `test`, `research`, `plan`, or `guardrail`.
+- Add a custom role: add it under `roles` in the same config files. A new role needs `description`, `access`, and `chain`. Its `result` field picks the result block: `work`, `review`, `test`, `research`, `plan`, `guardrail`, or `grill`.
 - Add a persona: write `.omt/roles/<role>.md`. Its content is the persona and rules for that role, and it replaces the bundled persona. The lookup order is `.omt/roles/`, then `~/.config/oh-my-t3code/roles/`, then the bundled personas.
 - Fit the harnesses: `.omt/bin/omt detect` prints which harnesses can run and the `"harnesses"` value that fits them. `.omt/bin/omt detect --write --dry-run` shows the change, and `--yes` instead of `--dry-run` writes it. In a T3 thread, add `--capabilities <file>` from step 4 to each of these commands.
 - Let an agent do it: the user can ask `$omt-setup` for any of these changes.

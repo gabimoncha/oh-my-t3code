@@ -30,6 +30,7 @@ function workflowGroup(rules: (typeof WORKFLOW_RULES)[keyof typeof WORKFLOW_RULE
   const properties = Object.fromEntries(Object.entries(rules).map(([key, rule]) => {
     if ("values" in rule) return [key, { enum: [...rule.values] }];
     if ("items" in rule) return [key, { type: "array", items: { enum: [...rule.items] } }];
+    if ("strings" in rule) return [key, { type: "array", items: { type: "string", pattern: rule.strings } }];
     const integer = { type: "integer", minimum: rule.minimum, maximum: rule.maximum };
     return [key, "auto" in rule ? { oneOf: [{ const: "auto" }, integer] } : integer];
   }));
@@ -171,6 +172,7 @@ export const CONFIG_SCHEMA = {
         design: workflowGroup(WORKFLOW_RULES.design),
         build: workflowGroup(WORKFLOW_RULES.build),
         review: workflowGroup(WORKFLOW_RULES.review),
+        git: workflowGroup(WORKFLOW_RULES.git),
       },
     },
   },

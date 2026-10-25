@@ -32,16 +32,18 @@ ELECTRON_RUN_AS_NODE=1 "$T3_ACP_MCP_NODE" ${T3_ACP_MCP_ENTRYPOINT:+"$T3_ACP_MCP_
 Do not call `orchestrator_capabilities` to read your modes. Use it only for the provider and model catalog ([roles.md](roles.md)). Its result is large, so save it to a temp file and read only the fields you need.
 
 - `default`: follow the skill as written.
-- `plan`: you are read-only too. Dispatch only read-only roles (`explore`, `research`, `plan-review`, `review`, `oracle`). Write no files: run no `omt init`, `omt plan new`, `omt plan mark`, or `omt ledger add`, and save no evidence files. Commands that only print (`omt roles`, `omt brief`, `omt ledger stats`, `omt plan status`) are fine. Count your dispatched and active tasks yourself against the limits. Settle each child after you read its result ([Releasing children](#releasing-children)). Deliver the plan or the report in your final message. When the work needs files or edit roles, ask the user to switch the thread to default mode and stop.
+- `plan`: you are read-only too. Dispatch only read-only roles (`explore`, `research`, `plan-review`, `grill`, `review`, `oracle`). Write no files: run no `omt init`, `omt plan new`, `omt plan mark`, or `omt ledger add`, and save no evidence files. Commands that only print (`omt roles`, `omt brief`, `omt ledger stats`, `omt plan status`) are fine. Count your dispatched and active tasks yourself against the limits. Settle each child after you read its result ([Releasing children](#releasing-children)). Deliver the plan or the report in your final message. When the work needs files or edit roles, ask the user to switch the thread to default mode and stop.
 
 ## Branch check
 
 Step 0 checks whether the current branch is behind the default branch. A worktree can start from an old base.
 
-1. Find the default branch from the repository metadata. Use the first that gives a result:
-   1. `git symbolic-ref --quiet --short refs/remotes/origin/HEAD`, with the `origin/` prefix removed.
-   2. `git config init.defaultBranch`, when that branch exists (`git rev-parse --verify --quiet <name>`).
-   3. `main` or `master`, whichever exists.
+1. Find the default branch from the repository metadata. Use the first that gives a result, and keep its full ref as `<default>`:
+   1. `git symbolic-ref --quiet refs/remotes/origin/HEAD`. It prints the full ref `refs/remotes/origin/<name>`.
+   2. `git config init.defaultBranch`, when that branch exists (`git rev-parse --verify --quiet refs/heads/<name>`). The full ref is `refs/heads/<name>`.
+   3. `main` or `master`, whichever exists as a branch (the same `refs/heads/<name>` check). The full ref is `refs/heads/<name>`.
+
+   Use the full ref `<default>` in every later command. A short name can select a tag with the same name. Report the branch by its short name.
 
    When none gives a result, skip the check and tell the user that you skipped it.
 2. Count the commits: `git rev-list --count HEAD..<default>`. When the count is 0, continue.
@@ -52,6 +54,34 @@ Step 0 checks whether the current branch is behind the default branch. A worktre
 ## Worktree setup
 
 A worktree thread needs the project's T3 setup script to install dependencies. On the first run in a project, check it with `omt worktree check` and follow [worktrees.md](worktrees.md). A `t3.json` file is not proof that T3 runs it.
+
+## Git actions
+
+The git policy in the config (`workflow.git`) is the owner's standing approval for each action that it marks `auto`.
+
+- Before each commit, push, PR, or merge, run `omt git check <commit|push|pr|merge> --plan <slug> --json`. In a run with no plan file, pass `--profile <profile>` instead of `--plan <slug>`.
+- Once per run, get the `origin` host from the `host` field of a first `omt git check <action> --json` call. Then get the user's login on that host with `gh api --hostname <host> user -q .login`. Pass both to each check as `--user <login> --host <host>`. When the `host` field is `null` or the login cannot be read, ask the owner. Without `--user`, the check gives `ask` in a repo with an `origin` remote.
+- Each `gh` PR command names the checked repo with `--repo <host>/<owner>/<repo>`, from the `host`, `owner`, and `repo` fields of the check. Never take the repo from `GH_REPO` or the current folder.
+- List every open PR from the branch with `gh pr list --repo <host>/<owner>/<repo> --head <branch> --state open --json number,author,headRefName,headRepositoryOwner,url --limit 100`. Keep only the PRs whose `headRefName` is the current branch and whose `headRepositoryOwner` login is the checked `owner`. When any kept PR has an author that is not the user, pass `--pr-author` with that author's login, so that the check asks. When the user wrote all kept PRs, pass `--pr-author <user>`. When no PR is kept, pass no `--pr-author`. When the command fails or returns 100 PRs, ask the owner. This applies to `commit`, `push`, `pr`, and `merge`. The list covers open PRs in the checked repo only: when another person opens a PR from the user's branch into another repo, such as an upstream repo, the check does not see it, and a push to the branch also updates that PR.
+- The policy acts with no question only on the user's own work: a repo whose `origin` fetch URL and every push URL are on the login's host and have an owner that is the user or is in `workflow.git.owners`, and a PR that the user wrote. Another person's repo, an org repo that `workflow.git.owners` does not list, a push URL to another owner or another repo, and another author's PR give `ask`.
+- Push only with `git push origin HEAD:<branch>`. The explicit remote keeps `branch.<name>.pushRemote` and `remote.pushDefault` from sending the push elsewhere. Never push to another remote.
+- On `auto`, act. On `ask`, ask the owner and wait. On `off`, do not act, and say so in the report. The `reason` field tells why.
+- When `omt git check` exits non-zero or prints no decision, treat it as `ask`.
+- Before the run's first edit task, save the output of `git status --porcelain` under `Log` in the plan. In a run with no plan file, save it in a file in the evidence directory (`omt paths --evidence`).
+- At commit time, stage only the paths that the run changed and that the saved list does not name. These are the owned paths.
+- Before the commit, run `git commit --dry-run --porcelain --only -- <owned paths>`. Each line with a letter in the first column is a path that the commit takes. Check that each of these paths is an owned path. When the commit takes another path, do not commit. Ask the owner.
+- Commit only the owned paths: `git commit --only -m <message> -- <owned paths>`. Changes that another session staged stay staged and stay out of the commit.
+- Never run a plain `git commit` or `git commit -a`.
+- A path in the saved list was already changed before the run. It holds changes that the run does not own. Do not stage it. Ask the owner, and name it in the report.
+- When the saved list is missing, or you cannot tell which changes are the run's, ask the owner before the commit.
+- Leave other changes alone, and name them in the report.
+- Follow the repository's commit conventions in `AGENTS.md` and the recent `git log`.
+- Children never commit, push, or create branches.
+- A PR is a ready PR against the base that the run was given, for example, for a stacked `omt-swarm` track, the previous track's branch. With no given base, the PR goes against the `defaultBranch` field that `omt git check pr --json` prints. When that field is `null`, ask the owner for the base. Open the PR only in the `origin` repo, with `gh pr create --repo <host>/<owner>/<repo>` from the `host`, `owner`, and `repo` fields of the check. A PR to a repo of another owner, such as an upstream repo of a fork, always asks the owner.
+- When the branch already has an open PR, the push updates it. Do not open a second PR.
+- Link each PR with `link_pull_request` when available.
+- A force push always asks the owner, whatever the policy says. So a rebase of a pushed branch needs the owner's yes before `git push --force-with-lease`.
+- In `plan` interaction mode, make no git action.
 
 ## `delegate_task`
 
@@ -206,7 +236,7 @@ A failed child run (a provider error in `summary`) counts as a failed attempt. R
 When you create a pull request, also after the run ends, watch it at once. Do not wait for the user to ask.
 
 1. Call `link_pull_request` with the PR URL, then `watch_pull_request`, and end the turn.
-2. On each wake, read the checks with `gh pr checks <number>`. When a check fails, find the cause in its log, fix it, push the fix, and keep the watch.
+2. On each wake, read the checks with `gh pr checks <number>`. When a check fails, find the cause in its log, fix it, push the fix by the [Git actions](#git-actions) rules, and keep the watch.
 3. When every check has passed or was skipped, call `unwatch_pull_request` and tell the user the result.
 
 Without the watch tool, run `gh pr checks <number> --watch` instead, and apply steps 2 and 3. `omt-review` and `omt-swarm` have their own PR rules; follow those inside those skills.

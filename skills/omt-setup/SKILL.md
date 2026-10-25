@@ -83,7 +83,7 @@ Done when: you finished each step of worktrees.md that applies to this checkout.
 ### 6. Change a profile or a role
 
 1. Run `omt config path`. Use the project file for one project, and the user file for all projects. When the file is absent, propose `omt init` (project) or `omt config init` (user), and ask.
-2. Read the file and `omt config show --defaults`. Write the planned JSONC edit as the new block, with its key path. Keep the rules of the [configuration guide](https://github.com/gabimoncha/oh-my-t3code/blob/main/docs/configuration.md): a new role needs `description`, `access`, and `chain`; a new profile needs `description`; a `chain` replaces the old chain as a whole; `null` removes a role; `"profile": "<name>"` selects the default profile.
+2. Read the file and `omt config show --defaults`. Write the planned JSONC edit as the new block, with its key path. Keep the rules of the [configuration guide](https://github.com/gabimoncha/oh-my-t3code/blob/main/docs/configuration.md): a new role needs `description`, `access`, and `chain`; a new profile needs `description`; a `chain` replaces the old chain as a whole; `null` removes a role; `"profile": "<name>"` selects the default profile; `workflow.git.owners` lists the GitHub orgs whose repos count as the user's own for the git policy, and the default is none.
 3. Show the edit and ask. After the user agrees, make the edit and keep every other byte of the file, comments included.
 4. The check: `omt config validate`, then `omt profile show <name>` for the profile that the change affects.
 

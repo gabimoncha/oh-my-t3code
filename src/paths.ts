@@ -202,6 +202,14 @@ export function planPath(root: string, slug: string): string {
   return join(plansDir(root), `${slug}.md`);
 }
 
+export function grillsDir(root: string): string {
+  return join(omtDir(root), "grills");
+}
+
+export function grillPath(root: string, slug: string): string {
+  return join(grillsDir(root), `${slug}.md`);
+}
+
 export function ledgerPath(root: string): string {
   return join(omtDir(root), "ledger.jsonl");
 }

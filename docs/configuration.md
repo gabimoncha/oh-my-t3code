@@ -34,6 +34,7 @@ A role, such as `execute` or `review`, maps to an ordered chain of provider, mod
 | `research` | Answer a question from docs, the web, and code | GPT-6.1-Sol, low | Claude Opus 5.5, low |
 | `plan` | Turn a goal into a plan file | Claude Opus 5.5, xhigh | GPT-6-Astra, xhigh |
 | `plan-review` | Check a plan for gaps | GPT-6-Astra, high | Claude Opus 5.5, high |
+| `grill` | Test a goal before it has a plan: edge cases, questions, and options | GPT-6-Astra, high | Claude Opus 5.5, high |
 | `execute` | Implement one planned unit | Claude Opus 5.5, medium | GPT-6.1-Sol, xhigh |
 | `quick` | Make a small, mechanical change | GPT-6-Luna, high | Claude Sonnet 5.5, low |
 | `deep` | Solve a hard or cross-cutting problem | Claude Opus 5.5, max | GPT-6-Astra, xhigh |
@@ -48,11 +49,11 @@ A role, such as `execute` or `review`, maps to an ordered chain of provider, mod
 
 The fallback runs only when T3 refuses the first choice. `design` and `ui` have no fallback. Designs come only from Claude Opus 5.5, and you are the design review.
 
-`plan-review`, `review`, and `oracle` are cross-family roles. The reviewer comes from the other model family than the worker. GPT-6-Astra reviews Claude work, and Claude Opus 5.5 reviews GPT work. The skills pass the worker to `omt brief --against`, and the CLI puts the rungs of the other family first. When the other family is not available, the same family reviews. A build oracle uses the family that did not do most of the implementation. A review oracle uses the family that did not do most of the reviews.
+`plan-review`, `grill`, `review`, and `oracle` are cross-family roles. The reviewer comes from the other model family than the worker. GPT-6-Astra reviews Claude work, and Claude Opus 5.5 reviews GPT work. The skills pass the worker to `omt brief --against`, and the CLI puts the rungs of the other family first. When the other family is not available, the same family reviews. A build oracle uses the family that did not do most of the implementation. A review oracle uses the family that did not do most of the reviews.
 
 Claude models run on the `claudeAgent` driver, and GPT models run on the `codex` driver. Each default rung also names the T3 built-in provider instance of its driver. T3 checks a named instance again before it refuses it. A target with only a driver can fail because of an old provider snapshot.
 
-The read-only roles are `explore`, `research`, `plan-review`, `review`, `oracle`, and `guardrail`. They run in T3 plan mode. On Claude, Codex, Cursor, and OpenCode, plan mode stops the child from editing files. T3 has no plan mode for Pi, so only its brief stops a Pi child in a read-only role. No default role uses Pi.
+The read-only roles are `explore`, `research`, `plan-review`, `grill`, `review`, `oracle`, and `guardrail`. They run in T3 plan mode. On Claude, Codex, Cursor, and OpenCode, plan mode stops the child from editing files. T3 has no plan mode for Pi, so only its brief stops a Pi child in a read-only role. No default role uses Pi.
 
 Run `omt roles` to see how each role resolves with your config.
 
@@ -109,7 +110,7 @@ Add the role under `roles` in either config file. A new role needs `description`
 | `description` | Text of at most 300 characters. Agents read it in `omt roles` and in the skills. | Required. |
 | `access` | `read-only` or `edit`. | Required. |
 | `chain` | 1 to 10 rungs. | Required. |
-| `result` | The result block that the child ends with: `work`, `review`, `test`, `research`, `plan`, or `guardrail`. | `work` for `edit`, `research` for `read-only`. |
+| `result` | The result block that the child ends with: `work`, `review`, `test`, `research`, `plan`, `guardrail`, or `grill`. | `work` for `edit`, `research` for `read-only`. |
 | `t3Role` | The `role` value that omt passes to the T3 `delegate_task` tool: `implementation`, `research`, `review`, `design`, `test`, or `general`. | `implementation` for `edit`, `research` for `read-only`. |
 | `interactionMode` | The T3 interaction mode of the child: `inherit`, `default`, or `plan`. `plan` stops the child from editing files. | `default` for `edit`, `plan` for `read-only`. |
 | `runtimeMode` | The T3 runtime mode of the child: `inherit`, `approval-required`, `auto-accept-edits`, `auto`, or `full-access`. A child cannot get a broader mode than its parent thread. | `inherit`. |
@@ -164,7 +165,7 @@ Add the profile under `profiles` in either config file. The starter configs hold
 | --- | --- |
 | `description` | Text of at most 300 characters. Required for a new profile. Without it, omt drops the profile and `omt config validate` reports the error. |
 | `extends` | The name of the parent profile. A profile without `extends` inherits `normal`. |
-| `workflow` | Switches of the plan, design, build, and review steps, per group and key. The [spec](spec.md#67-profiles-and-workflow) lists every key and its values. |
+| `workflow` | Switches of the plan, design, build, and review steps, per group and key. The `git` group sets when the skills commit, push, open a PR, or merge without a question (`auto`) and when they ask first (`ask`). Its `owners` key lists the GitHub orgs whose repos count as your own; the default is none, so an org repo asks. The [spec](spec.md#67-profiles-and-workflow) lists every key and its values. |
 | `limits` | Limits for runs with this profile. See [Set limits](#set-limits). |
 | `roles` | Role overrides, with the fields of [Add a custom role](#add-a-custom-role). |
 | `models` | Settings per model id. The only setting is `fast`. |
@@ -227,7 +228,7 @@ The first value that is set wins: the rung `fast`, the role `fast`, the model `f
 
 ## Pin the default set
 
-Each omt release ships dated default sets. A set holds every built-in role, profile, limit, model setting, and visual setting. The only set today is `2026-10`. A set does not change after its release. New defaults go into a new set with a later name.
+Each omt release ships dated default sets. A set holds every built-in role, profile, limit, model setting, and visual setting. The sets today are `2026-10` and `2026-11`, which adds the `grill` role. A set does not change after its release. New defaults go into a new set with a later name.
 
 The `"defaults"` key pins one set:
 
@@ -235,11 +236,11 @@ The `"defaults"` key pins one set:
 {
   "$schema": "https://raw.githubusercontent.com/gabimoncha/oh-my-t3code/main/schema/omt.schema.json",
   "version": 1,
-  "defaults": "2026-10"
+  "defaults": "2026-11"
 }
 ```
 
-Each new starter config pins the latest set. Your overrides apply on top of the pinned set, and an omt update does not change them. The project config's pin wins over the user config's. A config without a pin follows the latest set, so its defaults can change when you update omt. For such a config, the `defaults` line of `omt doctor` says `2026-10 (latest, not pinned); run omt defaults use latest to pin`.
+Each new starter config pins the latest set. Your overrides apply on top of the pinned set, and an omt update does not change them. The project config's pin wins over the user config's. A config without a pin follows the latest set, so its defaults can change when you update omt. For such a config, the `defaults` line of `omt doctor` says `2026-11 (latest, not pinned); run omt defaults use latest to pin`.
 
 After an omt update, compare your set with the new one, then move the pin:
 

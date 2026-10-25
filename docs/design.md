@@ -38,6 +38,10 @@ The `plan-review`, `review`, and `oracle` roles are cross-family. The skill pass
 
 The ledger records the provider of each dispatch. So `--against auto` finds the worker of a unit, or the main implementer of a plan, without help from the agent.
 
+### A grill runs before the plan
+
+A plan reviewer finds a missing edge case as a gap in a written plan. At that point the plan has units, scopes, and a test list, and each fix changes them. So `omt-grill` tests the goal before a plan exists, while a change costs one line in a grill file. Each round runs one Claude and one Codex child that do not see each other. The aim is coverage, not agreement: two families with different blind spots find more edge cases, and a disagreement shows a real choice. The user knows some areas and not others. In an area that the user does not know, the models decide and give the reason, so the user answers only the questions that they can answer well. `omt-plan` reads the grill file, asks no settled question again, and turns the accepted and changed edge cases into test lines.
+
 ### Designs come from Opus, and the owner steers
 
 The `design` role makes design variants and the design spec, and the `ui` role implements a UI unit from that spec. Both run only on Claude Opus 5.5: `design` at high effort, `ui` at medium. Neither has a fallback to another family. The owner chose this rule, because Opus is far better at design, and a human steers taste. No model reviews a design: `review`, `oracle`, and `plan-review` tasks leave `docs/design/` out. The designer makes a new Paper file for each project and uses `design.variants` for each screen, 3 in the normal profile, so the owner compares real options side by side. The owner picks one variant per screen, may mix variants across screens, steers them in their own words, and approves the spec. Code review of `ui` units still runs as for any other unit.
@@ -103,6 +107,10 @@ T3 keeps a finished child loaded for 30 idle minutes. Codex then keeps the threa
 ### Profiles select the workflow
 
 A role selects a model. A profile selects the plan, build, and review steps. Keeping those choices separate lets a project use the same roles for normal work, prototypes, and PR reviews. Sparse profile overrides inherit `normal`, so a custom workflow states only its differences. A plan header keeps the selected profile across context resets. The conductor reloads it on wake so an owner can switch the remaining work.
+
+### Git actions follow a config policy
+
+Most owners work on branches and worktrees, where a question before each commit, push, and PR only adds a turn. Agent harnesses commit only when the user asks or gives standing approval. So the policy in `workflow.git` is that standing approval: the owner writes it once and can change it per profile. `omt git check` finds the current and default branch in code, so the decision does not depend on a model's reading of git output. A commit or push on the default branch asks first, because a wrong commit there reaches everyone who builds on that branch. A merge asks first, because it puts the change into the base branch, and that decision belongs to the owner. A force push always asks, because it can remove commits from the remote. Only the user's own repos and PRs act with no question, because there the policy states the user's intent. Another person's repo or PR always needs the user's yes, because the policy cannot speak for that person.
 
 ### Verification and test writing are separate
 

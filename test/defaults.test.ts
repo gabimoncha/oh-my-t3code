@@ -1,15 +1,41 @@
 import { test } from "bun:test";
 import assert from "node:assert/strict";
+import { join } from "node:path";
 import { DEFAULT_CONFIG } from "../src/config/defaults.ts";
 import { LATEST_DEFAULT_SET } from "../src/config/defaultSets.ts";
+import { loadConfig } from "../src/config/load.ts";
 import { PROJECT_STARTER_CONFIG, USER_STARTER_CONFIG } from "../src/config/starter.ts";
 import { EFFORT_LADDER } from "../src/types.ts";
+import { fakeContext, tempDir, writeFile } from "./helpers.ts";
+
+test("a config pinned to 2026-10 has no grill role and the latest set has its exact cross-family chain", async () => {
+  const ctx = fakeContext({ root: tempDir("omt-grill-defaults-") });
+  const configPath = join(ctx.cwd, ".omt", "config.jsonc");
+  writeFile(configPath, JSON.stringify({ defaults: "2026-10" }));
+  const pinned = await loadConfig(ctx);
+  assert.deepEqual(pinned.issues, []);
+  assert.equal(pinned.config.defaults, "2026-10");
+  assert.equal(Object.hasOwn(pinned.config.roles, "grill"), false);
+
+  writeFile(configPath, "{}");
+  const latest = await loadConfig(ctx);
+  assert.deepEqual(latest.issues, []);
+  assert.equal(latest.config.defaults, LATEST_DEFAULT_SET);
+  const grill = latest.config.roles.grill;
+  assert.ok(grill);
+  assert.equal(grill.crossFamily, true);
+  assert.deepEqual(grill.chain, [
+    { provider: "codex", driver: "codex", model: "gpt-6-astra", effort: "high" },
+    { provider: "claudeAgent", driver: "claudeAgent", model: "claude-opus-5-5", effort: "high" },
+  ]);
+});
 
 const EXPECTED: Record<string, [access: string, result: string, t3Role: string, mode: string, crossFamily: boolean, chain: string[]]> = {
   explore: ["read-only", "research", "research", "plan", false, ["codex/gpt-6-luna/low", "claudeAgent/claude-sonnet-5-5/low"]],
   research: ["read-only", "research", "research", "plan", false, ["codex/gpt-6.1-sol/low", "claudeAgent/claude-opus-5-5/low"]],
   plan: ["edit", "plan", "design", "default", false, ["claudeAgent/claude-opus-5-5/xhigh", "codex/gpt-6-astra/xhigh"]],
   "plan-review": ["read-only", "review", "review", "plan", true, ["codex/gpt-6-astra/high", "claudeAgent/claude-opus-5-5/high"]],
+  grill: ["read-only", "grill", "review", "plan", true, ["codex/gpt-6-astra/high", "claudeAgent/claude-opus-5-5/high"]],
   execute: ["edit", "work", "implementation", "default", false, ["claudeAgent/claude-opus-5-5/medium", "codex/gpt-6.1-sol/xhigh"]],
   quick: ["edit", "work", "implementation", "default", false, ["codex/gpt-6-luna/high", "claudeAgent/claude-sonnet-5-5/low"]],
   deep: ["edit", "work", "implementation", "default", false, ["claudeAgent/claude-opus-5-5/max", "codex/gpt-6-astra/xhigh"]],
@@ -23,7 +49,7 @@ const EXPECTED: Record<string, [access: string, result: string, t3Role: string, 
   ui: ["edit", "work", "implementation", "default", false, ["claudeAgent/claude-opus-5-5/medium"]],
 };
 
-test("the defaults hold the 15 roles with the planned values", () => {
+test("the defaults hold the 16 roles with the planned values", () => {
   assert.deepEqual(Object.keys(DEFAULT_CONFIG.roles).sort(), Object.keys(EXPECTED).sort());
   for (const [name, [access, result, t3Role, mode]] of Object.entries(EXPECTED)) {
     const role = DEFAULT_CONFIG.roles[name];

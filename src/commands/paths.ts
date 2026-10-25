@@ -1,4 +1,4 @@
-import { evidenceDir, findProjectRoot, ledgerPath, omtDir, plansDir, projectConfigPath, projectShimPath } from "../paths.ts";
+import { evidenceDir, findProjectRoot, grillsDir, ledgerPath, omtDir, plansDir, projectConfigPath, projectShimPath } from "../paths.ts";
 import type { CommandRun } from "../types.ts";
 import { parseArgs } from "../util/args.ts";
 import { usageError } from "../util/errors.ts";
@@ -6,17 +6,18 @@ import { formatJson } from "../util/output.ts";
 
 export const summary = "Print the absolute paths of the project's .omt state.";
 
-export const usage = `Usage: omt paths [--json] [--root|--plans|--ledger|--evidence|--config|--shim]
+export const usage = `Usage: omt paths [--json] [--root|--plans|--grills|--ledger|--evidence|--config|--shim]
 
-Print the project root, .omt, plans, ledger, evidence, project config, and
-shim paths, one "name: path" line each. From a linked git worktree, the
-paths are in the main checkout.
+Print the project root, .omt, plans, grills, ledger, evidence, project
+config, and shim paths, one "name: path" line each. From a linked git
+worktree, the paths are in the main checkout.
 
 Options:
-  --json      print an object with the keys root, omt, plans, ledger,
-              evidence, config, and shim
+  --json      print an object with the keys root, omt, plans, grills,
+              ledger, evidence, config, and shim
   --root      print only the project root
   --plans     print only the plans directory
+  --grills    print only the grills directory
   --ledger    print only the ledger file
   --evidence  print only the evidence directory
   --config    print only the project config file
@@ -24,13 +25,14 @@ Options:
   -h, --help  print this help
 `;
 
-const SINGLE = ["root", "plans", "ledger", "evidence", "config", "shim"] as const;
+const SINGLE = ["root", "plans", "grills", "ledger", "evidence", "config", "shim"] as const;
 
 export const run: CommandRun = async (ctx) => {
   const { values } = parseArgs(ctx.argv, {
     json: { type: "boolean" },
     root: { type: "boolean" },
     plans: { type: "boolean" },
+    grills: { type: "boolean" },
     ledger: { type: "boolean" },
     evidence: { type: "boolean" },
     config: { type: "boolean" },
@@ -44,6 +46,7 @@ export const run: CommandRun = async (ctx) => {
     root,
     omt: omtDir(root),
     plans: plansDir(root),
+    grills: grillsDir(root),
     ledger: ledgerPath(root),
     evidence: evidenceDir(root),
     config: projectConfigPath(root),

@@ -40,7 +40,9 @@ export const MODEL_KEYS: readonly string[] = ["fast"];
 export const PRESET_PROFILE_NAMES: readonly string[] = ["normal", "prototype", "pr-review"];
 export const PROFILE_CHAIN_MAX = 8;
 
-type WorkflowRule = { values: readonly string[] } | { minimum: number; maximum: number; auto?: boolean } | { items: readonly string[] };
+type WorkflowRule = { values: readonly string[] } | { minimum: number; maximum: number; auto?: boolean } | { items: readonly string[] } | { strings: string };
+
+export const GIT_OWNER_PATTERN = "^[A-Za-z0-9][A-Za-z0-9-]{0,38}$";
 
 export const WORKFLOW_RULES = {
   plan: {
@@ -67,6 +69,13 @@ export const WORKFLOW_RULES = {
     tests: { values: ["off", "offer"] },
     guardrails: { values: ["off", "propose"] },
     crap: { values: ["off", "report"] },
+  },
+  git: {
+    branchCommits: { values: ["auto", "ask"] },
+    pullRequests: { values: ["auto", "ask", "off"] },
+    defaultBranch: { values: ["ask", "auto"] },
+    merge: { values: ["ask", "auto"] },
+    owners: { strings: GIT_OWNER_PATTERN },
   },
 } as const satisfies Record<keyof Workflow, Record<string, WorkflowRule>>;
 
@@ -354,6 +363,13 @@ function validateWorkflow(value: unknown, path: string, out: Collector): Workflo
           fields[key] = [...field];
         } else {
           out.error(keyPath, `must be an array of ${oneOf(rule.items)}, got ${describe(field)}`);
+        }
+      } else if ("strings" in rule) {
+        const pattern = new RegExp(rule.strings);
+        if (Array.isArray(field) && field.every((entry) => typeof entry === "string" && pattern.test(entry))) {
+          fields[key] = [...field];
+        } else {
+          out.error(keyPath, `must be an array of strings that match ${rule.strings}, got ${describe(field)}`);
         }
       } else if ((rule.auto && field === "auto") ||
         (typeof field === "number" && Number.isInteger(field) && field >= rule.minimum && field <= rule.maximum)) {

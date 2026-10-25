@@ -99,6 +99,7 @@ If you do not know what to do next, type `$omt-help`. To change the setup, type 
 | --- | --- |
 | `omt-ulw` | You want a task built, fixed, or shipped from start to end. The `ulw` and `ultrawork` keywords start it. |
 | `omt-plan` | You want a reviewed plan before any code changes. |
+| `omt-grill` | Your goal is vague, or you want its edge cases and open questions found before a plan. |
 | `omt-design` | You want designs or mockups before UI work. |
 | `omt-review` | You want a review of uncommitted changes, a branch, a commit, or a pull request. |
 | `omt-research` | You need an answer with sources from the repository, library docs, or the web. |
@@ -109,7 +110,7 @@ If you do not know what to do next, type `$omt-help`. To change the setup, type 
 | `omt-loop` | Work must continue across turns until a check passes. |
 | `omt` | You want the list of workflows and CLI commands. |
 
-The agent can start the first eight skills itself. You start `omt-swarm`, `omt-loop`, and `omt` by name.
+The agent can start the first nine skills itself. You start `omt-swarm`, `omt-loop`, and `omt` by name.
 
 A plan and its ledger stay in `.omt/` after context compaction and across sessions, so one plan can run for days. A profile in `.omt/config.jsonc` can change the models, the checks, and the limits. See [Configure roles and profiles](docs/configuration.md), or ask `$omt-setup` to make the change.
 

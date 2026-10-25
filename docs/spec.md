@@ -57,6 +57,7 @@ src/
   ledger/                ledger.ts
   profile/               resolve.ts
   lock/                  lock.ts
+  git/                   branch.ts (section 5.16)
   install/               skills.ts, links.ts, claudeHook.ts, manifest.ts, plan.ts, apply.ts, doctor.ts, confirm.ts, fsops.ts, project.ts, harness.ts (section 5.14), projects.ts (section 14.8)
   update/                channel.ts, check.ts, sync.ts, flow.ts (section 5.15)
   hooks/                 userPromptSubmit.ts
@@ -66,6 +67,7 @@ src/
                          worktree.ts adds the worktree command
                          defaults.ts and detect.ts add the defaults and detect commands (sections 5.13 and 5.14)
                          update.ts adds the update command (section 5.15)
+                         git.ts adds the git command (section 5.16)
                          shared.ts holds the helpers that commands share and exports no `run`
 scripts/
   build-schema.ts        writes schema/omt.schema.json from src/config/schema.ts
@@ -88,6 +90,7 @@ test/
   config/profiles.test.ts profile validation and merging
   profile/               resolve.test.ts, profile.test.ts
   lock/                  lock.test.ts
+  git.test.ts            omt git check decisions
   routing/fast.test.ts    fast option mapping and precedence
   skills/                common.test.ts, personas.test.ts, plan-design.test.ts, review.test.ts, ulw.test.ts, shared.ts
 docs/
@@ -107,8 +110,8 @@ export type Access = "read-only" | "edit";
 export type InteractionMode = "inherit" | "default" | "plan";
 export type RuntimeMode = "inherit" | "approval-required" | "auto-accept-edits" | "auto" | "full-access";
 export type T3Role = "implementation" | "research" | "review" | "design" | "test" | "general";
-export type ResultKind = "work" | "review" | "test" | "research" | "plan" | "guardrail";
-export const RESULT_KINDS: readonly ResultKind[] = ["work", "review", "test", "research", "plan", "guardrail"];
+export type ResultKind = "work" | "review" | "test" | "research" | "plan" | "guardrail" | "grill";
+export const RESULT_KINDS: readonly ResultKind[] = ["work", "review", "test", "research", "plan", "guardrail", "grill"];
 
 export interface Rung {
   provider?: string; // T3 provider instance id, for example "claudeAgent"
@@ -170,6 +173,14 @@ export interface Workflow {
     guardrails: "off" | "propose";
     crap: "off" | "report";
   };
+  git?: Partial<GitPolicy>; // set 2026-10 has no git group; a missing key means "ask"
+}
+
+export interface GitPolicy {
+  branchCommits: "auto" | "ask";
+  pullRequests: "auto" | "ask" | "off";
+  defaultBranch: "ask" | "auto";
+  merge: "ask" | "auto";
 }
 
 export type WorkflowLayer = { [K in keyof Workflow]?: Partial<Workflow[K]> };
@@ -465,6 +476,8 @@ export class OmtError extends Error {
 | `projectRolesDir(root)` | `<root>/.omt/roles` |
 | `plansDir(root)` | `<root>/.omt/plans` |
 | `planPath(root, slug)` | `<root>/.omt/plans/<slug>.md` |
+| `grillsDir(root)` | `<root>/.omt/grills` |
+| `grillPath(root, slug)` | `<root>/.omt/grills/<slug>.md` |
 | `ledgerPath(root)` | `<root>/.omt/ledger.jsonl` |
 | `evidenceDir(root)` | `<root>/.omt/evidence` |
 | `projectManifestPath(root)` | `<root>/.omt/install.json` |
@@ -512,9 +525,10 @@ Argument parsing uses `node:util` `parseArgs` with `strict: true` and `allowPosi
 | `ledger` | `omt ledger add [options]`, `omt ledger list [--plan <slug>] [--json]`, `omt ledger stats [--plan <slug>] [--json]`, `omt ledger request-id --plan <slug> --unit <id> --role <role> [--round <n>] [--attempt <n>]` |
 | `profile` | `omt profile list [--json]`, `omt profile show [<name>] [--plan <slug>] [--profile <name>] [--json]` |
 | `lock` | `omt lock run <name> [--wait <seconds>] -- <command> [args...]`, `omt lock list` |
-| `paths` | `omt paths [--json] [--root \| --plans \| --ledger \| --evidence \| --config \| --shim]` |
+| `paths` | `omt paths [--json] [--root \| --plans \| --grills \| --ledger \| --evidence \| --config \| --shim]` |
 | `visual` | `omt visual [--plan <slug\|file.md>] [--spec <file\|->] [--out <path\|->] [--json]` |
 | `worktree` | `omt worktree [check] [--json]`, `omt worktree setup [--dry-run] [--yes]` |
+| `git` | `omt git check <commit\|push\|pr\|merge> [--user <login>] [--host <host>] [--pr-author <login>] [--plan <slug>] [--profile <name>] [--json]` |
 | `hook` | `omt hook user-prompt-submit` |
 
 In every flag that takes a file, `-` means standard input.
@@ -555,7 +569,7 @@ Creates, in the project root, only what is missing:
 
 - `.omt/config.jsonc` with the starter project config (section 6.5)
 - `.omt/plans/`
-- `.omt/.gitignore` with the eight lines `ledger.jsonl`, `evidence/`, `bin/`, `install.json`, `backups/`, `plans/`, `locks/`, and `guardrails.md`. A live plan is shared state of all worktrees (section 4), not source, so git does not see it.
+- `.omt/.gitignore` with the nine lines `ledger.jsonl`, `evidence/`, `bin/`, `install.json`, `backups/`, `plans/`, `locks/`, `guardrails.md`, and `grills/`. A live plan is shared state of all worktrees (section 4), not source, so git does not see it.
 
 When `.omt/.gitignore` exists and lacks some of these lines, `init` appends the missing lines and keeps every other line. An older omt wrote fewer lines, so this brings an existing project up to date. A symlinked `.gitignore` is updated through its target, and a dangling symlink is left alone.
 
@@ -707,9 +721,9 @@ See section 13.
 
 Prints the absolute paths of the project state, resolved through `findProjectRoot`. So from a linked worktree it prints the paths in the main checkout.
 
-- Without a flag it prints one `name: path` line for each path. The order is `root` (the project root), `omt` (`omtDir`), `plans` (`plansDir`), `ledger` (`ledgerPath`), `evidence` (`evidenceDir`), `config` (`projectConfigPath`), and `shim` (`projectShimPath`).
+- Without a flag it prints one `name: path` line for each path. The order is `root` (the project root), `omt` (`omtDir`), `plans` (`plansDir`), `grills` (`grillsDir`), `ledger` (`ledgerPath`), `evidence` (`evidenceDir`), `config` (`projectConfigPath`), and `shim` (`projectShimPath`).
 - `--json` prints an object with the same keys.
-- One of `--root`, `--plans`, `--ledger`, `--evidence`, `--config`, or `--shim` prints only that path and a newline, for use as `$(omt paths --evidence)`.
+- One of `--root`, `--plans`, `--grills`, `--ledger`, `--evidence`, `--config`, or `--shim` prints only that path and a newline, for use as `$(omt paths --evidence)`.
 - Two path flags, a path flag with `--json`, or a positional argument is a usage error (exit 2).
 - The command creates no path. Root resolution can read the worktree metadata from section 4.
 
@@ -1119,6 +1133,22 @@ Daily check in install and doctor. The check is on when the user config sets `up
 
 No other command calls `dailyCheck`. The hook and the agent commands (`brief`, `route`, `ledger`, `plan`, `roles`, `profile`, `lock`, `visual`, and `paths`) never contact the network.
 
+### 5.16 `omt git`
+
+`omt git check <commit|push|pr|merge> [--user <login>] [--host <host>] [--pr-author <login>] [--plan <slug>] [--profile <name>] [--json]` prints the decision of the `workflow.git` policy (section 6.7) for one git action. The skills run it before each commit, push, PR, and merge. It writes nothing and makes no network call: the skills pass the user's GitHub login as `--user`, the login's host as `--host` (default `github.com`), and, as `--pr-author`, the author of an open PR from the branch that is not the user, else the user (section 15.1). Logins, owners, and hosts compare without case.
+
+- It resolves the profile as `omt profile show` does (section 5.10): `--profile`, then the plan header of `--plan`, then the project and user config, then `normal`.
+- `src/git/branch.ts` reads full refs, not short names, so that a tag with the name of a branch does not change the result. It reads the current branch with `git symbolic-ref --quiet HEAD` without the `refs/heads/` prefix, and finds the default branch in this order: `git symbolic-ref --quiet refs/remotes/origin/HEAD` without the `refs/remotes/origin/` prefix; `git config init.defaultBranch` when `git rev-parse --verify --quiet refs/heads/<name>` finds that branch; `main` or `master`, whichever has a `refs/heads/` branch. It runs git with `spawnSync` in the current folder.
+- `src/git/branch.ts` reads the `origin` fetch URL with `git remote get-url origin` and each push URL with `git remote get-url --push --all origin`, which applies `insteadOf` and `pushInsteadOf` rewrites. `parseRemote` reads the host, the owner, and the repo from `git@<host>:<owner>/<repo>`, `ssh://git@<host>/<owner>/<repo>`, and `https://<host>/<owner>/<repo>`, each with an optional `.git`. The owner matches `^[A-Za-z0-9][A-Za-z0-9-]{0,38}$`. Another form gives an unknown owner.
+- The decision, checked in this order:
+  1. An unknown or missing action exits 2. When the config or the resolved profile has an issue with severity `error`, the decision is `ask` for each action, the reason is `config error in <source> [<path>]: <message>; fix the config first`, and `key` and `value` stay as computed. When the config load or the profile resolution fails with an `OmtError` (for example an unknown profile, a profile cycle, or a missing plan), the decision is `ask` with exit 0, the reason is `config error: <message>; fix the config first`, `key` and `value` are `null`, and the message also goes to stderr. A `--plan` value that is not a valid slug still exits 2.
+  2. Ownership. With no `origin` remote, `commit` and `merge` go on to the next step, and `push` and `pr` give `ask` ("no origin remote"). An `origin` fetch URL or push URL that `parseRemote` cannot read gives `ask`; the reason names no URL. With no `--user`, the decision is `ask` ("pass --user <login> to check ownership"). When the fetch URL's host is not `--host`, the decision is `ask` ("the login is for <host>, the repo is on <origin host>"). When the fetch URL's owner is not `--user` and is not in `workflow.git.owners`, the decision is `ask` ("<owner>/<repo> is not your repo; add the owner to workflow.git.owners to allow it"). A push URL on another host or with such an owner gives `ask`, and the reason names its owner and host, not the URL. A push URL whose host, owner, or repo differs from the fetch URL's gives `ask` ("a push URL of origin goes to another repo, <owner>/<repo> on <host>"); the repos compare without case and without `.git`. When `--pr-author` is given and is not `--user`, each action gives `ask` ("the PR is by <author>").
+  3. The key: `merge` reads `merge`. `commit` reads `defaultBranch` on the default branch and `branchCommits` on another branch. `push` reads `defaultBranch` on the default branch and `pullRequests` on another branch. `pr` reads `pullRequests`. When the resolved workflow does not set the key, the decision is `ask` with `value: null`, and the reason names the profile and the default set.
+  4. `merge` gives the `merge` value on any branch, also outside a git repository.
+  5. For `commit`, `push`, and `pr`: outside a git repository, on a detached HEAD, or with no default branch found, the decision is `ask`. `pr` on the default branch gives `ask`.
+  6. Otherwise the key's value: `auto` or `ask`. `pullRequests: "off"` gives `off` for `push` and `pr`.
+- Text output is one line, `<decision>: <reason>`. `--json` prints `{ action, decision, branch, defaultBranch, host, owner, repo, user, prAuthor, key, value, reason }`. `host` is the `origin` fetch URL's host. `branch`, `defaultBranch`, `host`, `owner`, `repo`, `user`, `prAuthor`, `key`, and `value` are `null` when unknown. Each decision exits 0.
+
 ## 6. Config
 
 ### 6.1 Files and layering
@@ -1145,7 +1175,7 @@ A missing file is not an error. Each file is JSONC (section 7). Profile selectio
 - Allowed role keys and values:
   - `description`: a non-empty string of at most 300 characters.
   - `access`: `read-only` or `edit`.
-  - `result`: `work`, `review`, `test`, `research`, `plan`, or `guardrail`.
+  - `result`: `work`, `review`, `test`, `research`, `plan`, `guardrail`, or `grill`.
   - `t3Role`: `implementation`, `research`, `review`, `design`, `test`, or `general`.
   - `interactionMode`: `inherit`, `default`, or `plan`.
   - `runtimeMode`: `inherit`, `approval-required`, `auto-accept-edits`, `auto`, or `full-access`.
@@ -1201,8 +1231,8 @@ A JSONC syntax error in a file becomes one error issue, and that file is skipped
 
 `src/config/defaultSets.ts` exports the dated default sets:
 
-- `DEFAULT_SETS: Readonly<Record<string, OmtConfig>>`. Each set is a whole `OmtConfig`, and its `defaults` field holds its own name. The only set is `"2026-10"`, with the values of this section. A set never changes after a release; a change to the defaults goes into a new set with a later name.
-- `LATEST_DEFAULT_SET = "2026-10"` and `DEFAULT_SET_NAME_RE = /^\d{4}-\d{2}(-[a-z0-9]+)?$/`.
+- `DEFAULT_SETS: Readonly<Record<string, OmtConfig>>`. Each set is a whole `OmtConfig`, and its `defaults` field holds its own name. The sets are `"2026-10"` and `"2026-11"`. `"2026-11"` has the values of this section, and `"2026-10"` has the same values without the `grill` role and without the `workflow.git` group (section 6.7). A set never changes after a release; a change to the defaults goes into a new set with a later name.
+- `LATEST_DEFAULT_SET = "2026-11"` and `DEFAULT_SET_NAME_RE = /^\d{4}-\d{2}(-[a-z0-9]+)?$/`.
 - `isDefaultSet(name)`, `defaultSetNames()`, and `defaultSet(name)`, which returns the named set, or the latest set for a name that omt does not ship.
 - `diffDefaultSets(from: OmtConfig, to: OmtConfig, overrides: { source: string; layer: ConfigLayer }[]): DefaultsChange[]`.
 
@@ -1222,6 +1252,7 @@ For a role without `crossFamily`, rung 2 runs only when T3 refuses rung 1. For a
 | `research` | read-only | research | research | plan | false | codex/gpt-6.1-sol low, claudeAgent/claude-opus-5-5 low |
 | `plan` | edit | plan | design | default | false | claudeAgent/claude-opus-5-5 xhigh, codex/gpt-6-astra xhigh |
 | `plan-review` | read-only | review | review | plan | true | codex/gpt-6-astra high, claudeAgent/claude-opus-5-5 high |
+| `grill` | read-only | grill | review | plan | true | codex/gpt-6-astra high, claudeAgent/claude-opus-5-5 high |
 | `execute` | edit | work | implementation | default | false | claudeAgent/claude-opus-5-5 medium, codex/gpt-6.1-sol xhigh |
 | `quick` | edit | work | implementation | default | false | codex/gpt-6-luna high, claudeAgent/claude-sonnet-5-5 low |
 | `deep` | edit | work | implementation | default | false | claudeAgent/claude-opus-5-5 max, codex/gpt-6-astra xhigh |
@@ -1242,6 +1273,7 @@ Role descriptions (shown to agents in `omt roles` and in skills):
 - `research`: Answer a question from docs, the web, and code, with cited sources.
 - `plan`: Turn a goal into a plan file whose units have a scope, a done condition, and a verify command.
 - `plan-review`: Check a plan for gaps, ambiguity, and steps that cannot be verified.
+- `grill`: Test a goal before it has a plan: find its edge cases, open questions, and options.
 - `execute`: Implement one planned unit inside its scope and run its verify commands.
 - `quick`: Make a small, mechanical change, such as a rename, a typo, or a one-file edit.
 - `deep`: Solve a hard or cross-cutting problem that needs investigation before the change.
@@ -1309,8 +1341,13 @@ The following keys are under `profiles.<name>.workflow`. The table shows the res
 | `review.tests` | `off`, `offer` | `off` | `off` | `offer` |
 | `review.guardrails` | `off`, `propose` | `off` | `off` | `propose` |
 | `review.crap` | `off`, `report` | `off` | `off` | `report` |
+| `git.branchCommits` | `auto`, `ask` | `auto` | `auto` | `auto` |
+| `git.pullRequests` | `auto`, `ask`, `off` | `auto` | `auto` | `auto` |
+| `git.defaultBranch` | `ask`, `auto` | `ask` | `ask` | `ask` |
+| `git.merge` | `ask`, `auto` | `ask` | `ask` | `ask` |
+| `git.owners` | array of GitHub owners that match `^[A-Za-z0-9][A-Za-z0-9-]{0,38}$` | `[]` | `[]` | `[]` |
 
-`prototype` also sets `limits.maxReviewRounds` to 2. `normal` and `pr-review` set no limits, roles, or models. Profiles cannot set `visuals`.
+Set `2026-10` has no `git` group, so with that set each `git` key that the config does not set is absent, and `omt git check` gives `ask` for it (section 5.16). `git.owners` lists the owners, such as the user's orgs, whose repos count as the user's own; the user's login always counts. `prototype` also sets `limits.maxReviewRounds` to 2. `normal` and `pr-review` set no limits, roles, or models. Profiles cannot set `visuals`.
 
 The skills apply these switches at the steps in section 15. They reload the profile on wake and after an owner switch. `omt plan profile <slug> <name>` changes the remaining work of a running plan. It does not change completed tasks.
 
@@ -1621,6 +1658,25 @@ PROPOSALS:
 NOTES:
 - <each finding with no proposal and why, or none>
 ```
+
+`grill.md`:
+
+```text
+VERDICT: OPEN | CLEAR
+SUMMARY: <one or two sentences>
+DIRECTIONS:
+- <direction>: <what the user gets>; cost: <what it costs>; or none
+DECISIONS:
+- <area>: <choice>. Why: <reason>; or none
+EDGE CASES:
+- [blocking|minor] <area>: when <trigger>, <effect>. Handle: <proposed handling>. Test: integration | unit | none; or none
+QUESTIONS:
+- [blocking|minor] <area>: <question>. Options: <2 to 4 options>. Recommend: <option>, because <reason>; or none
+NOTES:
+- <non-blocking note, or none>
+```
+
+A grill returns `OPEN` when at least one blocking edge case or question remains that `Prior rounds` does not hold, and `CLEAR` otherwise. An edge case is blocking when, without a decision on its handling, the build would do the wrong thing, lose data, or break a flow of the goal; a question is blocking when its answer changes what the user gets.
 
 `qa` lists every new test under `TESTS`. `verify` can omit that section and names each checked flow's covering test file, or `none`, under `CHECKS`. Worker `NOTES` are optional. A review or oracle finding needs a concrete failure scenario. When CRAP is requested, a CRAP finding instead names the changed function and its complexity, coverage, and CRAP values. This exception applies in every round.
 
@@ -1996,7 +2052,7 @@ exec "$node" "<cliPath>" "$@"
 
 The shim is `create` (absent), `update` (managed, different content), `unchanged`, or `conflict` (a path without the signature). With `--force`, a conflict becomes `replace`, and the old file moves to `<root>/.omt/backups/<stamp>/bin/omt`. The check of section 14.2 decides whether `--project` may run from a one-shot cache or a temp directory. A runtime or CLI path that contains `"`, `$`, a backquote, a backslash, or a newline is refused.
 
-`.omt/.gitignore` holds the lines `ledger.jsonl`, `evidence/`, `bin/`, `install.json`, `backups/`, `plans/`, `locks/`, and `guardrails.md`. When the file is missing, the install creates it with these lines. A dangling symlink at that path is the user's, the same as a dangling settings link: the install leaves it alone, with `keep (a dangling symlink; left alone)`, and never writes its target. With the git exclude step on, the install never edits an existing `.omt/.gitignore`, because the repository may track it. One exception upgrades an unedited file: when the previous manifest lists the file in `project.files` and the file's SHA-256 equals the recorded hash, an earlier install created it and nobody edited it. Then the install appends the missing lines, the plan shows `update` for the file, and the manifest records the new hash. With `--no-git-exclude`, a setup meant to be committed, the install appends the missing lines and never removes a line. The manifest then records the file's old content and the hash of what the install wrote, as `gitignoreRestore`, and the uninstall writes the old content back while the file still has that hash.
+`.omt/.gitignore` holds the lines `ledger.jsonl`, `evidence/`, `bin/`, `install.json`, `backups/`, `plans/`, `locks/`, `guardrails.md`, and `grills/`. When the file is missing, the install creates it with these lines. A dangling symlink at that path is the user's, the same as a dangling settings link: the install leaves it alone, with `keep (a dangling symlink; left alone)`, and never writes its target. With the git exclude step on, the install never edits an existing `.omt/.gitignore`, because the repository may track it. One exception upgrades an unedited file: when the previous manifest lists the file in `project.files` and the file's SHA-256 equals the recorded hash, an earlier install created it and nobody edited it. Then the install appends the missing lines, the plan shows `update` for the file, and the manifest records the new hash. With `--no-git-exclude`, a setup meant to be committed, the install appends the missing lines and never removes a line. The manifest then records the file's old content and the hash of what the install wrote, as `gitignoreRestore`, and the uninstall writes the old content back while the file still has that hash.
 
 The git exclude step is on by default. `--no-git-exclude` turns it off: the install writes no block, removes a block that an earlier install wrote for this root (the plan shows `remove managed block in <file>  (--no-git-exclude)`), and the manifest records `"gitExcludeOff": true`. The installer finds the exclude file without running git:
 
@@ -2113,6 +2169,7 @@ User scope and project scope never read or write each other's files, except the 
 - Shared reference lives in `skills/omt/references/`. Other skills link to it with relative paths such as `../omt/references/delegation.md`.
 - Every relative link in a skill must resolve to a file in the repository. A test checks this.
 - Write for agents. Front-load the trigger words in each description. Give each step a completion criterion. State the target behavior instead of a ban where possible.
+- Git actions follow the `workflow.git` policy, which is the owner's standing approval for each action that it marks `auto`. The policy acts with no question only on the user's own work. Before each commit, push, PR, or merge, a skill runs `omt git check <action> --json` with `--plan <slug>`, or with `--profile <profile>` in a run with no plan file (section 5.16). Once per run, it reads the `host` field of a first check and the login from `gh api --hostname <host> user -q .login`, and asks the owner when either is missing. It passes `--user <login> --host <host>`, names the checked repo in each `gh` PR command with `--repo <host>/<owner>/<repo>` from the check, never from `GH_REPO` or the current folder, and, for each action, `merge` too, lists every open PR from the branch with `gh pr list --repo <host>/<owner>/<repo> --head <branch> --state open --json number,author,headRefName,headRepositoryOwner,url --limit 100` and keeps the PRs whose `headRefName` is the current branch and whose `headRepositoryOwner` is the checked owner. It passes `--pr-author` with any kept PR's author that is not the user, else with the user when the user wrote all kept PRs, and no `--pr-author` when none is kept. It asks when the command fails or returns 100 PRs. The list covers open PRs in the checked repo only, so a PR that another person opens from the user's branch into another repo, such as an upstream repo, gives no `ask`, and a push to the branch also updates that PR. `omt-review` passes the reviewed PR's author and also applies this list rule to the PR's head branch. It pushes only with `git push origin HEAD:<branch>`, never to another remote. It acts on `auto`, asks the owner on `ask`, and skips the action and reports it on `off`. A check that exits non-zero or prints no decision counts as `ask`. Before the run's first edit task, it saves the `git status --porcelain` output. At commit time, it stages only the paths that the run changed and that the saved output does not name. It commits only those paths with `git commit --only -m <message> -- <paths>`, after `git commit --dry-run --porcelain --only -- <paths>` shows that the commit takes no other path, so that changes that another session staged stay out of the commit. For a path that the saved output names, or when the output is missing or the run's changes are unclear, it asks the owner. It opens a ready PR only in the `origin` repo (`gh pr create --repo <host>/<owner>/<repo>`), against the given base or else the `defaultBranch` field of `omt git check pr --json`, asks the owner for the base when that field is `null`, and lets the push update an open PR. A PR to a repo of another owner asks. A force push always asks, a `plan`-mode run makes no git action, and children never commit. The rules live in the section "Git actions" of `delegation.md`.
 
 ### 15.2 Skill list
 
@@ -2121,6 +2178,7 @@ User scope and project scope never read or write each other's files, except the 
 | `omt` | user | Router. Lists the omt workflows, when to use each, and the shared references. |
 | `omt-ulw` | model | Ultrawork loop: mode and branch check, frame, route, explore, plan, dispatch, review, test, fix, final gate, report. Trigger words: ulw, ultrawork, build or fix with subagents in T3. |
 | `omt-plan` | model | Explore, ask owner decisions in one message, write the plan and approved test list, set its task budget, review by `plan.review`, and show the final plan. |
+| `omt-grill` | model | Test a goal before its plan: frame it with a knowledge map, run blind panel rounds of one Claude and one Codex `grill` child, ask the user one message per round with decisions, questions, and edge cases, and write the grill file that `omt-plan` reads. Trigger words: grill, stress-test, edge cases, brainstorm, vague goal, before a plan. |
 | `omt-design` | model | Dispatch `design.variants` options per screen in a new Paper file, show screenshots by screen, carry owner steering through fresh design tasks, and write `docs/design/<slug>.md` after approval. |
 | `omt-review` | model | Review uncommitted changes, a branch, a commit, or a PR. The profile controls group count, families, oracle, and fix offers. PRs use the eleven steps in section 15.4. |
 | `omt-research` | model | Parallel read-only research into a cited report. |
@@ -2144,9 +2202,9 @@ Rules that the skills must carry:
 - The `omt` router lists `omt worktree check` and `omt worktree setup` and links `worktrees.md`. `omt-ulw` step 0 and the section "Worktree setup" of `delegation.md` point to `worktrees.md` for the first run in a project. No skill runs the worktree check before every CLI command. `docs/agents/quickstart.md` runs the check before it reports the install as complete.
 - `interaction_mode_escalation_denied` and `runtime_mode_escalation_denied` are stop codes: report them and do not fall back. `provider_unavailable`, `model_unavailable`, and an `invalid_request` about options move to the next rung with the next attempt number.
 - On `provider_unavailable` for a target that names only `driverKind`, the skill first retries that target once, with the next attempt number and `providerInstanceId` in place of `driverKind`, set to the same value. The target is the one that failed, rung 1 or a fallback, so the skill keeps it until the retry is sent. Observed T3 behavior is the reason. T3 checks a named provider instance again before it refuses it, but it takes a `driverKind`-only target from a cached provider snapshot that can be stale.
-- `omt-swarm` tracks are top-level threads, not delegated children. Their launch message does not use `omt brief`. It tells the track to run `omt-ulw`, to commit each verified unit on its own branch, to push, and to open a PR against its base. Before it launches, the skill checks with `t3_thread_configuration` that the caller runs in `full-access` runtime mode and `default` interaction mode, which `t3_thread_launch` requires. It launches at most `maxParallel` tracks. Each track uses the plan slug `<slug>-<track>` and, after its plan exists, runs `omt plan limit <slug>-<track> <k>` with a lower `<k>`. The track does not change `limits` in the config, because all worktrees share one `.omt/`. Top-level threads never wake the caller, so the skill monitors them with a `schedule_task` heartbeat bound to the caller's thread. The heartbeat prompt is complete on its own, and the skill deletes the heartbeat when every track has a PR or a blocker.
+- `omt-swarm` tracks are top-level threads, not delegated children. Their launch message does not use `omt brief`. It tells the track to run `omt-ulw`, which commits, pushes, and opens a PR on the track's branch against its base by the git rules of section 15.1. The skill merges each PR only as `omt git check merge` allows. Before it launches, the skill checks with `t3_thread_configuration` that the caller runs in `full-access` runtime mode and `default` interaction mode, which `t3_thread_launch` requires. It launches at most `maxParallel` tracks. Each track uses the plan slug `<slug>-<track>` and, after its plan exists, runs `omt plan limit <slug>-<track> <k>` with a lower `<k>`. The track does not change `limits` in the config, because all worktrees share one `.omt/`. Top-level threads never wake the caller, so the skill monitors them with a `schedule_task` heartbeat bound to the caller's thread. The heartbeat prompt is complete on its own, and the skill deletes the heartbeat when every track has a PR or a blocker.
 - `omt-ulw`, `omt-plan`, `omt-review`, and `omt-research` start with a step 0 that calls `t3_thread_configuration` with no `threadId` and reads `interactionMode`. In `plan` mode they dispatch only read-only roles, write no files, and deliver the result in the final message, or ask the user to switch to default mode. No skill calls `orchestrator_capabilities` to read its modes, because that result holds the full provider and model catalog.
-- Step 0 of `omt-ulw` and `omt-plan` also links to the branch check in `delegation.md`. It finds the default branch from the repository metadata (`refs/remotes/origin/HEAD`, then `init.defaultBranch` when that branch exists, then `main` or `master`) and counts `git rev-list --count HEAD..<default>`. When the count is above 0, `plan` mode only reports it. `default` mode runs `git merge --ff-only <default>` when the worktree is clean and `HEAD` is an ancestor of the default branch; otherwise it reports the count and asks the user. When no default branch is found, the skill skips the check and says so.
+- Step 0 of `omt-ulw` and `omt-plan` also links to the branch check in `delegation.md`. It finds the default branch from the repository metadata (`refs/remotes/origin/HEAD`, then `init.defaultBranch` when that branch exists, then `main` or `master`) and keeps its full ref as `<default>` (`refs/remotes/origin/<name>`, or `refs/heads/<name>` for a local result), so that a tag with the same name cannot match. It counts `git rev-list --count HEAD..<default>`. When the count is above 0, `plan` mode only reports it. `default` mode runs `git merge --ff-only <default>` when the worktree is clean and `HEAD` is an ancestor of the default branch; otherwise it reports the count and asks the user. When no default branch is found, the skill skips the check and says so.
 - `omt-plan` finishes independent research and a draft plan before it asks all owner decisions in one message. The message includes the proposed `## Tests` lines and reasons for layers outside `plan.testLayers`. Each research question, answer, and source goes under `## Research`. It names shared resources and wraps verify commands with `omt lock run <resource> -- <command>`. It runs `omt plan limit <slug> 1` only for shared build state without `flock` or `lockf`, or for commands that leave processes running after exit. Those commands run outside the lock. For a HEAVY budget, start with dispatched tasks, add 4 for plan reviews, and add 5 per unit. Use 4 per unit when `workflow.build.review` is `first-round` or `off`. Add 1 per `ui` unit, 1 per unit with test lines, 3 for the final gate, and 5 for an `omt-design` step. Round up to a multiple of 10. Set the owner-approved budget with `omt plan limit <slug> --tasks <n>`. In plan mode, report it instead. Edit and hash the absolute plan path from `omt plan status`. Compute the hash after every edit, including header changes, before the next brief.
 - Every plan has a `## Summary` of at most 15 lines for the owner, in plain words with no `path:line` citations and no code blocks. The `plan` persona writes it last, and `omt-plan` step 3 updates it after each review fix. The `plan-review` persona blocks a summary line that the rest of the plan does not support. `omt-ulw` fills it last in a LIGHT plan too.
 - `omt-plan` step 5 shows the plan before it hands off, also when `omt-ulw` called it. It reads `visuals.plan` from `omt config show`. When the value is `true` and the harness has `html_render`, it runs `omt-show` with the plan slug (in `plan` mode, with the temp plan file, and `omt-show` writes the page to `$TMPDIR`). When the page is in the thread, the reply leaves the summary out. Otherwise, also when `omt-show` could not show the page, the reply holds the `## Summary` text in full. Either way the reply gives the plan path, the review result, and each open decision.
@@ -2163,6 +2221,8 @@ Rules that the skills must carry:
 - `plan-review`, `review`, and `oracle` are cross-family relative to the worker. A reviewer comes from the family other than the worker's; when that family is not available, the same family reviews. The `oracle` is the whole-change gate from the family other than the main implementer's.
 - `omt-ulw` builds the review briefs (step 7) and the oracle brief (step 10) with `--against auto`.
 - `omt-plan` applies `plan.review`. `owner` dispatches no plan reviewer and waits for owner approval of the plan and test list. `two-families` uses two round-1 tasks, `plan.claude --against codex` and `plan.codex --against claudeAgent`. Both must approve. `one` uses one reviewer from the family other than the plan author in every round. From round 2, both reviewed modes use `plan --against <plan author provider>`. The author is the step-0 `modelSelection.instanceId`, or the provider of a plan worker. Every required family must be available. Each dispatch passes the effective `plan.testLayers` in the task. Round 1 freezes the union of blockers. Later rounds count frozen blockers, fix regressions, or findings with a requirement, regression, or concrete risk. The limit is the profile's `maxReviewRounds`.
+- `omt-plan` step 1 reads `$(omt paths --grills)/<slug>.md` when it exists and puts its goal, decisions, and edge cases under `## Research`. Step 2 asks no grill decision again, asks each pending edge case with the grill's open questions, and offers `omt-grill` first when no grill file exists and the goal has no done condition that can fail or 4 or more owner decisions remain. Step 3 turns each accepted or changed edge case with `Test: integration` or `Test: unit` into a `## Tests` line of that layer, never an e2e line, and maps no dropped or pending edge case. A changed edge case uses the user's handling from the grill file. In `plan` mode, step 0 also allows `grill` dispatches and takes the grill text from the conversation.
+- `omt-grill` runs each panel round as two fresh `delegate_task` calls, never `t3_thread_send`: `--unit grill.claude --against codex` and `--unit grill.codex --against claudeAgent`, with no fallback to the other family. Explore tasks use units `GX<k>`. When `omt roles --role grill --json` fails with `unknown_role`, it stops, shows `omt defaults diff`, and offers `omt-setup`. It writes the grill file at `$(omt paths --grills)/<slug>.md`, and stops when a round adds no counted blocking item, at `limits.maxReviewRounds`, or when the user stops. In `plan` mode it dispatches only `explore` and `grill`, builds briefs without `--save`, writes no grill file and no ledger entry, and delivers the grill text in the final message.
 - `omt-review` uses `review.reviewers` for the number of file groups. `auto` gives 1 below 200 changed lines, 2 below 1,000, 3 below 3,000, and 4 otherwise. `review.families: one` uses one reviewer per group. `both` uses one reviewer per family per group and requires both families to be available. Round 1 passes no `--against` unless selecting both families. `review.oracle: on` uses the family other than the provider that ran most reviewers of that round. `review.fixLoop: offer` asks before each fix loop. Later rounds review each fix under `F<k> --against auto`, against that fix's worker. Every round is a fresh task.
 - `omt-ulw`, `omt-plan`, and `omt-design` read `omt profile show --plan <slug> --json` when the plan file exists. Otherwise they use `omt profile show <name> --json`, or omit the name for the config selection. Before plan creation, every brief, roles, and route call carries the selected `--profile`. `omt-plan` creates a HEAVY plan with `--profile <name>` to store the effective profile. A LIGHT plan stores a profile only when the run has an explicit `--profile`. Otherwise, it has no `profile=` header and follows the current config. The planner creates a missing file before a plan worker starts and tells that worker to edit the existing file without `--force`.
 - `omt-ulw` reloads the profile on each wake, switch, and context reset. `build.review: every-round` reviews every round, `first-round` reviews only the first implementation round, and `off` skips unit reviews. `build.oracle: heavy` requires the final oracle only for HEAVY, `always` for both tiers, and `off` for neither. After plan creation and profile switches, the conductor adds or removes the `F2` oracle item to match that rule.
@@ -2197,7 +2257,7 @@ The review uses the ledger-only id `review-<slug>`. It reads `omt profile show <
 8. Guardrails. With `review.guardrails: propose`, dispatch one read-only `guardrail` task after the enabled oracle and CI fix reviews. Give it merged findings, CI failures, rule files, CRAP results, and existing `.omt/guardrails.md`. For each finding, choose the first applicable class: `check`, then `rule-fix`, then `new-rule`. A check names a tool, config change, and proof command that fails on the PR head and passes after the change. A rule fix cites and corrects an unclear or conflicting rule. A new rule states its text and destination. A judgment-only finding gets a reason and no proposal. Skip existing proposals. Run `omt init` before appending when `.omt/.gitignore` lacks `guardrails.md`. The conductor appends `- [ ] G<k> <date> PR #<n> <class>: <proposal>. Where: <file>. Proof: <command or none>.`. Each id is one above the highest existing id. The owner can turn proposals into separate-branch omt-ulw work. The guardrail child edits no file.
 9. CRAP. With `review.crap: report`, collect the calculations requested in step 5. For each added or changed function, use `CRAP = complexity² × (1 − coverage)³ + complexity`. Complexity starts at 1. Add 1 for each `if`, `else if`, loop, `case`, `catch`, `&&`, `||`, `??`, and `?:`. Coverage is the fraction of function lines that lcov marks as hit. Without data, use 0 and state `no coverage data`. A CRAP value above 30 is P2 with complexity, coverage, and CRAP values. Include these findings before merge, oracle, and guardrails. With `review.guardrails: propose`, missing complexity lint or a coverage gate requires a check proposal in step 8. With guardrails off, report each missing check as a note.
 10. Report. Write `<evidence>/review-<slug>-r<n>.md` in the review result format. Include verdict, findings by severity, applicable rule citations, CI state, reviewed CI fixes with paths, verify screenshots, and CRAP findings. List verified flows without tests and guardrail proposals. List design files for owner review. Show the current branch or detached commit and the return command. Use `git switch <original branch>` or `git switch --detach <original commit>`. If checks remain pending, report them and keep the watch. New failures on wake return to step 7 and update steps 8 to 10.
-11. Offers. `review.fixLoop: offer` asks before each fix loop. `review.tests: offer` proposes one e2e test per verified flow without a covering test, with exact flow and file lines. Each qa task needs the owner's approval of those lines. Name the PR's changed paths, excluding `docs/design/`, as the code under test in the `qa` task. Qa writes only those tests and returns `INCONCLUSIVE` when no e2e framework exists. Review each qa change once. Product failures need an owner-approved fix loop. Before any approved edit, perform step 1's checkout procedure if the PR is not yet checked out. Report the branch and return command after a late checkout. Before finishing, call `list_thread_pull_requests` when available and link the PR if missing. Report linking failures. Commit and push need the owner's yes. Make one commit per fix or qa task, using only its changed paths. Combine changes to the same file into one commit. After push, watch only when CI is enabled and step 3 found checks, then end the turn immediately. Otherwise unwatch and end. Only `review.ci: fix` starts another CI fix round for a repeated failure.
+11. Offers. `review.fixLoop: offer` asks before each fix loop. `review.tests: offer` proposes one e2e test per verified flow without a covering test, with exact flow and file lines. Each qa task needs the owner's approval of those lines. Name the PR's changed paths, excluding `docs/design/`, as the code under test in the `qa` task. Qa writes only those tests and returns `INCONCLUSIVE` when no e2e framework exists. Review each qa change once. Product failures need an owner-approved fix loop. Before any approved edit, perform step 1's checkout procedure if the PR is not yet checked out. Report the branch and return command after a late checkout. Before finishing, call `list_thread_pull_requests` when available and link the PR if missing. Report linking failures. Commit and push follow the git rules of section 15.1, with `--profile <profile>`. Make one commit per fix or qa task, using only its changed paths. Combine changes to the same file into one commit. After push, watch only when CI is enabled and step 3 found checks, then end the turn immediately. Otherwise unwatch and end. Only `review.ci: fix` starts another CI fix round for a repeated failure.
 
 Round-1 review and oracle tasks use the saved PR commits, with or without a PR checkout:
 
@@ -2249,7 +2309,7 @@ Required coverage:
 - Project install: the files of section 14.8, an idempotent rerun, `--dry-run`, the exclude file for a `.git` directory and a worktree `.git` file, block replacement, no `.git`, `--no-git-exclude` (also on a reinstall, and its `.omt/.gitignore` restore), the conditional `.omt` and `settings.local.json` lines, the hook in `settings.local.json`, uninstall with a locally modified skill and `--purge`, `--targets gemini` (exit 2), a temp `cliPath`, and the shim conflict and update. Also: a copied project, a moved clone round trip, a tracked manifest with paths outside the root, a symlinked path to the root, the home directory as the root (exit 2), a dangling settings symlink, a failed scratch delete, glob characters in a package path, worktrees, a block whose root is gone, the exact bytes of the exclude file, a kept created `settings.local.json`, and a kept ledger. Also: a reinstall that appends `plans/`, `locks/`, and `guardrails.md` to an unedited `.omt/.gitignore` that an earlier install created, and one that leaves an edited file alone. Also: uninstall, reinstall, and a second uninstall after each kind of kept created file, each with an empty `git status`; an uninstall that fails midway; a symlinked exclude file and `.omt/.gitignore`; a crafted tracked manifest that names project files; a package copied inside the same repository; and the exact paths that stay after a failed install and its uninstall.
 - Doctor: each status that the table in section 14.7 defines, with `runtimeName` and `runtimeVersion` injected through the context.
 - Worktree setup: `test/commands/worktree-setup.test.ts` covers the cases in section 5.12: init, `install --project --dry-run`, setup dry run and apply, check, and `doctor --project` from a linked worktree (shared `.omt`, setup files in the worktree); a Bun and a pnpm runner with controlled executables (versions, flags, environment, lockfiles, failure exit codes, a failed linker query, CI warning); existing, invalid, and partial `t3.json`, ambiguous and unsupported managers, linker settings with TOML comments, each persistent-store status with the created, kept, and incomplete `pnpm-workspace.yaml`, symlinked and dangling `.t3` folders and runners, a home-directory alias, conflicting output paths, idempotency, and a dry run that writes nothing; and `launchSpec` for Windows. Tests never start a real package manager. They start the runner with `node`, the command in `t3.json`, and with Bun when no `node` is on `PATH`. `test/e2e/binary.test.ts` (Bun project) and `test/e2e/packages.test.ts` (pnpm and Bun projects) run `worktree setup --yes` through the shim and compare the written runner with `templates/worktree-setup.mjs`, so the binary and the bundle prove that they carry the runner.
-- Skills: `test/skills/*.test.ts` replaces `test/skills.test.ts`. `common` checks frontmatter and links. `personas` checks role and result files, test policy, CRAP, and guardrails. `plan-design` checks profile selection, planned test lines, shared-build rules, budgets, review modes, and variant counts. `ulw` checks dispatch, profile reloads, check-ins, verify then qa, locks, heartbeat retention, and loop waits. `review` checks each PR step, commit-based round-1 reads, working-tree fix reviews, offers, linking, and watches.
+- Skills: `test/skills/*.test.ts` replaces `test/skills.test.ts`. `common` checks frontmatter and links. `personas` checks role and result files, test policy, CRAP, and guardrails. `plan-design` checks profile selection, planned test lines, shared-build rules, budgets, review modes, and variant counts. `grill` (`test/skills/grill.test.ts`) checks the mode check, the branch-check link, the stop on a missing `grill` role with the `omt-setup` offer, the two panel units with their `--against` values, a fresh `delegate_task` per round, `GX<k>` explore units, the stop rule with `limits.maxReviewRounds`, the path from `omt paths --grills`, and no writes in plan mode. `ulw` checks dispatch, profile reloads, check-ins, verify then qa, locks, heartbeat retention, and loop waits. `review` checks each PR step, commit-based round-1 reads, working-tree fix reviews, offers, linking, and watches.
 - Visual: spec errors with JSON paths, unknown keys, escaping of every text field (also an SVG label `<script>alert(1)</script>`), inline markup, byte-identical output, back edges, no edge that crosses a node on any fixture flow, label sides at a shared stub, row centering with and without a pinned column, the transitive reduction, the 6 layers of a plan shaped like `workflow-profiles`, non-unit dependency tokens, a plan with no `## Summary`, and the command: `--out -`, `--json`, the default paths, a plan file path, and the usage errors.
 - Schema: the committed schema equals the generated one, and it allows the same keys as the validator.
 - CLI: `--help`, `--version`, an unknown command (exit 2), and an unknown flag (exit 2), run as a child process.

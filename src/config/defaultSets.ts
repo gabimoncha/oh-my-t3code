@@ -214,11 +214,40 @@ const SET_2026_10: OmtConfig = {
   },
 };
 
-export const DEFAULT_SETS: Readonly<Record<string, OmtConfig>> = {
-  "2026-10": SET_2026_10,
+const SET_2026_11: OmtConfig = {
+  ...SET_2026_10,
+  defaults: "2026-11",
+  profiles: {
+    ...SET_2026_10.profiles,
+    normal: {
+      ...SET_2026_10.profiles.normal!,
+      workflow: {
+        ...SET_2026_10.profiles.normal!.workflow,
+        git: { branchCommits: "auto", pullRequests: "auto", defaultBranch: "ask", merge: "ask", owners: [] },
+      },
+    },
+  },
+  roles: Object.fromEntries(Object.entries(SET_2026_10.roles).flatMap(([name, role]) => {
+    if (name !== "plan-review") return [[name, role]];
+    const grill: RoleConfig = {
+      ...readOnlyRole(
+        "Test a goal before it has a plan: find its edge cases, open questions, and options.",
+        "review",
+        [rung("codex", ASTRA, "high"), rung("claudeAgent", OPUS, "high")],
+        true,
+      ),
+      result: "grill",
+    };
+    return [[name, role], ["grill", grill]];
+  })),
 };
 
-export const LATEST_DEFAULT_SET = "2026-10";
+export const DEFAULT_SETS: Readonly<Record<string, OmtConfig>> = {
+  "2026-10": SET_2026_10,
+  "2026-11": SET_2026_11,
+};
+
+export const LATEST_DEFAULT_SET = "2026-11";
 export const DEFAULT_SET_NAME_RE = /^\d{4}-\d{2}(-[a-z0-9]+)?$/;
 
 export function defaultSetNames(): string[] {

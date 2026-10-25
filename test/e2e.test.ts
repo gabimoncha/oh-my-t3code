@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { test } from "bun:test";
 import type { BriefJsonOutput, LedgerStats, RouteOutput } from "../src/types.ts";
@@ -32,6 +32,7 @@ test("end to end: install, use every command in a project, then uninstall", () =
   assert.deepEqual(omtEntries(join(home, ".agents", "skills")).sort(), [
     "omt",
     "omt-design",
+    "omt-grill",
     "omt-help",
     "omt-loop",
     "omt-plan",
@@ -84,6 +85,68 @@ test("end to end: install, use every command in a project, then uninstall", () =
   assert.match(ok(["uninstall", "--yes"]), /^Removed \d+ paths\.$/m);
   assert.deepEqual(omtEntries(join(home, ".agents", "skills")), []);
   assert.deepEqual(omtEntries(join(home, ".claude", "skills")), []);
+});
+
+test("end to end: a grill session initializes shared paths and routes against each family", () => {
+  const p = gitProject({ "README.md": "demo\n" });
+
+  assert.match(p.omt("init"), /^create .*\.omt[/\\]config\.jsonc$/m);
+  assert.ok(readFileSync(join(p.project, ".omt", ".gitignore"), "utf8").split("\n").includes("grills/"));
+  const sharedPath = `${join(realpathSync(p.project), ".omt", "grills")}\n`;
+  assert.equal(p.omt("paths", "--grills"), sharedPath);
+
+  const worktree = join(p.project, "..", "grill-worktree");
+  p.git(["worktree", "add", "-q", "-b", "grill-session", worktree]);
+  const paths = spawnOmt(["paths", "--grills"], { root: p.project, cwd: worktree, env: p.env });
+  assert.equal(paths.code, 0, paths.stderr);
+  assert.equal(paths.stdout, sharedPath);
+
+  for (const [against, provider, model] of [
+    ["codex", "claudeAgent", "claude-opus-5-5"],
+    ["claudeAgent", "codex", "gpt-6-astra"],
+  ] as const) {
+    const brief = JSON.parse(p.omt("brief", "grill", "--task", "Test this goal before planning.", "--against", against, "--json")) as BriefJsonOutput;
+    assert.equal(brief.delegateTask.target.providerInstanceId, provider);
+    assert.equal(brief.delegateTask.target.model, model);
+  }
+});
+
+test("end to end: git policy checks each action on feature and default branches and a pinned set", () => {
+  const p = gitProject({});
+  p.git(["remote", "add", "origin", "git@github.com:alice/app.git"]);
+  p.git(["update-ref", "refs/remotes/origin/main", "HEAD"]);
+  p.git(["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"]);
+  p.git(["checkout", "-q", "-b", "feat/x"]);
+  for (const branch of ["feat/x", "main"]) {
+    p.git(["checkout", "-q", branch]);
+    for (const action of ["commit", "push", "pr", "merge"]) {
+      const expected = branch === "feat/x" && action !== "merge" ? "auto" : "ask";
+      assert.match(p.omt("git", "check", action, "--user", "alice"), new RegExp(`^${expected}: `), `${branch}: ${action}`);
+    }
+  }
+  p.git(["checkout", "-q", "feat/x"]);
+  mkdirSync(join(p.project, ".omt"));
+  writeFileSync(join(p.project, ".omt", "config.jsonc"), JSON.stringify({ defaults: "2026-10" }));
+  assert.match(p.omt("git", "check", "commit", "--user", "alice"), /^ask: .*2026-10/);
+});
+
+test("end to end: git policy permits owned repos and asks for another owner's repo or PR", () => {
+  const p = gitProject({});
+  p.git(["remote", "add", "origin", "git@github.com:alice/app.git"]);
+  p.git(["update-ref", "refs/remotes/origin/main", "HEAD"]);
+  p.git(["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"]);
+  p.git(["checkout", "-q", "-b", "feat/ownership"]);
+
+  assert.match(p.omt("git", "check", "commit", "--user", "bob"), /^ask: .*alice\/app/);
+  assert.match(p.omt("git", "check", "commit", "--user", "alice"), /^auto: /);
+
+  mkdirSync(join(p.project, ".omt"));
+  writeFileSync(join(p.project, ".omt", "config.jsonc"), JSON.stringify({
+    profiles: { normal: { workflow: { git: { owners: ["acme"] } } } },
+  }));
+  p.git(["remote", "set-url", "origin", "https://github.com/acme/app.git"]);
+  assert.match(p.omt("git", "check", "commit", "--user", "bob"), /^auto: /);
+  assert.match(p.omt("git", "check", "push", "--user", "bob", "--pr-author", "carol"), /^ask: .*carol/);
 });
 
 // A committed git repository in a temp root, with an omt runner whose HOME and git config point into the root.

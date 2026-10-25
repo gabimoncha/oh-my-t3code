@@ -11,7 +11,7 @@ You write a plan that a worker can execute without making a design decision, and
 
 ### 0. Check your mode
 
-Call `t3_thread_configuration` with no `threadId` and read your `interactionMode` ([delegation.md](../omt/references/delegation.md#your-interaction-mode)). Also keep `modelSelection.instanceId`. It is your provider instance, and step 4 passes it to `--against`. In `plan` mode, dispatch only `explore` and `plan-review`, write no plan file and no ledger entry, put the plan text in the review briefs instead of a path, and deliver the finished plan in your final message.
+Call `t3_thread_configuration` with no `threadId` and read your `interactionMode` ([delegation.md](../omt/references/delegation.md#your-interaction-mode)). Also keep `modelSelection.instanceId`. It is your provider instance, and step 4 passes it to `--against`. In `plan` mode, dispatch only `explore`, `grill`, and `plan-review`, write no plan file and no ledger entry, put the plan text in the review briefs instead of a path, and deliver the finished plan in your final message. In `plan` mode no grill file exists: take the grill text from the final message of `omt-grill` in this conversation.
 
 Then run the [branch check](../omt/references/delegation.md#branch-check).
 
@@ -20,6 +20,8 @@ Done when: you know your mode and your provider instance.
 ### 1. Pick the slug and explore
 
 Pick the plan slug first: `omt-ulw` passes one; otherwise choose one that matches `^[a-z0-9][a-z0-9-]{0,63}$`. Explore briefs and `omt ledger stats` use it as `--plan <slug>`.
+
+When `$(omt paths --grills)/<slug>.md` exists, read it. Put its goal, its decisions, and its edge cases under `## Research`, with the grill file as the source.
 
 When the plan file exists, run `omt profile show --plan <slug> --json`. Before the plan file exists, use `omt profile show <name> --json` for an explicit profile name. When neither a plan file nor a profile name exists, run `omt profile show --json`. Keep the returned `profile` as `<name>` for later commands.
 
@@ -37,6 +39,10 @@ Done when: you can name each file and function the change touches, with a `path:
 ### 2. Decide whether the intent is clear
 
 List the decisions the plan needs. Settle each one from the code, the docs, or the request. What remains is an owner decision: a choice between valid options that changes what the user gets.
+
+A decision in the grill file is settled. Do not ask it again. From the grill, ask only its open questions and its `pending` edge cases, then the new owner decisions. The owner accepts, changes, or drops each `pending` edge case.
+
+When no grill file exists, and the goal has no done condition that can fail or 4 or more owner decisions remain, offer [omt-grill](../omt-grill/SKILL.md) as the first option in the owner message. When the owner picks it, run `omt-grill` with the slug, then come back to this step.
 
 Ask the user only owner decisions. Before you ask, finish all work that does not depend on the answers: the research and a draft plan. Then ask every owner decision in one message. Give each one 2 to 4 options and your recommendation.
 
@@ -63,6 +69,8 @@ Read the effective profile again with the step 1 command before you fill `## Tes
 - Start with e2e tests of the main user flows of each vertical slice that `verify` can also walk. Then add integration cases that e2e skips, followed by unit cases. Add other test kinds only when the owner asks.
 - Propose only the layers in `plan.testLayers` without an owner request. Keep a line in another layer only with its reason and the owner's approval.
 - Use one e2e test per main flow. Keep edge cases out of the e2e lines.
+- Map each grill edge case with `State: accepted` or `State: changed`. A changed edge case uses the user's handling and test layer from the grill file. A `dropped` edge case gets no line and no done condition. A `pending` edge case gets no line until the owner answers it.
+- Each mapped grill edge case with `Test: integration` or `Test: unit` becomes a `## Tests` line of that layer, with `Reason: grill edge case GE<k>`. When that layer is outside `plan.testLayers`, put the line in the step 2 message for owner approval, as any other line outside. A grill edge case never becomes an e2e line. A mapped edge case with `Test: none`, and every mapped edge case when `build.qa` is `off`, goes into the done condition of the unit that owns its handling.
 - Write each `## Tests` line as `- <layer> <unit>: <flow or case>. File: <path>. Reason: <why>.` An empty `## Tests` section means no new tests.
 - When units build or change UI and no spec for that UI exists under `docs/design/`, plan an `omt-design` step before those units. UI units cite the spec (`docs/design/<slug>.md`) and use the `ui` role.
 - Name each shared resource in the plan, such as a build folder, a generated project, a simulator, or a dev-server port. Write each verify command that uses shared build state as `omt lock run <resource> -- <command>`. Use the same `<resource>` for commands that share that state.
