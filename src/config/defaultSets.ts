@@ -274,7 +274,7 @@ function formatChain(chain: unknown[]): string {
   }).join(", ");
 }
 
-function formatValue(segments: string[], value: unknown): string {
+export function formatValue(segments: string[], value: unknown): string {
   if (value === undefined) return "none";
   if (segments.at(-1) === "chain" && Array.isArray(value)) return formatChain(value);
   return JSON.stringify(value);
@@ -298,8 +298,22 @@ function collectChanges(from: unknown, to: unknown, segments: string[], out: { s
   if (JSON.stringify(from) !== JSON.stringify(to)) out.push({ segments, from, to });
 }
 
+// The leaf paths of a config value, root `defaults` included; an array is one leaf.
+export function configLeaves(value: unknown): string[][] {
+  const out: string[][] = [];
+  const walk = (node: unknown, segments: string[]) => {
+    if (!isRecord(node)) {
+      if (segments.length > 0) out.push(segments);
+      return;
+    }
+    for (const key of Object.keys(node)) walk(node[key], [...segments, key]);
+  };
+  walk(value, []);
+  return out;
+}
+
 // A layer overrides a path when it sets a value at the full path, or null at an ancestor.
-function overrides(layer: unknown, segments: string[]): boolean {
+export function overrides(layer: unknown, segments: string[]): boolean {
   let value = layer;
   for (const segment of segments) {
     if (value === null) return true;
