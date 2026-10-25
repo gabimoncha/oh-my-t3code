@@ -66,6 +66,12 @@ export const WORKFLOW_RULES = {
     guardrails: { values: ["off", "propose"] },
     crap: { values: ["off", "report"] },
   },
+  git: {
+    branchCommits: { values: ["auto", "ask"] },
+    pullRequests: { values: ["auto", "ask", "off"] },
+    defaultBranch: { values: ["ask", "auto"] },
+    merge: { values: ["ask", "auto"] },
+  },
 } as const satisfies Record<keyof Workflow, Record<string, WorkflowRule>>;
 
 export const ACCESS_VALUES: readonly string[] = ["read-only", "edit"];

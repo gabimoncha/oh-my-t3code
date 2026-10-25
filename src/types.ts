@@ -69,6 +69,14 @@ export interface Workflow {
     guardrails: "off" | "propose";
     crap: "off" | "report";
   };
+  git?: Partial<GitPolicy>; // set 2026-10 has no git group; a missing key means "ask"
+}
+
+export interface GitPolicy {
+  branchCommits: "auto" | "ask";
+  pullRequests: "auto" | "ask" | "off";
+  defaultBranch: "ask" | "auto";
+  merge: "ask" | "auto";
 }
 
 export type WorkflowLayer = { [K in keyof Workflow]?: Partial<Workflow[K]> };

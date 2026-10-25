@@ -26,6 +26,8 @@ omt turns this T3 thread into a conductor: it plans, delegates each unit to a ro
 
 For a pull request review, load `omt-review` with `omt-review --profile pr-review <number>`.
 
+Before each commit, push, PR, or merge, a skill runs `omt git check` and follows the [Git actions](references/delegation.md#git-actions) rules.
+
 Each skill name works as a composer mention: `$omt-ulw` becomes `/omt-ulw` in Claude and Cursor, `/skill:omt-ulw` in Pi, and stays `$omt-ulw` in Codex.
 
 ## CLI cheat sheet

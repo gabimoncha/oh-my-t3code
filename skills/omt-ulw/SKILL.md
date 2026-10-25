@@ -203,6 +203,6 @@ Tell the user:
 
 Delete the stall heartbeat with `delete_scheduled_task`.
 
-Commit only when the user asked for a commit.
+After the final gate passes, make one commit for the run, then push and open or update the PR, each by the [Git actions](../omt/references/delegation.md#git-actions) rules. Report the commit hash and the PR URL.
 
 Done when: every done condition from step 1 appears in the report with evidence or as an open item.

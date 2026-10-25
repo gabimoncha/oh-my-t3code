@@ -451,6 +451,37 @@
               ]
             }
           }
+        },
+        "git": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "branchCommits": {
+              "enum": [
+                "auto",
+                "ask"
+              ]
+            },
+            "pullRequests": {
+              "enum": [
+                "auto",
+                "ask",
+                "off"
+              ]
+            },
+            "defaultBranch": {
+              "enum": [
+                "ask",
+                "auto"
+              ]
+            },
+            "merge": {
+              "enum": [
+                "ask",
+                "auto"
+              ]
+            }
+          }
         }
       }
     }

@@ -45,9 +45,8 @@ The launch message is a plain task, not an `omt brief`. It says:
 
 1. Use the plan slug `<slug>-<track>` for this track. After the plan exists, run `omt plan limit <slug>-<track> <k>`. Pick `<k>` so that the tracks together stay near this thread's `maxParallel`, for example 2. The `.omt/` config is shared by all worktrees, so do not change `limits` in it.
 2. Run the `omt-ulw` skill for this objective: <objective, scope, done conditions>. Give absolute paths when a scope is outside this worktree.
-3. Commit each verified unit on branch `omt/<slug>/<track>`.
-4. Push the branch and open a PR against `<base>`.
-5. Report the PR URL as the last line of the final message.
+3. `omt-ulw` commits and opens the PR by the `Git actions` rules of the omt `delegation.md` reference, on branch `omt/<slug>/<track>`, against `<base>`.
+4. Report the PR URL as the last line of the final message.
 
 After each call, record the thread id under the track's unit in the plan and with `omt ledger add --plan <slug> --unit <track> --role swarm --round 1 --attempt 1 --status dispatched --note <threadId>`. If a launch fails or its response is lost, call `t3_thread_list` and look for the thread before you launch again: the tool has no retry key.
 
@@ -82,6 +81,6 @@ Done when: every PR is linked and watched.
 
 ### 6. Merge
 
-Merge independent PRs in any order once their checks pass and the user approves. Merge a stack bottom-up: merge the first PR, then retarget or rebase the next onto the base, and wait for its checks before merging it.
+Merge independent PRs in any order once their checks pass. Before each merge, run `omt git check merge --plan <slug> --json` and act on its decision by the [Git actions](../omt/references/delegation.md#git-actions) rules. Merge a stack bottom-up: merge the first PR, then retarget or rebase the next onto the base, and wait for its checks before merging it.
 
 Done when: every PR is merged or closed, and each track's unit is marked with `omt plan mark <slug> <unit id> done` or `blocked`, with the reason in the plan's log.

@@ -217,6 +217,16 @@ const SET_2026_10: OmtConfig = {
 const SET_2026_11: OmtConfig = {
   ...SET_2026_10,
   defaults: "2026-11",
+  profiles: {
+    ...SET_2026_10.profiles,
+    normal: {
+      ...SET_2026_10.profiles.normal!,
+      workflow: {
+        ...SET_2026_10.profiles.normal!.workflow,
+        git: { branchCommits: "auto", pullRequests: "auto", defaultBranch: "ask", merge: "ask" },
+      },
+    },
+  },
   roles: Object.fromEntries(Object.entries(SET_2026_10.roles).flatMap(([name, role]) => {
     if (name !== "plan-review") return [[name, role]];
     const grill: RoleConfig = {

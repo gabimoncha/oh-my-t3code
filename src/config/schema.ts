@@ -166,6 +166,7 @@ export const CONFIG_SCHEMA = {
         design: workflowGroup(WORKFLOW_RULES.design),
         build: workflowGroup(WORKFLOW_RULES.build),
         review: workflowGroup(WORKFLOW_RULES.review),
+        git: workflowGroup(WORKFLOW_RULES.git),
       },
     },
   },

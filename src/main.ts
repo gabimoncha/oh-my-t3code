@@ -9,6 +9,7 @@ import * as config from "./commands/config.ts";
 import * as defaults from "./commands/defaults.ts";
 import * as detect from "./commands/detect.ts";
 import * as doctor from "./commands/doctor.ts";
+import * as git from "./commands/git.ts";
 import * as hook from "./commands/hook.ts";
 import * as init from "./commands/init.ts";
 import * as install from "./commands/install.ts";
@@ -49,6 +50,7 @@ export const COMMANDS: Readonly<Record<string, CommandModule>> = {
   lock,
   visual,
   worktree,
+  git,
   paths,
   hook,
 };

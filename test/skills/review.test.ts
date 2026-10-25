@@ -245,7 +245,7 @@ test("omt-review pins PR 7. CI fixes", () => {
   assert.match(text, /Tell the task to reproduce with the matching local command, fix the failure, and run the command again\./);
   assert.match(text, /A failure that cannot be reproduced because of secrets or outside services returns `STATUS: BLOCKED` with the reason\./);
   assert.match(text, /Review each fix once as in step 3 above, with `--unit F<k> --against auto` and the fix result in its task\./);
-  assert.match(text, /Keep each fix's changed paths for the report and the commit offer\./);
+  assert.match(text, /Keep each fix's changed paths for the report and the commit\./);
   assert.match(text, /Apply `maxReviewRounds` to repeated CI fixes\./);
   assert.match(text, /Done when: every failing check has a reviewed fix or a reported blocker, or its task waits on a limit\./);
 });
@@ -315,10 +315,10 @@ test("omt-review pins PR 11. Offers", () => {
   assert.match(text, /Name the PR's changed paths, excluding `docs\/design\/`, as the code under test in the `qa` task\./);
   assert.match(text, /When the project has no e2e test framework, require `INCONCLUSIVE` with that reason\./);
   assert.match(text, /With `review\.tests: off`, offer no `qa` task\./);
-  assert.match(text, /Leave qa changes uncommitted and review each qa change once before the commit offer\./);
+  assert.match(text, /Leave qa changes uncommitted and review each qa change once before the commit\./);
   assert.match(text, /Send product failures from qa to an owner-approved fix loop\./);
-  assert.match(text, /Ask for the owner's yes before the conductor commits and pushes\./);
-  assert.match(text, /After yes, make one commit per fix and per qa task using only its changed paths\./);
+  assert.match(text, /Commit and push by the \[Git actions\]\(\.\.\/omt\/references\/delegation\.md#git-actions\) rules, with `--profile <profile>`\./);
+  assert.match(text, /Make one commit per fix and per qa task using only its changed paths\./);
   assert.match(text, /Combine changes to the same file into one commit\./);
   assert.match(text, /Push to the PR branch\./);
   assert.match(text, /After the push, call `watch_pull_request` only when `review\.ci` is not `off` and PR step 3 found checks\./);
@@ -334,7 +334,7 @@ test("omt-review pins PR 11. Offers", () => {
   assert.ok(text.indexOf("Before finishing, call `list_thread_pull_requests` when available.") < push);
   assert.ok(text.indexOf("Link this PR if it is missing from the list.") < push);
   assert.ok(text.indexOf("Report a failed linking call as a failure.") < push);
-  assert.match(text, /Post nothing to GitHub except an owner-approved push\./);
+  assert.match(text, /Post nothing to GitHub except a push that the \[Git actions\]\(\.\.\/omt\/references\/delegation\.md#git-actions\) rules allow\./);
   assert.match(text, /Done when: each offer has an owner decision or awaits one, and the PR is unwatched when the review ends\./);
 });
 

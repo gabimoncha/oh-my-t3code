@@ -19,6 +19,7 @@ Every command accepts `--help`. Each command prints text for people. The command
 | `omt brief <role> --task <text>` | Renders a brief. `--save --json` saves the brief and returns a short dispatch task and a ledger command. |
 | `omt profile` | Lists the profiles. `show [<name>] [--plan <slug>] --json` shows the resolved workflow settings. |
 | `omt lock` | Runs a command under a shared build lock, or lists the held and free locks. |
+| `omt git` | `check <commit\|push\|pr\|merge> [--plan <slug>] [--profile <name>] [--json]` prints `auto`, `ask`, or `off` with the reason, from the profile's `workflow.git` policy and the current and default branch. It writes nothing. |
 | `omt plan` | Creates plan files and shows their progress. `new --profile <name>` selects a profile, and `new <slug> --light` leaves out the oracle item. `profile <slug> <name\|none>` switches the profile. `mark <slug> <id> <done\|open\|blocked>` marks one item. `status <slug>` prints the next item and the `ready:` units. |
 | `omt ledger` | Records and counts the delegated tasks in `.omt/ledger.jsonl`. A result entry with a terminal status, such as `completed` or `failed`, closes the dispatch that has the same `--task-id`. Without a task id, it closes the dispatch with the same plan, unit, role, round, and attempt. |
 | `omt visual` | Builds a self-contained HTML page with flowcharts, tables, and status cards. `--plan <slug>` adds the plan summary, the unit flowchart, and the checks. `--spec` adds tabs from a JSON page spec. |

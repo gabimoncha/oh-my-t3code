@@ -111,6 +111,24 @@ test("end to end: a grill session initializes shared paths and routes against ea
   }
 });
 
+test("end to end: git policy checks each action on feature and default branches and a pinned set", () => {
+  const p = gitProject({});
+  p.git(["update-ref", "refs/remotes/origin/main", "HEAD"]);
+  p.git(["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"]);
+  p.git(["checkout", "-q", "-b", "feat/x"]);
+  for (const branch of ["feat/x", "main"]) {
+    p.git(["checkout", "-q", branch]);
+    for (const action of ["commit", "push", "pr", "merge"]) {
+      const expected = branch === "feat/x" && action !== "merge" ? "auto" : "ask";
+      assert.match(p.omt("git", "check", action), new RegExp(`^${expected}: `), `${branch}: ${action}`);
+    }
+  }
+  p.git(["checkout", "-q", "feat/x"]);
+  mkdirSync(join(p.project, ".omt"));
+  writeFileSync(join(p.project, ".omt", "config.jsonc"), JSON.stringify({ defaults: "2026-10" }));
+  assert.match(p.omt("git", "check", "commit"), /^ask: .*2026-10/);
+});
+
 // A committed git repository in a temp root, with an omt runner whose HOME and git config point into the root.
 function gitProject(files: Record<string, string>) {
   const root = tempDir("omt-e2e-project-");

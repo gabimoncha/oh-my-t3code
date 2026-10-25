@@ -108,6 +108,10 @@ T3 keeps a finished child loaded for 30 idle minutes. Codex then keeps the threa
 
 A role selects a model. A profile selects the plan, build, and review steps. Keeping those choices separate lets a project use the same roles for normal work, prototypes, and PR reviews. Sparse profile overrides inherit `normal`, so a custom workflow states only its differences. A plan header keeps the selected profile across context resets. The conductor reloads it on wake so an owner can switch the remaining work.
 
+### Git actions follow a config policy
+
+Most owners work on branches and worktrees, where a question before each commit, push, and PR only adds a turn. Agent harnesses commit only when the user asks or gives standing approval. So the policy in `workflow.git` is that standing approval: the owner writes it once and can change it per profile. `omt git check` finds the current and default branch in code, so the decision does not depend on a model's reading of git output. A commit or push on the default branch asks first, because a wrong commit there reaches everyone who builds on that branch. A merge asks first, because it puts the change into the base branch, and that decision belongs to the owner. A force push always asks, because it can remove commits from the remote.
+
 ### Verification and test writing are separate
 
 `verify` runs the artifact and existing checks. `qa` writes the approved tests after verification passes. The split avoids new tests on every worker attempt and keeps device checks on a role that can reach local tools. Only qa makes required failure proofs. A ui worker requests design screenshots, while unit verification checks behavior without a second design comparison.

@@ -38,10 +38,12 @@ Do not call `orchestrator_capabilities` to read your modes. Use it only for the 
 
 Step 0 checks whether the current branch is behind the default branch. A worktree can start from an old base.
 
-1. Find the default branch from the repository metadata. Use the first that gives a result:
-   1. `git symbolic-ref --quiet --short refs/remotes/origin/HEAD`, with the `origin/` prefix removed.
-   2. `git config init.defaultBranch`, when that branch exists (`git rev-parse --verify --quiet <name>`).
-   3. `main` or `master`, whichever exists.
+1. Find the default branch from the repository metadata. Use the first that gives a result, and keep its full ref as `<default>`:
+   1. `git symbolic-ref --quiet refs/remotes/origin/HEAD`. It prints the full ref `refs/remotes/origin/<name>`.
+   2. `git config init.defaultBranch`, when that branch exists (`git rev-parse --verify --quiet refs/heads/<name>`). The full ref is `refs/heads/<name>`.
+   3. `main` or `master`, whichever exists as a branch (the same `refs/heads/<name>` check). The full ref is `refs/heads/<name>`.
+
+   Use the full ref `<default>` in every later command. A short name can select a tag with the same name. Report the branch by its short name.
 
    When none gives a result, skip the check and tell the user that you skipped it.
 2. Count the commits: `git rev-list --count HEAD..<default>`. When the count is 0, continue.
@@ -52,6 +54,29 @@ Step 0 checks whether the current branch is behind the default branch. A worktre
 ## Worktree setup
 
 A worktree thread needs the project's T3 setup script to install dependencies. On the first run in a project, check it with `omt worktree check` and follow [worktrees.md](worktrees.md). A `t3.json` file is not proof that T3 runs it.
+
+## Git actions
+
+The git policy in the config (`workflow.git`) is the owner's standing approval for each action that it marks `auto`.
+
+- Before each commit, push, PR, or merge, run `omt git check <commit|push|pr|merge> --plan <slug> --json`. In a run with no plan file, pass `--profile <profile>` instead of `--plan <slug>`.
+- On `auto`, act. On `ask`, ask the owner and wait. On `off`, do not act, and say so in the report. The `reason` field tells why.
+- When `omt git check` exits non-zero or prints no decision, treat it as `ask`.
+- Before the run's first edit task, save the output of `git status --porcelain` under `Log` in the plan. In a run with no plan file, save it in a file in the evidence directory (`omt paths --evidence`).
+- At commit time, stage only the paths that the run changed and that the saved list does not name. These are the owned paths.
+- Before the commit, run `git commit --dry-run --porcelain --only -- <owned paths>`. Each line with a letter in the first column is a path that the commit takes. Check that each of these paths is an owned path. When the commit takes another path, do not commit. Ask the owner.
+- Commit only the owned paths: `git commit --only -m <message> -- <owned paths>`. Changes that another session staged stay staged and stay out of the commit.
+- Never run a plain `git commit` or `git commit -a`.
+- A path in the saved list was already changed before the run. It holds changes that the run does not own. Do not stage it. Ask the owner, and name it in the report.
+- When the saved list is missing, or you cannot tell which changes are the run's, ask the owner before the commit.
+- Leave other changes alone, and name them in the report.
+- Follow the repository's commit conventions in `AGENTS.md` and the recent `git log`.
+- Children never commit, push, or create branches.
+- A PR is a ready PR against the base that the run was given, for example, for a stacked `omt-swarm` track, the previous track's branch. With no given base, the PR goes against the `defaultBranch` field that `omt git check pr --json` prints. When that field is `null`, ask the owner for the base.
+- When the branch already has an open PR, the push updates it. Do not open a second PR.
+- Link each PR with `link_pull_request` when available.
+- A force push always asks the owner, whatever the policy says. So a rebase of a pushed branch needs the owner's yes before `git push --force-with-lease`.
+- In `plan` interaction mode, make no git action.
 
 ## `delegate_task`
 
