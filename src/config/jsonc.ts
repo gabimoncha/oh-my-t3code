@@ -212,9 +212,14 @@ function skipValue(chars: string[], i: number): number {
   return i;
 }
 
-// Comments are blanked in `chars`, so the offsets match the original text.
-function rootMembers(chars: string[]): { open: number; close: number; members: Member[] } {
-  const open = skipSpace(chars, 0);
+interface ObjectScan {
+  open: number;
+  close: number;
+  members: Member[];
+}
+
+// Comments are blanked in `chars`, so the offsets match the original text. `open` is the offset of the "{".
+function objectMembers(chars: string[], open: number): ObjectScan {
   const members: Member[] = [];
   let i = skipSpace(chars, open + 1);
   while (chars[i] === '"') {
@@ -229,7 +234,34 @@ function rootMembers(chars: string[]): { open: number; close: number; members: M
     if (comma === undefined) break;
     i = skipSpace(chars, comma + 1);
   }
+  // parseJsonc reads "{,}" as an empty object.
+  if (members.length === 0 && chars[i] === ",") i = skipSpace(chars, i + 1);
   return { open, close: skipSpace(chars, i), members };
+}
+
+interface Level {
+  object: ObjectScan;
+  matches: number[]; // indices of the members with this level's key
+}
+
+function lastMatch(level: Level): Member | undefined {
+  const index = level.matches.at(-1);
+  return index === undefined ? undefined : level.object.members[index];
+}
+
+// Follows the path through the last member with each key, the one that JSON.parse keeps. It stops at a missing key
+// and at a value that is not an object, so a path never indexes into an array.
+function walk(chars: string[], path: readonly string[]): Level[] {
+  const levels: Level[] = [];
+  let object = objectMembers(chars, skipSpace(chars, 0));
+  for (const key of path) {
+    const level = { object, matches: object.members.flatMap((member, index) => (member.key === key ? [index] : [])) };
+    levels.push(level);
+    const member = lastMatch(level);
+    if (levels.length === path.length || member === undefined || chars[member.valueStart] !== "{") break;
+    object = objectMembers(chars, member.valueStart);
+  }
+  return levels;
 }
 
 function lineStart(text: string, offset: number): number {
@@ -241,6 +273,14 @@ function indentOf(text: string, member: Member | undefined): string | undefined 
   if (member === undefined) return undefined;
   const before = text.slice(lineStart(text, member.keyStart), member.keyStart);
   return /^[ \t]*$/.test(before) ? before : undefined;
+}
+
+// The whitespace at the start of the line that holds `offset`.
+function lineIndent(text: string, offset: number): string {
+  const start = lineStart(text, offset);
+  let end = start;
+  while (text[end] === " " || text[end] === "\t") end++;
+  return text.slice(start, end);
 }
 
 // The end of the line at `offset` (before its "\r\n" or "\n") when only spaces and complete one-line comments
@@ -289,59 +329,174 @@ function removeMember(body: string, members: Member[], index: number): string {
   return out;
 }
 
-function insertMember(body: string, chars: string[], open: number, close: number, members: Member[], key: string, json: string): string {
-  const anchor = members.findLast((entry) => entry.key === "version" || entry.key === "defaults");
-  const indent = indentOf(body, anchor ?? members[0]) ?? "  ";
-  const property = `${JSON.stringify(key)}: ${json}`;
-  const nl = body.includes("\r\n") ? "\r\n" : "\n";
-  if (anchor !== undefined) {
-    const comma = anchor.comma;
-    const after = comma === undefined ? anchor.valueEnd : comma + 1;
-    const lineEnd = endOfLine(body, after);
-    const insert = lineEnd ?? after;
-    const trailing = comma === undefined ? "" : ",";
-    const added = lineEnd === undefined ? ` ${property}${trailing}` : `${nl}${indent}${property}${trailing}`;
-    return comma === undefined
-      ? body.slice(0, after) + "," + body.slice(after, insert) + added + body.slice(insert)
-      : body.slice(0, insert) + added + body.slice(insert);
-  }
-  if (members.length > 0) {
-    const insert = endOfLine(body, open + 1) ?? open + 1;
-    return body.slice(0, insert) + `${nl}${indent}${property},` + body.slice(insert);
-  }
-  const multiline = chars.slice(open + 1, close).includes("\n");
-  return body.slice(0, open + 1) + `${nl}${indent}${property}` + (multiline ? "" : nl) + body.slice(open + 1);
+interface Layout {
+  nl: string;
+  step: string; // the indentation that one nesting level adds
 }
 
-// Sets, adds, or (with undefined) removes one top-level key of a JSONC object. Every other byte stays.
-// A new key goes after "version" or "defaults", whichever is last, or first in the object.
-// With duplicate keys, a set replaces the last one and removes the others, and a removal removes them all.
-export function setTopLevelValue(text: string, key: string, value: unknown | undefined): string {
+const LINE_WIDTH = 100;
+
+// `used` counts the other columns of the value's line: the text before the value and a comma right after it.
+function render(value: unknown, layout: Layout, indent: string, used: number): string {
+  const json = JSON.stringify(value);
+  if (used + json.length <= LINE_WIDTH) return json;
+  return JSON.stringify(value, null, layout.step).split("\n").join(layout.nl + indent);
+}
+
+// The indentation of the first member found in a top-level object value, minus the root member indentation.
+function indentStep(body: string, chars: string[], root: ObjectScan): string {
+  const firstIndent = (members: Member[]) => members.map((member) => indentOf(body, member)).find((indent) => indent !== undefined);
+  const outer = firstIndent(root.members);
+  for (const member of root.members) {
+    if (chars[member.valueStart] !== "{") continue;
+    const inner = firstIndent(objectMembers(chars, member.valueStart).members);
+    if (inner === undefined) continue;
+    return outer !== undefined && inner.length > outer.length && inner.startsWith(outer) ? inner.slice(outer.length) : "  ";
+  }
+  return "  ";
+}
+
+function replaceValue(body: string, member: Member, value: unknown, layout: Layout): string {
+  const used = member.valueStart - lineStart(body, member.valueStart) + (member.comma === member.valueEnd ? 1 : 0);
+  const json = render(value, layout, lineIndent(body, member.valueStart), used);
+  return body.slice(0, member.valueStart) + json + body.slice(member.valueEnd);
+}
+
+// Adds a member after `anchor` with the comma that the object needs. When only spaces and one-line comments follow
+// the anchor on its line, the member goes on the next line, so a same-line comment stays with its property. Else it
+// goes on the same line, so it never lands inside a comment.
+function insertAfter(body: string, anchor: Member, indent: string, key: string, value: unknown, layout: Layout): string {
+  const comma = anchor.comma;
+  const after = comma === undefined ? anchor.valueEnd : comma + 1;
+  const lineEnd = endOfLine(body, after);
+  const insert = lineEnd ?? after;
+  const trailing = comma === undefined ? "" : ",";
+  const name = `${JSON.stringify(key)}: `;
+  let added: string;
+  if (lineEnd === undefined) {
+    const used = after - lineStart(body, after) + (comma === undefined ? 1 : 0) + 1 + name.length + trailing.length;
+    added = ` ${name}${render(value, layout, lineIndent(body, after), used)}${trailing}`;
+  } else {
+    added = `${layout.nl}${indent}${name}${render(value, layout, indent, indent.length + name.length + trailing.length)}${trailing}`;
+  }
+  return comma === undefined
+    ? body.slice(0, after) + "," + body.slice(after, insert) + added + body.slice(insert)
+    : body.slice(0, insert) + added + body.slice(insert);
+}
+
+// A new top-level key goes after "version" or "defaults", whichever is last, or first in the object.
+function insertTopLevel(body: string, chars: string[], root: ObjectScan, key: string, value: unknown, layout: Layout): string {
+  const { open, close, members } = root;
+  const anchor = members.findLast((entry) => entry.key === "version" || entry.key === "defaults");
+  const indent = indentOf(body, anchor ?? members[0]) ?? "  ";
+  if (anchor !== undefined) return insertAfter(body, anchor, indent, key, value, layout);
+  const name = `${JSON.stringify(key)}: `;
+  if (members.length > 0) {
+    const property = `${name}${render(value, layout, indent, indent.length + name.length + 1)}`;
+    const insert = endOfLine(body, open + 1) ?? open + 1;
+    return body.slice(0, insert) + `${layout.nl}${indent}${property},` + body.slice(insert);
+  }
+  const property = `${name}${render(value, layout, indent, indent.length + name.length)}`;
+  const multiline = chars.slice(open + 1, close).includes("\n");
+  return body.slice(0, open + 1) + `${layout.nl}${indent}${property}` + (multiline ? "" : layout.nl) + body.slice(open + 1);
+}
+
+// A new nested key goes after the last member, with the indentation of its siblings. In an object with no member,
+// it goes after the last comment, with the parent's indentation plus one step, and a one-line object becomes
+// multi-line with the closing brace at the parent's indentation.
+function appendMember(body: string, chars: string[], object: ObjectScan, parent: Member, key: string, value: unknown, layout: Layout): string {
+  const parentIndent = lineIndent(body, parent.keyStart);
+  const anchor = object.members.at(-1);
+  if (anchor !== undefined) {
+    const sibling = object.members.map((member) => indentOf(body, member)).findLast((indent) => indent !== undefined);
+    return insertAfter(body, anchor, sibling ?? parentIndent + layout.step, key, value, layout);
+  }
+  // parseJsonc reads "{,}" as an empty object; the stray comma cannot stay in front of the new member.
+  const stray = chars.indexOf(",", object.open);
+  if (stray !== -1 && stray < object.close) {
+    body = body.slice(0, stray) + " " + body.slice(stray + 1);
+    chars[stray] = " ";
+  }
+  let end = object.close;
+  while (end > object.open + 1 && body[end - 1] === chars[end - 1]) end--;
+  const indent = parentIndent + layout.step;
+  const name = `${JSON.stringify(key)}: `;
+  const added = `${layout.nl}${indent}${name}${render(value, layout, indent, indent.length + name.length)}`;
+  if (body.slice(end, object.close).includes("\n")) {
+    const insert = endOfLine(body, end) ?? end;
+    return body.slice(0, insert) + added + body.slice(insert);
+  }
+  return body.slice(0, end) + added + layout.nl + parentIndent + body.slice(object.close);
+}
+
+// Sets, adds, or (with undefined) removes the value at `path` in a JSONC object. Every byte outside the edited value
+// stays, with three exceptions: duplicate keys on the path are merged into the last one, an empty "{}" that gets a
+// member becomes multi-line, and a removal also removes each object that it empties, up to the first object that
+// keeps a member or a comment, never a top-level key. Missing parents are created as one nested value. Removing a
+// path that does not exist returns the text unchanged.
+export function setJsoncValue(text: string, path: readonly string[], value: unknown | undefined): string {
+  if (path.length === 0) throw new OmtError("jsonc_edit", "cannot edit the config: the path is empty");
+  if (path.includes("")) throw new OmtError("jsonc_edit", "cannot edit the config: the path has an empty segment");
+  if (value !== undefined && JSON.stringify(value) === undefined) {
+    throw new OmtError("jsonc_edit", "cannot edit the config: the value has no JSON form");
+  }
   const bom = text.charCodeAt(0) === 0xfeff ? "﻿" : "";
   let body = bom === "" ? text : text.slice(1);
   const root = parseJsonc(body, "config");
   if (typeof root !== "object" || root === null || Array.isArray(root)) {
     throw new OmtError("jsonc_edit", "cannot edit the config: its root is not an object");
   }
-  const json = value === undefined ? undefined : JSON.stringify(value);
   const scan = () => {
     const chars = stripComments(body, "config");
-    return { chars, ...rootMembers(chars) };
+    return { chars, levels: walk(chars, path) };
   };
   const first = scan();
-  let members = first.members;
-  const lastIndex = members.findLastIndex((member) => member.key === key);
-  const member = members[lastIndex];
-  if (json !== undefined && member === undefined) {
-    body = insertMember(body, first.chars, first.open, first.close, members, key, json);
-  } else if (json !== undefined && member !== undefined) {
-    body = body.slice(0, member.valueStart) + json + body.slice(member.valueEnd);
-  }
+  if (value === undefined && (first.levels[path.length - 1]?.matches.length ?? 0) === 0) return text;
+  const layout = {
+    nl: body.includes("\r\n") ? "\r\n" : "\n",
+    step: indentStep(body, first.chars, (first.levels[0] as Level).object),
+  };
+  // JSON.parse keeps the last of duplicate keys. The others go before the edit, so that removing an emptied object
+  // cannot make an older duplicate the live one. A removal removes every occurrence of the last key anyway.
+  const unique = value === undefined ? path.length - 1 : path.length;
   for (;;) {
-    ({ members } = scan());
-    const matches = members.flatMap((entry, index) => (entry.key === key ? [index] : []));
-    if (matches.length === 0 || (json !== undefined && matches.length === 1)) break;
-    body = removeMember(body, members, matches[0] as number);
+    const level = scan().levels.slice(0, unique).find((entry) => entry.matches.length > 1);
+    if (level === undefined) break;
+    body = removeMember(body, level.object.members, level.matches[0] as number);
+  }
+  if (value === undefined) {
+    for (;;) {
+      const level = scan().levels[path.length - 1] as Level;
+      if (level.matches.length === 0) break;
+      body = removeMember(body, level.object.members, level.matches[0] as number);
+    }
+    // levels[depth] holds the value of a member at depth `depth`; a top-level key (depth 1) always stays.
+    for (let depth = path.length - 1; depth >= 2; depth--) {
+      const { levels } = scan();
+      const object = (levels[depth] as Level).object;
+      if (object.members.length > 0 || /\S/.test(body.slice(object.open + 1, object.close))) break;
+      const parent = levels[depth - 1] as Level;
+      body = removeMember(body, parent.object.members, parent.matches.at(-1) as number);
+    }
+    return bom + body;
+  }
+  const { chars, levels } = scan();
+  const depth = levels.length - 1;
+  const level = levels[depth] as Level;
+  const nested = path.slice(depth + 1).reduceRight<unknown>((inner, key) => ({ [key]: inner }), value);
+  const member = lastMatch(level);
+  const key = path[depth] as string;
+  if (member !== undefined) {
+    body = replaceValue(body, member, nested, layout);
+  } else if (depth === 0) {
+    body = insertTopLevel(body, chars, level.object, key, nested, layout);
+  } else {
+    body = appendMember(body, chars, level.object, lastMatch(levels[depth - 1] as Level) as Member, key, nested, layout);
   }
   return bom + body;
+}
+
+// The depth-1 case of setJsoncValue: sets, adds, or (with undefined) removes one top-level key.
+export function setTopLevelValue(text: string, key: string, value: unknown | undefined): string {
+  return setJsoncValue(text, [key], value);
 }
