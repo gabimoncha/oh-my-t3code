@@ -25,7 +25,7 @@ Give the question one kind:
 | --- | --- | --- |
 | A workflow skill | "how do I build this with subagents", "which skill reviews a PR" | the [workflow table](../omt/SKILL.md#workflows) of the router |
 | A CLI command | "what does `omt brief` do", "explain `omt ledger`" | `omt --help`, then `omt <command> --help` |
-| A config change | "how do I make reviews cheaper", "can I use only Codex" | `omt config show`, `omt profile list`, `omt profile show <name>`, `omt roles`, `omt defaults list`, `omt detect` |
+| A config change | "how do I make reviews cheaper", "can I use only Codex" | `omt config show`, `omt config explain`, `omt profile list`, `omt profile show <name>`, `omt roles`, `omt defaults list`, `omt detect` |
 | The next step | "what do I do next", "is omt set up" | `omt doctor --project` |
 | A tour | "show me around", "give me a tour" | step 4 |
 
@@ -43,6 +43,7 @@ Run the commands of the kind before you answer. Each command reads only, except 
 | `omt profile show <name>` | the workflow, limits, roles, and models of one profile |
 | `omt roles` | the target, access, and mode of each role |
 | `omt config show` | the merged config before profile selection |
+| `omt config explain [--profile <name>]` | the layer that sets each value: the default set, the user config, the project config, or a profile, and the lower layers that it overrides |
 | `omt defaults list` | the default sets, the latest set, and the selected set with its source |
 | `omt detect` | which harnesses (Claude Code, Codex) this machine can run, and the `harnesses` value that omt recommends |
 | `omt update --check` | the current and the latest omt version, the install channel, and its update command; it asks the npm registry and writes nothing |

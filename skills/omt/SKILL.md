@@ -52,6 +52,7 @@ To find the CLI (`omt`, `.omt/bin/omt`, or the manual steps), follow [The CLI](r
 | `omt ledger stats --plan <slug>` | `dispatched` and `active` counts, the limits, and `can dispatch: yes` or `no` |
 | `omt ledger request-id --plan <slug> --unit <id> --role <r> --round <n> --attempt <n>` | the `clientRequestId` |
 | `omt config show` | the merged config before profile selection, including limits and `visuals` |
+| `omt config explain [--profile <name>] [--json]` | the layer that sets each value (the default set, the user or project config, or a profile and the file that declares it) and the lower layers that it overrides |
 | `omt defaults list` | each default set, with the `latest` mark and the `selected (<source>)` mark |
 | `omt defaults diff [<from>] [<to>]` | one `<path>: <from> -> <to>` line per change, with ` (overridden by <file>)` when a config file sets that value; `no changes` when none. `<from>` defaults to the selected set, `<to>` to `latest` |
 | `omt defaults use <set\|latest> [--user\|--project] [--dry-run] [--yes]` | `<file>: defaults <old\|none> -> <new>`; changes only the `defaults` key; without a flag, the project config when it exists, else the user config |

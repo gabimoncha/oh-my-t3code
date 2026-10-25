@@ -48,8 +48,10 @@ src/
   main.ts                main(), createContext(), command registry, help text
   types.ts               shared types (section 3)
   paths.ts               path helpers (section 4)
-  util/                  errors.ts, args.ts, fs.ts, output.ts, json.ts, ids.ts
-  config/                jsonc.ts, defaults.ts, defaultSets.ts (section 6.4), validate.ts, merge.ts, load.ts, starter.ts, schema.ts
+  util/                  errors.ts, args.ts, fs.ts, output.ts, json.ts, ids.ts, open.ts (opens a URL in the default browser)
+  config/                jsonc.ts, defaults.ts, defaultSets.ts (section 6.4), validate.ts, merge.ts, load.ts, starter.ts, schema.ts,
+                         explain.ts (the source of each value, section 5.1)
+  config/editor/         server.ts, api.ts, diff.ts, assets.ts, assetText.ts: the config editor of omt config edit --web (section 5.1)
   routing/               capabilities.ts, effort.ts, resolve.ts, format.ts, family.ts
   brief/                 templates.ts, render.ts
   plan/                  template.ts, parse.ts
@@ -79,6 +81,7 @@ schema/
 templates/
   worktree-setup.mjs     the standalone worktree setup runner (section 5.12)
   worktree-setup.d.mts   its types for src/worktree/runner.ts
+  config-editor/         index.html, app.css, and app.js: the config editor page (section 5.1)
 skills/
   omt/                   router skill and shared references
   omt-ulw/ omt-plan/ omt-design/ omt-review/ omt-research/ omt-swarm/ omt-loop/ omt-show/
@@ -504,7 +507,7 @@ No project. Before `plan`, `profile`, `ledger`, `brief`, `visual`, and `lock` ru
 
 ## 5. CLI
 
-Exit codes: 0 for success, 1 for a failure (bad config, a failed check, a conflict, a missing file), 2 for a usage error (unknown command, unknown flag, missing argument). `omt lock run` also returns the command's exit code, or 75 for a busy lock. `omt lock run` and `omt lock list` also return the lock tool's exit code when it is neither 0 nor 75. Every command accepts `--help`, prints its usage, and exits 0. `omt --version` prints the version. `omt` with no command or with `--help` prints the command list.
+Exit codes: 0 for success, 1 for a failure (bad config, a failed check, a conflict, a missing file), 2 for a usage error (unknown command, unknown flag, missing argument). `omt lock run` also returns the command's exit code, or 75 for a busy lock. `omt lock run` and `omt lock list` also return the lock tool's exit code when it is neither 0 nor 75. Every command accepts `--help`, prints its usage, and exits 0. `omt --version` prints the version. `omt` with no command or with `--help` prints the command list, which ends with a `help [<command>]` row. `omt help` prints the same text as `omt --help`, and `omt help <command>` prints the same text as `omt <command> --help`. Both exit 0, and so do `omt help --help` and `omt help -h`, which print the command list. `omt help` with a name that is not a command, such as `omt help nope`, fails with `unknown command "<name>"` and exit 2. `help` itself is not in the command registry, so `omt help help` fails the same way. A second argument fails with `unexpected argument "<arg>"` and exit 2.
 
 Argument parsing uses `node:util` `parseArgs` with `strict: true` and `allowPositionals: true`, wrapped in `src/util/args.ts`. A parse error becomes an `OmtError` with exit code 2.
 
@@ -515,7 +518,7 @@ Argument parsing uses `node:util` `parseArgs` with `strict: true` and `allowPosi
 | `update` | `omt update [--check] [--dry-run] [--yes] [--skills-only] [--project] [--json]` (section 5.15) |
 | `doctor` | `omt doctor [--project] [--capabilities <file>] [--json]` |
 | `init` | `omt init` |
-| `config` | `omt config [show \| path \| validate \| init] [--json] [--defaults] [--force]` |
+| `config` | `omt config [show \| explain \| path \| validate \| init] [--json] [--defaults] [--force]`, `omt config explain [--profile <name>] [--json]`, `omt config edit --web [--no-open]` |
 | `defaults` | `omt defaults list [--json]`, `omt defaults diff [<from>] [<to>] [--json]`, `omt defaults use <set\|latest> [--user \| --project] [--dry-run] [--yes] [--json]` |
 | `detect` | `omt detect [--capabilities <file>] [--json] [--write] [--user \| --project] [--dry-run] [--yes]` |
 | `roles` | `omt roles [--capabilities <file>] [--role <name>]... [--plan <slug>] [--profile <name>] [--json]` |
@@ -554,14 +557,119 @@ Build. `bun run build` runs `bun scripts/build.ts [--bundle] [--binary] [--targe
 - `<outdir>/cli.js` comes from `bun build --target=node --define OMT_BUILD='"bundle"' src/cli.ts`. `bun build` keeps the source shebang, `#!/usr/bin/env bun`, so the script replaces the first line with `#!/usr/bin/env node`. The file then has exactly one shebang. The script sets its mode to 0755.
 - `<outdir>/bin/omt` comes from `bun build --compile --minify --asset ./skills --define OMT_BUILD='"binary"' src/cli.ts`. The skills land at `/$bunfs/root/skills`. With `--target`, each target goes to `<outdir>/bin/<target>/omt`, and a cross-compile downloads the Bun runtime of that target.
 
-Both outputs inline the worktree setup runner, its module and its text (section 5.12), so neither needs a `templates/` folder.
+Both outputs inline the worktree setup runner, its module and its text (section 5.12), and the config editor page (section 5.1), so neither needs a `templates/` folder.
 
 ### 5.1 `omt config`
 
 - `show` (the default subcommand) prints the merged config as JSON, before the selected profile is applied (section 6.7). `--defaults` prints the selected default set (section 6.4) instead. Config issues go to stderr, and the command still exits 0.
+- `explain` prints the layer that sets each value, as the section on value sources below describes.
+- `edit --web` starts the config editor, as the section on the config editor below describes. `edit` without `--web` is a usage error with the hint `use omt config edit --web`. `--web` and `--no-open` with another subcommand are usage errors.
 - `path` prints two lines: `user: <path> (present)` or `(absent)`, then `project: <path> (present)` or `(absent)`. Neither path goes through `realpath`. The CLI takes its cwd from `$PWD` when `$PWD` resolves to `process.cwd()` and `findProjectRoot($PWD)` resolves to the same real directory as `findProjectRoot(process.cwd())`; otherwise it uses `process.cwd()`. So the project root always names the physical project, and `$PWD` changes only how it prints.
 - `validate` prints each issue as `<severity> <source> <path>: <message>`, or `<severity> <source>: <message>` when the path is empty. A JSONC syntax error is one issue with an empty path and the message `<line>:<column>: <reason>`, so the file path appears once. It prints `config ok` when there is no issue. It exits 1 when any issue is an error. `--json` prints `{ "ok": boolean, "issues": ConfigIssue[] }`.
 - `init` writes the starter user config (section 6.5) and prints `create <path>` or `overwrite <path>`. It refuses to overwrite an existing file unless `--force` is given.
+
+Value sources. `omt config explain [--profile <name>] [--json]` reads both config files with `readConfigLayers`, merges them with `mergeConfigLayers` (section 6.3), and prints the report of `explainConfig(layers, loaded, profile?)` from `src/config/explain.ts`. Config issues go to stderr. Without `--profile`, the report explains the selected profile, as `effectiveConfig` selects it (section 6.7). The command prints the report only when that profile resolves. Then it exits 0, also when an issue is an error. When the profile does not resolve, the command prints no report. An unknown profile name, given or selected, or an unknown profile in its chain, is the usage error of `omt profile show` (exit 2). A profile cycle (`OmtError` code `profile_cycle`) or a chain of more than 8 profiles (`profile_depth`) exits 1. `--profile` with another subcommand is a usage error.
+
+```ts
+type ExplainSource =
+  | { kind: "defaults"; set: string }
+  | { kind: "user" | "project"; path: string }
+  | { kind: "profile"; profile: string; declaredIn: ExplainSource };
+
+interface ExplainEntry {
+  path: string[];
+  value: unknown;
+  source: ExplainSource;
+  overridden: { source: ExplainSource; value: unknown }[]; // highest first
+}
+
+interface ExplainReport {
+  defaults: { set: string; source: string }; // source is LoadedConfig.defaultsSource
+  profile: { name: string; source: ProfileSource };
+  root: ExplainEntry[];
+  effective: ExplainEntry[];
+  removed: { path: string[]; source: ExplainSource }[];
+}
+```
+
+The sources come from the merge steps, not from the paths that a file names:
+
+- `mergeConfigLayers` returns `LoadedConfig` plus `steps: MergeStep[]`: the config after each merge step, first the cloned default set, then each present file layer in order. `loadConfig` returns the same value without `steps`.
+- A step sets a path when its layer has a value at the path and the config after the step has a value there. A `null` at an ancestor does not set the path.
+- A step creates a path under `roles.<name>` or `profiles.<name>` when the object `<name>` is absent before the step, present after it, and holds the path. So the fields that `mergeLayer` fills in for a new role (`result`, `t3Role`, `interactionMode`, `runtimeMode`) belong to the layer that creates the role. A step removes the path when the object is present before the step and absent after it.
+- The source of a path is the last step that sets or creates it. With no such step, the source is `{ kind: "defaults", set }`.
+- `overridden` lists, highest first, each earlier step that sets, creates, or removes the path, with its value after that step, and last the default set when it has a value at the path. A step that removed the object adds `{ source, value: null }`. A step that sets the same value is still listed.
+- `root` has one entry per leaf of `loaded.config`, `profiles.*` included. `configLeaves` in `src/config/defaultSets.ts` lists the leaves: an array is one leaf, and the root `defaults` key is a leaf.
+- `removed` lists each role and profile that a step holds and the final config does not, with the last layer that sets it to `null`. A role that one layer removes and a later layer creates again is not in `removed`.
+- `effective` applies the same rules to the profile steps. `profileBase(config)` in `src/profile/resolve.ts` is the config before the first step, and `profileSteps(config, name)` returns the config after each step of the chain, from `normal` to the named profile. `resolveProfile` uses both. `effective` has one entry per leaf of the resolved `roles`, `limits`, `models`, and `workflow`, and its paths start with these keys. In the base step, a `workflow` path has the source `{ kind: "defaults", set }`, from `normal` of the selected set, and any other path has its `root` source. A profile step that sets or creates a path gives the source `{ kind: "profile", profile, declaredIn }`, where `declaredIn` is the `root` source of `profiles.<profile>.<path>`. For a filled-in field of a role that the profile creates, `declaredIn` is the `root` source of `profiles.<profile>.roles.<role>.access`.
+
+The text output starts with the two file paths, `user: <path>` and `project: <path>`, then `defaults: <set> (<source>)` and `profile: <name> (<source>)`. Then come the lines `root:`, `removed:` (only when `removed` is not empty), and `effective:`, each followed by its entries. An entry is one line, `<dotted path>  <value>  <label>`, and one line `  over <label>: <value>` per `overridden` item. Values print with `formatValue` of `src/config/defaultSets.ts`, as in `omt defaults diff`. A `removed` entry prints as `<dotted path>  <label>`. The labels are `defaults <set>`, `user`, `project`, and `profile <name> (<label of declaredIn>)`. `--json` prints the `ExplainReport`.
+
+Config editor. `omt config edit --web [--no-open]` calls `startConfigEditor(ctx, { open })` from `src/config/editor/server.ts`. It prints `omt config editor: <url>` and `Press Ctrl-C to stop. The editor also stops when you close its tab.`, waits until the server stops, prints `editor stopped`, and exits 0. On SIGINT or SIGTERM it closes the server and exits 0. It removes its signal handlers after the close. Without `--no-open`, it opens the URL with `openUrl(url, platform)` from `src/util/open.ts`: `open` on darwin, `cmd /c start "" <url>` on win32, and `xdg-open` on other platforms, spawned detached with `stdio: "ignore"`. When the opener cannot start, the command prints `warning: could not open a browser; open the URL yourself` to stderr and keeps running. The token is in the opener's argv while the opener runs, so `ps` can show the URL to other local users for that time. With `--no-open`, nothing is spawned.
+
+```ts
+interface ConfigEditorOptions {
+  open: boolean;
+  idleMs?: number; // default 120_000
+  closeGraceMs?: number; // default 5_000
+}
+
+interface ConfigEditor {
+  url: string; // http://127.0.0.1:<port>/<token>/
+  port: number;
+  closed: Promise<void>; // resolves when the server has stopped
+  close(): Promise<void>;
+}
+```
+
+Server. The editor uses `node:http` and listens on host `127.0.0.1`, port 0. A listen error fails with `OmtError` code `editor_listen`. The token is 32 bytes from `randomBytes`, as base64url. Every path starts with the base path `/<token>/`. omt runs no other server, and the editor runs only while the command runs.
+
+Request checks, in this order:
+
+1. The `Host` header must equal `127.0.0.1:<port>`, else 403 `forbidden`. A request without `Host` gets the same 403.
+2. The path must start with `/<token>/`, compared with `timingSafeEqual`, and the rest must be a route, else 404 `not_found`.
+3. When `Origin` is present, it must equal `http://127.0.0.1:<port>`, else 403 `forbidden`. `Origin: null` fails this check. A POST without `Origin` gets 403 `forbidden`.
+4. When `Sec-Fetch-Site` is present, it must be `same-origin` or `none`, else 403 `forbidden`.
+5. The method must be the route's method, else 405 `method_not_allowed` with an `Allow` header. `OPTIONS` gets this 405 too.
+6. An `Expect` header other than `100-continue` gets 417 `expectation_failed`.
+7. `api/preview` and `api/write` need `Content-Type: application/json`, else 415 `unsupported_media_type`.
+8. On a POST route, a body over 1 MiB gets 413 `payload_too_large` with `Connection: close`. A `Content-Length` over 1 MiB gets the 413 before the body is read, and a chunked body gets it at the first byte over the limit. The server drops the rest of the upload. A GET route reads no body, so this check does not apply to it.
+
+A CONNECT request and a protocol upgrade go through checks 1 to 4. When they pass, the request gets 405 `method_not_allowed` with `Allow`, and the server closes the socket. A request that does not parse gets 431 for a header overflow, 413 for a chunk-extension overflow, 408 for a request timeout, and 400 otherwise, all with code `bad_request`.
+
+Every response, error responses and the parser-error responses included, has these headers: `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`, `Cross-Origin-Opener-Policy: same-origin`, `Cross-Origin-Resource-Policy: same-origin`, and `Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`. No response has an `Access-Control-*` header. `Referrer-Policy` is `same-origin` and not `no-referrer`, because with `no-referrer` a browser sends `Origin: null` on the page's own POST requests, which check 3 refuses. The page loads nothing from another origin, so no `Referer` with the token leaves it. An error body is `{ "ok": false, "code", "message", "hint"?, "newErrors"? }` and has no stack trace. An unexpected error gets 500 `internal_error`, and the server prints a warning to stderr.
+
+Routes under `/<token>/`:
+
+| Route | Method | Response |
+| --- | --- | --- |
+| `""` | GET | `index.html` |
+| `app.css`, `app.js` | GET | the page assets |
+| `api/state` | GET | the editor state |
+| `api/explain?profile=<name>` | GET | `explainConfig` for that profile |
+| `api/preview` | POST | the edit result, with nothing written |
+| `api/write` | POST | the write result |
+| `api/ping` | POST | 204 |
+| `api/close` | POST | 204 |
+
+The page assets come from `src/config/editor/assetText.ts`, a Bun macro that reads `templates/config-editor/<name>`. `src/config/editor/assets.ts` imports it `with { type: "macro" }`, as `src/worktree/runner.ts` imports the runner text (section 5.12).
+
+`api/state` returns `{ version, defaults: { selected, source, latest, sets }, files: [{ kind, path, present, hash, text, issues }], profiles, selectedProfile, issues, explain, vocab }`. `files` holds the user file, then the project file. `hash` is the SHA-256 hex of the file text, and `hash` and `text` are `null` for an absent file. `files[].issues` holds the issues of that file, and `issues` holds the issues of the merged config. `explain` is never `null`. It is the report of the selected profile. When that profile does not resolve, it is the report of `normal`. When `normal` does not resolve either, it has the `root` entries, the `removed` entries, and no `effective` entries, and the issues say why. `vocab` holds the keys, values, ranges, and patterns that `validateLayer` accepts, from the constants of `src/config/validate.ts` and `EFFORT_LADDER`, so the page offers the same choices.
+
+`api/explain` without a `profile` value gets 400 `bad_request`. An unknown name gets 400 `unknown_profile` with the known profiles in the hint. A profile whose chain does not resolve gets 422 `profile_invalid`.
+
+Edit requests. `api/preview` and `api/write` take the body `{ "file": "user" | "project", "base": string, "edits": ({ "path": string[], "value": unknown } | { "path": string[], "remove": true })[] }`. `base` is the `hash` of the file text that the page edited. A body that is not a JSON object, a `file` that is neither name, a `base` that is not a string, fewer than 1 or more than 200 edits, a path that is empty or has an empty segment, a `path[0]` that is not in `ROOT_KEYS` or is `$schema` or `version`, or an edit without exactly one of `value` and `remove: true` gets 400 `bad_request`. Both routes then do these steps:
+
+1. Read the target file with `readConfigTarget` (section 5.13). An absent file gets 404 `config_not_found` with its hint, `run omt init` or `run omt config init`.
+2. Compare the SHA-256 of the text with `base`. A difference gets 409 `config_changed` with the message `<path> changed since the editor loaded it; nothing was written` and the hint `reload the page`.
+3. Apply the edits in order with `setJsoncValue` (section 7). A `remove` edit passes `undefined`. A target that does not parse gets 422 `jsonc_parse`, and a failed edit gets 422 `jsonc_edit`, each with its message.
+4. Check the candidate text with `layerFromText`, and merge it with the other file's layer through `mergeConfigLayers`. Do the same with the current text. An error issue of the candidate whose `source`, `path`, and `message` the current files do not have is a new error. Warnings never block.
+
+`api/preview` returns `{ text, diff, issues, newErrors, defaultsChanges? }` and writes nothing. `diff` comes from `lineDiff` in `src/config/editor/diff.ts`: `{ op: " " | "+" | "-"; line: string }[]`, from the longest common subsequence of the lines. When either text has over 5,000 lines, the diff removes every old line and adds every new line. `defaultsChanges` is the result of `diffDefaultSets` for the old and the new set, as in `omt defaults diff`, and is present only when an edit's path is `["defaults"]`.
+
+`api/write` refuses a new error with 422 `config_invalid`, the message `the change adds <n> config errors; nothing was written` (`1 config error` for one error), and `newErrors`. Otherwise it writes the candidate text with `writeConfigTarget(target, snapshot, next)` (section 5.13), where `snapshot` is the text of step 1, and returns `{ "ok": true, "state" }` with the new editor state. When the candidate equals the snapshot, it writes nothing. A `config_changed` error from `writeConfigTarget` gets the 409 of step 2. The server runs previews and writes one at a time, in the order in which their bodies complete, from step 1 to the end of the atomic write. So of two writes with the same `base`, the second reads the new text and gets 409. A writer outside omt can still change the file between the last read and the rename, as for `omt defaults use`.
+
+Lifetime. The page posts `api/ping` at load and then every 5 seconds. An `api/close` starts a timer of `closeGraceMs`, also before the first ping, and stops the idle timer. A ping in that time cancels the close. Else the server stops. A reload sends a close, and the new page pings at load, so the server keeps running. Each ping starts an idle timer of `idleMs`. When it runs out with no ping, the server stops. The default of 120 seconds is longer than the one-minute timer interval that Chrome gives a tab that stays hidden for more than 5 minutes. With no ping and no close, the server runs until SIGINT, SIGTERM, or `close()`. `close()` stops both timers and the listener, waits for the running preview or write to finish, closes the open connections, and then resolves `closed`.
 
 ### 5.2 `omt init`
 
@@ -1361,12 +1469,42 @@ The skills apply these switches at the steps in section 15. They reload the prof
 - On a syntax error it throws `OmtError` with code `jsonc_parse` and the message `<source>:<line>:<column>: <reason>`. An unterminated block comment is also an error.
 - Accepts and strips a UTF-8 byte order mark.
 
-`setTopLevelValue(text: string, key: string, value: unknown | undefined): string` in the same file edits one top-level key of a JSONC object and keeps every other byte, comments included:
+`setJsoncValue(text: string, path: readonly string[], value: unknown | undefined): string` in the same file sets, adds, or removes the value at `path` in a JSONC object. `setTopLevelValue(text, key, value)` is its depth-1 case and calls `setJsoncValue(text, [key], value)`. Both keep the byte order mark and every byte outside the replaced or removed ranges, with three exceptions: duplicate keys on the path merge into the last one, an empty `{}` that gets a member becomes multi-line, and a removal also removes each object that it empties, as the removal rules below say. Comments inside a replaced or removed value are lost.
 
-- It replaces the value of an existing key with `JSON.stringify(value)`. With duplicate keys, it replaces the last one and removes the others, so the parsed result holds the new value.
-- It inserts a new key after the last of the top-level keys `version` and `defaults` that exists, or as the first property when neither exists. The new line takes the indentation of the line it follows (or of the first property), the file's line ending, and a comma that keeps the object valid: a trailing comma when the previous property had one, else a comma after the previous value. A same-line comment stays with its property. When a block comment that spans lines starts on that line, the new property goes on the same line, directly after the previous property, so it is never inside a comment.
-- With `value` `undefined`, it removes every occurrence of the key and the comma that each one needs: its own comma, or for the last property the comma before it. It removes the whole line when the property is alone on that line. It keeps every comment outside the removed property, also a comment after the removed value. A comment between the removed key and its value is part of the property and goes with it.
-- It throws the `jsonc_parse` error for text that does not parse, and `OmtError` code `jsonc_edit` when the root is not an object.
+Path:
+
+- The scanner reads the root and each object on the path with one function, `objectMembers(chars, open)`, on a copy of the text with the comments blanked, so the offsets match the text.
+- At each level, the path follows the last member with the key, the one that `JSON.parse` keeps. Arrays are leaves: a path never indexes into an array.
+- Before the edit, the older duplicates of each key on the path go, with the removal rules below, so that the parsed result holds the new value. For a removal, this step skips the last key, because the removal removes every occurrence of it.
+
+Set, with `value` defined:
+
+- When the key at the last segment exists, its value range gets the rendered value.
+- When a member on the path holds a value that is not an object (`null`, a scalar, or an array) and more segments follow, that value gets a new object built from the remaining path.
+- A missing key at depth 1 goes after the last of the top-level keys `version` and `defaults` that exists, or first in the object when neither exists. The new line takes the indentation of the line that it follows, or of the first property.
+- A missing key at depth 2 or more goes after the last member of its object, with the indentation of the last sibling that starts its line. When no sibling starts its line, it takes the indentation of the parent's line plus one indent step.
+- A new member gets the file's line ending and a comma that keeps the object valid: a trailing comma when the previous member had one, else a comma after the previous value. When only spaces and one-line comments follow the previous member on its line, the new member goes on the next line, so a same-line comment stays with its property. Otherwise, for example when a block comment that spans lines starts on that line, the new member goes on the same line, directly after the previous member, so it is never inside a comment.
+- When a missing key at depth 2 or more goes in an object with no member, the new member goes after the last comment between the braces, with the indentation of the parent's line plus one indent step. A one-line object becomes multi-line, and its closing brace gets the indentation of the parent's line. A stray comma in `{,}`, which `parseJsonc` reads as an empty object, becomes a space. These rules do not apply to the root. In a root object with no member, the depth-1 rule applies: the new member goes directly after `{`, before any comment, and a stray comma stays after the new member.
+- A missing parent is created as one nested value, for example `"roles": { "execute": { "fast": true } }`.
+
+Rendering:
+
+- A value is `JSON.stringify(value)` on one line when its line stays at most 100 columns. The count runs from the start of the line to the end of the value, plus a comma directly after the value. Text after that comma does not count.
+- Otherwise the value is `JSON.stringify(value, null, step)`, with each new line indented to the line of the value. This rule also holds for a top-level value.
+- The indent step comes from the first top-level object value that has a member that starts its line. The step is that member's indentation minus the indentation of the first top-level member that starts its line. When the inner indentation does not extend the outer one, or no such member exists, the step is 2 spaces.
+- The line ending is `\r\n` when the text holds one, else `\n`.
+
+Remove, with `value` `undefined`:
+
+- A path that does not exist returns the text unchanged.
+- It removes every occurrence of the last key in its object, and the comma that each one needs: its own comma, or for the last property the comma before it. It removes the whole line when the property is alone on that line. It keeps every comment outside the removed property, also a comment after the removed value. A comment between the removed key and its value is part of the property and goes with it.
+- When the removal leaves an object at depth 2 or more with no member and no comment between its braces, it removes that object's member too, and repeats upward. It stops at the first object that keeps a member or a comment, and it never removes a top-level key. For example, removing `profiles.prototype.limits.maxParallel` from `"prototype": { // note` + `"limits": { "maxParallel": 3 } }` removes `limits` and keeps `prototype` and `// note`.
+
+Errors:
+
+- Text that does not parse throws the `jsonc_parse` error.
+- `OmtError` code `jsonc_edit`: the root is not an object, the path is empty, a segment is empty, or `JSON.stringify(value)` returns `undefined`, as for a function. So `setTopLevelValue` with an empty key throws `jsonc_edit`.
+- When `JSON.stringify(value)` throws, as for a `BigInt` or a cyclic value, its error goes to the caller unchanged, for example a `TypeError`.
 
 ## 8. Capabilities, effort, and routing
 
@@ -2290,7 +2428,7 @@ Each module has tests in `test/`. Use `test/helpers.ts` to make temp directories
 
 Required coverage:
 
-- JSONC: comments, comment markers inside strings, trailing commas, a byte order mark, and error positions.
+- JSONC: comments, comment markers inside strings, trailing commas, a byte order mark, and error positions. `test/config/jsonc-edit.test.ts` checks `setJsoncValue`: nested set, insert, and removal with line and block comments, trailing commas, CRLF, a byte order mark, duplicate keys, empty and one-line objects, missing parents, the upward removal, a missing path, the 100-column rendering, and the error codes. It parses each result and checks that the comments outside the edited value stay.
 - Profiles: `test/config/profiles.test.ts` checks presets, sparse overrides, code-point limits, per-key pruning, profile removal, legacy `roles.test` warnings, and merged-layer inheritance errors. `test/profile/resolve.test.ts` checks precedence, root-to-child application, limits, roles, models, implicit normal inheritance, cycles, depth, and non-mutation. `test/profile/profile.test.ts` runs custom-profile selection, plan switches, profile limits, output sources, and errors through the CLI.
 - Locks: `test/lock/lock.test.ts` checks real process contention, wrapper SIGKILL, inherited background holders, Node child waits, failure and signal release, wait output, holder metadata, inode preservation, no-tool fallback, argument errors, and help. It also checks shared ignored locks across linked worktrees, nested projects, separate Git directories, and trailing-space paths.
 - Fast mode: `test/routing/fast.test.ts` uses `test/fixtures/capabilities-live.json` for advertised options, unsupported models, false overrides, precedence, raw options, and unverified mapping. The older `capabilities.json` fixture still checks fallback when Haiku is absent.
@@ -2312,7 +2450,9 @@ Required coverage:
 - Skills: `test/skills/*.test.ts` replaces `test/skills.test.ts`. `common` checks frontmatter and links. `personas` checks role and result files, test policy, CRAP, and guardrails. `plan-design` checks profile selection, planned test lines, shared-build rules, budgets, review modes, and variant counts. `grill` (`test/skills/grill.test.ts`) checks the mode check, the branch-check link, the stop on a missing `grill` role with the `omt-setup` offer, the two panel units with their `--against` values, a fresh `delegate_task` per round, `GX<k>` explore units, the stop rule with `limits.maxReviewRounds`, the path from `omt paths --grills`, and no writes in plan mode. `ulw` checks dispatch, profile reloads, check-ins, verify then qa, locks, heartbeat retention, and loop waits. `review` checks each PR step, commit-based round-1 reads, working-tree fix reviews, offers, linking, and watches.
 - Visual: spec errors with JSON paths, unknown keys, escaping of every text field (also an SVG label `<script>alert(1)</script>`), inline markup, byte-identical output, back edges, no edge that crosses a node on any fixture flow, label sides at a shared stub, row centering with and without a pinned column, the transitive reduction, the 6 layers of a plan shaped like `workflow-profiles`, non-unit dependency tokens, a plan with no `## Summary`, and the command: `--out -`, `--json`, the default paths, a plan file path, and the usage errors.
 - Schema: the committed schema equals the generated one, and it allows the same keys as the validator.
-- CLI: `--help`, `--version`, an unknown command (exit 2), and an unknown flag (exit 2), run as a child process.
+- CLI: `--help`, `--version`, an unknown command (exit 2), and an unknown flag (exit 2), run as a child process. `test/cli.test.ts` also checks that `omt help` and `omt help config` print the same text as `omt --help` and `omt config -h`. `test/cli-help.test.ts` runs every command in `COMMANDS` except `hook` with probe arguments from its usage text. It records the options of each `parseArgs` call through `observeParseArgs` in `src/util/args.ts`, and fails when a usage text does not name a flag that its parser accepts, or when no probe of a command reaches a parser.
+- Config explain: `test/e2e/config-explain.test.ts` runs `omt config explain` and `omt config explain --profile fast-proto --json` as a child process with a temp user and project config, and checks a source from the default set, the user file, the project file, and a profile.
+- Config editor: `test/config/editor-server.test.ts` checks that the server refuses a wrong token, a wrong `Host`, a foreign `Origin`, `Origin: null`, a POST without `Origin`, `Sec-Fetch-Site: cross-site`, an unknown path, a wrong method, a wrong `Content-Type`, and a body over 1 MiB, and that no response has an `Access-Control-*` header. It checks 409 `config_changed` for a stale `base` and for the second of two writes with the same `base`, and 422 `config_invalid` for a new error, each with the file unchanged. It checks that `closed` resolves after a close beacon with no ping, before and after the first ping, and that a ping after the beacon keeps the server open. `test/e2e/config-edit-web.test.ts` runs `omt config edit --web --no-open` as a child process with the `childEnv` helper, reads the URL, loads the page and `api/state`, pings, writes a nested profile value, checks that the file keeps every comment, and sends SIGINT for exit 0.
 - Commands: `roles`, `route`, `brief`, and `doctor` in `test/commands/`, including the `brief --json` payload fields, the title rule, `brief --json --against` with its target and fallbacks, `route --against auto` against a ledger, and the `CROSS` column and `crossFamily` field of `omt roles`.
 - End to end: one child-process flow in a temp `HOME` (`test/e2e.test.ts`) runs `install`, `doctor`, `roles`, `route`, `init`, `plan`, `profile`, `brief`, `ledger`, `hook`, and `uninstall` in a temp git project. It runs the CLI with `process.execPath`, because a version-manager `node` shim can fail when `HOME` is a temp directory. A second flow runs `install --project --hooks --yes` in a temp git project, runs `.omt/bin/omt`, checks that `git status --porcelain` is empty, and uninstalls.
 

@@ -325,11 +325,95 @@ Only the user config can set the key. In the project config, omt prints the warn
 
 omt asks the registry only in `omt install`, `omt doctor`, and `omt update`. The hook and the commands that agents call, such as `omt brief` and `omt roles`, never use the network. omt saves the result of the check in `update-check.json`, in the folder of the user config. A failed check, for example when the machine is offline, gives an `INFO` line in `omt doctor` and does not change its exit code. omt tries again the next day. [Update omt](install.md#update-omt) explains the update itself.
 
+## See where each value comes from
+
+A value can come from the pinned default set, the user config, the project config, or a profile. To see which of them sets each value, run:
+
+```sh
+omt config explain
+```
+
+Each line holds the dotted path, the value, and the layer that sets it: `defaults <set>`, `user`, `project`, or `profile <name> (<layer that declares the value>)`. Below a value, each `over <layer>: <value>` line names a lower layer that also sets the path, highest first. The `root` block holds the merged config that `omt config show` prints. The `effective` block holds the `roles`, `limits`, `models`, and `workflow` values after omt applies the profile, as `omt profile show` resolves them. A `removed` block, when present, lists each role or profile that a config file removes with `null`.
+
+In this example, the user config adds a profile `fast-proto` that extends `prototype` and sets `limits.maxParallel` to 2, and the project config sets `limits.maxParallel` to 4. The output is shortened:
+
+```sh
+omt config explain --profile fast-proto
+```
+
+```text
+user: <home>/.config/oh-my-t3code/config.jsonc
+project: <project>/.omt/config.jsonc
+defaults: 2026-10 (<home>/.config/oh-my-t3code/config.jsonc)
+profile: fast-proto (argument)
+root:
+limits.maxParallel  4  project
+  over defaults 2026-10: 6
+effective:
+limits.maxParallel  2  profile fast-proto (user)
+  over project: 4
+limits.maxReviewRounds  2  profile prototype (defaults 2026-10)
+  over defaults 2026-10: 4
+```
+
+Without `--profile`, omt explains the selected profile. `--json` prints the same report as JSON, with the full file path of each source. Config issues go to stderr. When the profile resolves, the command prints the report and exits 0, also when an issue is an error. When it does not resolve, the command prints no report. An unknown profile exits 2, and a profile cycle or a chain of more than 8 profiles exits 1.
+
+## Edit the config in a browser
+
+To edit the user config and the project config in a browser page, run:
+
+```sh
+omt config edit --web
+```
+
+```text
+omt config editor: http://127.0.0.1:<port>/<token>/
+Press Ctrl-C to stop. The editor also stops when you close its tab.
+```
+
+omt starts a local server and opens the URL in your default browser. With `--no-open`, it only prints the URL, and you open it yourself. The page reads the same value sources as `omt config explain`. The editor edits only a config file that exists, so run `omt config init` or `omt init` first.
+
+The page shows the config as a tree of keys. Each row shows the value, a strip of four cells, and the layer that sets the value, such as `defaults 2026-10`, `user`, or `profile fast-proto (user)`. The cells of the strip are the default set, the user config, the project config, and the profile, in this order (`strip = D U P F`). The purple cell is the layer that wins. A gray cell is a layer that also sets the value, but a higher layer overrides it. Click a key to see its source stack, from the default set to the profile.
+
+To change one value:
+
+1. In the `profile` picker, select the profile that you want to see. The tree then shows the values of that profile. The picker writes nothing.
+2. In `edit in`, select `user` or `project`. This selects the file that gets the edit.
+3. Click the key in the tree.
+4. Under `EDIT IN user · PATH IN THIS FILE`, select the path in the file. For a key under `roles`, `limits`, or `models`, you can select the path of the selected profile, such as `profiles.fast-proto.limits.maxParallel`, or the root path, such as `limits.maxParallel (root)`. When a higher layer overrides a path, a warning shows below it, such as `▲ project overrides this value · it sets 4`. An edit of that path does not change what runs.
+5. Enter the value, and click `Queue edit`. The button changes to `Queued ✓`. To remove the edit from the queue, click `Undo`.
+6. Click `Review changes ⏎` in the status bar, or press Ctrl-Enter (Cmd-Enter on macOS). The review shows the queued edits, the diff of the file, and the result of the check, with one tab for each file.
+7. Click the write button, for example `Write 1 edit to user`. To change more values first, click `Back`.
+
+The page follows these rules:
+
+- `Reset to inherited` queues the removal of the key from the selected file. The sentence below the button gives the value that runs after the removal. The button is off when the file does not set the key.
+- Click a role or a profile in the tree to open its editor. The `edit` link of the `harnesses · visuals · models · defaults` group opens the root settings. These screens queue edits in the same way. To go back to the tree, press Esc when no field has focus.
+- Queued edits stay in the page until you write them. The status bar counts the queued edits of each file.
+- When the page loads the config again, for example after a write, an editor that you did not change shows the new values. An editor that you changed but did not queue keeps your input. If its file changed, also after a write from the page to that file, the editor shows `Based on older text. The file changed after you started this edit.` You cannot queue that input until you click `Keep my edit` or `Discard`. `Keep my edit` keeps your input on the new text, and the review shows what the write changes. `Discard` shows the new values. When you leave an editor that has input that you did not queue, the editor keeps that input. When you open the same editor again with the same profile and the same `Edit in` file, it shows your input. Each path in the file keeps its own input: when you select the other path in `PATH IN THIS FILE` and then select the first path again, the editor shows your input for that path. Each file keeps its input when you select the other file in `Edit in`, and when the page selects the other file because the selected file was deleted or stops parsing. When you select that file again, the editors show your input.
+- In a chain, an option key that you clear removes the option when you queue the chain. A key that is the same as another key of the rung stops the queue, and a message shows next to the key. The page keeps your text until you change it. While a `+ key=value` form has text, you cannot queue the chain, and the form shows `Press Enter to add the option, or clear it.`
+- When the edits add a config error, the `CHECK` block of the review shows the new errors, and the write button is off. A warning that the file already has does not block the write.
+- When you edit `defaults`, the review also lists each value that changes between the two default sets.
+- When the file changed on disk, the page shows `✕ CHANGED ON DISK`. Click `Reload…`, then `Drop 1 edit and reload` to drop the queued edits of that file and load the new file. The queued edits of the other file stay. To keep your edits, click `Keep editing`.
+- When a config file does not exist, its layer shows `absent`, and you cannot select it in `edit in`. Create the file with the command that the page shows, then reload the page. When a file does not parse, you cannot select it until you fix the file.
+- When the editor stops, the page shows `● disconnected · the editor stopped` and becomes read-only. omt does not write the queued edits. To edit again, run `omt config edit --web`.
+
+Each write follows these rules:
+
+- omt computes the diff of the file first. A preview returns the diff and writes nothing.
+- omt changes only the edited values. The comments and the layout of the rest of the file stay. Comments inside a value that a write replaces as a whole, such as a role chain, are lost.
+- omt refuses a write that adds a validation error, and writes nothing.
+- omt refuses a write when the file changed on disk after the page loaded it, and writes nothing. Reload the page to load the new file.
+
+The server listens on 127.0.0.1 only, and the URL holds a random port and a random token. Do not share the URL. The editor stops when you press Ctrl-C, about 5 seconds after you close its tab, or when the page sends no ping for 2 minutes. A reload keeps it running. The command then prints `editor stopped` and exits 0.
+
 ## Inspect the config
 
 - `omt config path` prints the paths of the user and project configs.
 - `omt config show --defaults` prints the selected default set: the built-in profiles, roles, models, limits, and visuals.
 - `omt config show` prints the merged config before omt applies the profile.
+- `omt config explain` prints the layer that sets each value. See [See where each value comes from](#see-where-each-value-comes-from).
+- `omt config edit --web` opens an editor for both config files in a browser. See [Edit the config in a browser](#edit-the-config-in-a-browser).
 - `omt profile show <name> --json` prints the values after omt applies the profile.
 - `omt config validate` reports problems in your files and in every profile.
 - `omt defaults list` prints the default sets and the one that you use.
