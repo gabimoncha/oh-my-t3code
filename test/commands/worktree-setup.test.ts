@@ -398,3 +398,19 @@ console.log(JSON.stringify(checkLinker(${JSON.stringify(f.project)}, ${JSON.stri
     assert.deepEqual(f.calls(), []);
   }
 });
+
+test("Bun linker inspection ignores registry URLs and still rejects inline install tables", () => {
+  const f = fixture("bun", "1.4.4", "bun.lock");
+  const source = `import { checkLinker } from ${JSON.stringify(`file://${join(PACKAGE_ROOT, "templates", "worktree-setup.mjs")}`)};
+console.log(JSON.stringify(checkLinker(${JSON.stringify(f.project)}, "bun", { env: {}, home: ${JSON.stringify(f.env.HOME)} })));`;
+  for (const [text, status] of [
+    ['[install]\nregistry = "https://mirror.example/linker"\nlinker = "isolated"\n', "isolated"],
+    ['[install]\nregistry = "https://mirror.example/linker"\n', "default"],
+    ['[install]\nregistry = "https://mirror.example/linker"\nlinker = "hoisted"\n', "incompatible"],
+    ['install = { linker = "hoisted" }\n', "unverified"],
+  ] as const) {
+    writeFile(join(f.project, "bunfig.toml"), text);
+    const result = ok(f.run(NODE, ["--input-type=module", "-e", source]));
+    assert.equal(JSON.parse(result.out).status, status, text);
+  }
+});

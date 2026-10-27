@@ -11,7 +11,11 @@ export function escapeHtml(text: string): string {
 }
 
 // Renders `code`, **bold**, and [text](url) as HTML; a link keeps only its text, so the page loads no URL.
-export function inlineHtml(text: string, depth = 0): string {
+export function inlineHtml(text: string): string {
+  return renderInline(text, 0);
+}
+
+function renderInline(text: string, depth: number): string {
   if (depth >= 16) return escapeHtml(text);
   const out: string[] = [];
   let last = 0;
@@ -37,7 +41,7 @@ export function inlineHtml(text: string, depth = 0): string {
     } else if (text.startsWith("**", index)) {
       end = find("**", index + 3);
       if (end !== -1 && (newline === -1 || end < newline)) {
-        html = `<strong>${inlineHtml(text.slice(index + 2, end), depth + 1)}</strong>`;
+        html = `<strong>${renderInline(text.slice(index + 2, end), depth + 1)}</strong>`;
         end += 2;
       }
     } else if (text[index] === "[") {
@@ -50,7 +54,7 @@ export function inlineHtml(text: string, depth = 0): string {
           while (whitespace < text.length && !/\s/.test(text[whitespace]!)) whitespace++;
         }
         if (end !== -1 && end < whitespace) {
-          html = inlineHtml(text.slice(index + 1, labelEnd), depth + 1);
+          html = renderInline(text.slice(index + 1, labelEnd), depth + 1);
           end++;
         }
       }

@@ -27,7 +27,7 @@ The state-file checks address planted links and verify the opened inode before c
 
 Windows launch selection is tested with an injected Windows platform and file lookup. The local test run uses macOS and does not execute Windows binaries.
 
-`mise exec -- bun run verify` passes the type check and all 809 tests. The four tests selected by the following command fail against the original commit and pass with these changes:
+`mise exec -- bun run verify` passes the type check and all 811 tests. The four tests selected by the following command fail against the original commit and pass with these changes:
 
 ```sh
 mise exec -- bun test test/install/security.test.ts test/install/project.test.ts \

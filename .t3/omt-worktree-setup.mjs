@@ -384,7 +384,7 @@ function tomlLinker(text) {
     const rawValue = line.slice(equals + 1);
     const key = section === "" ? tomlKey(rawKey) : `${section}.${tomlKey(rawKey)}`;
     if (key !== "install.linker") {
-      if (/linker/.test(rawValue)) return { unverified: raw.trim() };
+      if (key === "install" && rawValue.trimStart().startsWith("{")) return { unverified: raw.trim() };
       continue;
     }
     const parsed = scalar(rawValue);
