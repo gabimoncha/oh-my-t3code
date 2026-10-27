@@ -213,3 +213,12 @@ test("a CRLF plan gives the same page as the LF plan", () => {
   const crlf = planSections(WORKFLOW_PROFILES_PLAN.replace(/\n/g, "\r\n"), "wp-fixture");
   assert.deepEqual(crlf, planSections(WORKFLOW_PROFILES_PLAN, "wp-fixture"));
 });
+
+test("plan visuals reject excessive text and graph complexity before layout", () => {
+  assert.throws(() => planSections("x".repeat(1_000_001), "p"), /1000000 characters/);
+  assert.throws(() => planSections("## Summary\n" + "[".repeat(8001), "p"), /8000 characters/);
+  const units = Array.from({ length: 61 }, (_, i) => `- [ ] U${i + 1}. Unit`);
+  assert.throws(() => planSections(units.join("\n"), "p"), /60 units/);
+  const dense = Array.from({ length: 17 }, (_, i) => `- [ ] U${i + 1}. Unit\n  - Depends on: ${Array.from({ length: i }, (_, j) => `U${j + 1}`).join(", ")}`);
+  assert.throws(() => planSections(dense.join("\n"), "p"), /120 dependencies/);
+});

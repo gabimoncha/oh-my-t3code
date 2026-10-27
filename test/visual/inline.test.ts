@@ -14,6 +14,19 @@ test("inlineHtml renders code, bold, and link text, and escapes the rest", () =>
   assert.equal(inlineHtml("a * b ** c ` d"), "a * b ** c ` d");
 });
 
+test("inlineHtml renders every item when used as an array callback", () => {
+  const items = Array<string>(20).fill("**bold** and `code`");
+  assert.deepEqual(items.map(inlineHtml), Array<string>(20).fill("<strong>bold</strong> and <code>code</code>"));
+});
+
 test("plainText removes backticks and collapses spaces", () => {
   assert.equal(plainText("Renderer and `omt  visual`\n"), "Renderer and omt visual");
+});
+
+test("inline delimiters do not rescan overlapping suffixes", () => {
+  const brackets = "[".repeat(200_000);
+  assert.equal(inlineHtml(brackets), brackets);
+  const targets = "[x](".repeat(30_000);
+  assert.equal(inlineHtml(targets), targets);
+  assert.equal(inlineHtml("[a[b](url) **ok**"), "a[b <strong>ok</strong>");
 });

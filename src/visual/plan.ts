@@ -1,5 +1,6 @@
 import { blankFences, parsePlan, planSectionsText, unitFields } from "../plan/parse.ts";
 import type { PlanItem } from "../plan/parse.ts";
+import { OmtError } from "../util/errors.ts";
 import { assignRows, labelCharsPerLine, wrapWords } from "./flow.ts";
 import { plainText } from "./inline.ts";
 import type { Block, FlowBlock, FlowEdge, FlowNode, PageSpec, TabSpec } from "./spec.ts";
@@ -78,24 +79,37 @@ function itemText(item: PlanItem): string {
 }
 
 export function planSections(markdown: string, slug: string): PlanPage {
+  if (markdown.length > 1_000_000) throw new OmtError("visual_limit", "plan exceeds 1000000 characters");
   const warnings: string[] = [];
   const unfenced = blankFences(markdown);
   const status = parsePlan(unfenced);
   const sections = planSectionsText(markdown);
   const fields = unitFields(unfenced);
   const units = status.items.filter((item) => item.kind === "U");
+  if (units.length > 60) throw new OmtError("visual_limit", "plan graph exceeds 60 units");
+  for (const item of status.items) {
+    if (item.title.length > 2000) throw new OmtError("visual_limit", "plan item text exceeds 2000 characters");
+  }
+  for (const values of fields.values()) {
+    for (const value of values.values()) {
+      if (value.length > 2000) throw new OmtError("visual_limit", "plan field text exceeds 2000 characters");
+    }
+  }
   const unitIds = new Set(units.map((unit) => unit.id));
   const ids = units.map((unit) => unit.id);
 
   const deps = new Map<string, string[]>();
+  let dependencyCount = 0;
   for (const unit of units) {
     const text = fields.get(unit.id)?.get("depends on") ?? "";
     const list: string[] = [];
     for (const match of text.matchAll(/\bU\d+\b/g)) {
       const token = match[0];
       if (!unitIds.has(token)) warnings.push(`${unit.id} depends on ${token}, which is not a unit of the plan`);
-      else if (token !== unit.id && !list.includes(token)) list.push(token);
-      else if (token === unit.id) warnings.push(`${unit.id} depends on itself`);
+      else if (token !== unit.id && !list.includes(token)) {
+        list.push(token);
+        if (++dependencyCount > 120) throw new OmtError("visual_limit", "plan graph exceeds 120 dependencies");
+      } else if (token === unit.id) warnings.push(`${unit.id} depends on itself`);
     }
     deps.set(unit.id, list);
   }
@@ -134,6 +148,7 @@ export function planSections(markdown: string, slug: string): PlanPage {
     warnings.push("plan has no ## Summary; showing ## Objective");
     summary = sections.get("Objective") ?? "";
   }
+  if (summary.length > 8000) throw new OmtError("visual_limit", "plan summary exceeds 8000 characters");
   const summaryBlocks: Block[] = [];
   if (summary !== "") summaryBlocks.push({ type: "text", text: summary });
   const cards = [

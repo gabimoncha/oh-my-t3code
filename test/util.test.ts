@@ -151,3 +151,12 @@ test("writeFileAtomic keeps the mode of the file it replaces and applies a mode 
   await writeFileAtomic(fresh, "x", { mode: 0o600 });
   assert.equal(statSync(fresh).mode & 0o777, 0o600);
 });
+
+test("tables cap cell widths and total output before padding", () => {
+  const rows = [["x".repeat(100_000), "first"], ...Array.from({ length: 10_000 }, () => ["short", "next"])];
+  const table = renderTable(["ROLE", "STATUS"], rows);
+  assert.ok(table.length < 1_001_000);
+  assert.match(table, /x{119}…/);
+  assert.match(table, /table truncated/);
+  assert.ok(table.split("\n").every((line) => line.length < 150));
+});

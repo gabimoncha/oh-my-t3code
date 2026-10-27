@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
-import { accessSync, constants, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { accessSync, constants, existsSync, mkdirSync, readFileSync, readdirSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { delimiter, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { onTestFinished, test } from "bun:test";
@@ -381,3 +381,21 @@ test("lock validates its arguments and appears in help and project warnings", as
   assert.equal(empty.stdout, "");
   assert.match(empty.stderr, /warning: no .omt or .git found above/);
 }, 180_000);
+
+lockTest("lock storage rejects leaf and directory symlinks without changing their targets", async () => {
+  for (const parent of [false, true]) {
+    const f = fixture();
+    const dir = join(f.ctx.cwd, ".omt", "locks");
+    const outside = join(tempDir(), "build.lock");
+    writeFile(outside, "keep\n");
+    if (parent) symlinkSync(join(outside, ".."), dir);
+    else {
+      mkdirSync(dir);
+      symlinkSync(outside, join(dir, "build.lock"));
+    }
+    const child = f.start(["lock", "run", "build", "--", process.execPath, "-e", "process.exit(0)"]);
+    assert.equal((await child.exited).code, 1, child.err());
+    assert.match(child.err(), /symlink|real directory/);
+    assert.equal(readFileSync(outside, "utf8"), "keep\n");
+  }
+});

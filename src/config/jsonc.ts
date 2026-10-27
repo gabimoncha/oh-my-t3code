@@ -436,6 +436,7 @@ function appendMember(body: string, chars: string[], object: ObjectScan, parent:
 // path that does not exist returns the text unchanged.
 export function setJsoncValue(text: string, path: readonly string[], value: unknown | undefined): string {
   if (path.length === 0) throw new OmtError("jsonc_edit", "cannot edit the config: the path is empty");
+  if (path.length > 32) throw new OmtError("jsonc_edit", "cannot edit the config: the path exceeds 32 segments");
   if (path.includes("")) throw new OmtError("jsonc_edit", "cannot edit the config: the path has an empty segment");
   if (value !== undefined && JSON.stringify(value) === undefined) {
     throw new OmtError("jsonc_edit", "cannot edit the config: the value has no JSON form");
@@ -451,6 +452,8 @@ export function setJsoncValue(text: string, path: readonly string[], value: unkn
     return { chars, levels: walk(chars, path) };
   };
   const first = scan();
+  const duplicates = first.levels.reduce((sum, level) => sum + Math.max(0, level.matches.length - 1), 0);
+  if (duplicates > 16) throw new OmtError("jsonc_edit", "cannot edit the config: the path has more than 16 duplicate keys");
   if (value === undefined && (first.levels[path.length - 1]?.matches.length ?? 0) === 0) return text;
   const layout = {
     nl: body.includes("\r\n") ? "\r\n" : "\n",

@@ -195,7 +195,7 @@ function manifestOptions(paths: ScopePaths, manifest: Manifest | undefined): { t
 }
 
 async function planHere(ctx: CliContext, scope: "user" | "project"): Promise<InstallPlan> {
-  const paths = scopePaths(ctx, scope);
+  const paths = await scopePaths(ctx, scope);
   const { manifest } = await loadScopeManifest(paths);
   return buildInstallPlan(ctx, { ...manifestOptions(paths, manifest), force: false, scope, sync: true });
 }

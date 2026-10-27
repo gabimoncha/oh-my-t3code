@@ -132,3 +132,10 @@ test("newCliCommand: pnpm 11 picks the folder with the target package version", 
   });
   assert.deepEqual(command, [process.execPath, join(targetFolder, "dist/cli.js")]);
 });
+
+test("channel detection bounds malformed shim paths with repeated links segments", () => {
+  const ctx = fakeContext({ root: tempDir() });
+  const base: ChannelInput = { build: "bundle", cliPath: "/links".repeat(100_000), packageRoot: ctx.cwd, cwd: ctx.cwd, env: ctx.env };
+  assert.equal(detectChannel(base).kind, "unknown");
+  assert.equal(detectChannel({ ...base, cliPath: "/links".repeat(4000) + "/bad" }).kind, "unknown");
+});

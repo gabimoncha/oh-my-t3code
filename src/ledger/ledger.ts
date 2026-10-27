@@ -1,7 +1,6 @@
-import { appendFile, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { LedgerEntry, LedgerStats, LedgerStatus, Limits } from "../types.ts";
-import { readFileIfExists } from "../util/fs.ts";
+import { openStateFile, readFileIfExists } from "../util/fs.ts";
 
 export const LEDGER_STATUSES: readonly LedgerStatus[] = [
   "dispatched",
@@ -51,14 +50,26 @@ export function isLedgerStatus(value: unknown): value is LedgerStatus {
 }
 
 export async function appendLedger(path: string, entry: LedgerEntry): Promise<void> {
-  await mkdir(dirname(path), { recursive: true });
-  await appendFile(path, `${JSON.stringify(entry)}\n`);
+  const file = await openStateFile(dirname(dirname(path)), path);
+  try {
+    await file.appendFile(`${JSON.stringify(entry)}\n`);
+  } finally {
+    await file.close();
+  }
 }
 
 function isEntry(value: unknown): value is LedgerEntry {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
   const record = value as Record<string, unknown>;
-  return typeof record.ts === "string" && typeof record.role === "string" && isLedgerStatus(record.status);
+  if (typeof record.ts !== "string" || typeof record.role !== "string" || !isLedgerStatus(record.status)) return false;
+  for (const key of ["plan", "unit", "taskId", "clientRequestId", "model", "verdict", "note"]) {
+    if (record[key] !== undefined && typeof record[key] !== "string") return false;
+  }
+  for (const key of ["round", "attempt"]) {
+    const number = record[key];
+    if (number !== undefined && (typeof number !== "number" || !Number.isSafeInteger(number) || number < 1)) return false;
+  }
+  return true;
 }
 
 export async function readLedger(path: string): Promise<LedgerRead> {
@@ -92,7 +103,17 @@ export function ledgerStats(
   const terminalEntries = selected.filter((entry) => TERMINAL.has(entry.status));
   const dispatched = dispatchedEntries.length;
   const terminal = terminalEntries.length;
-  const active = dispatchedEntries.filter((d) => !terminalEntries.some((t) => closes(t, d))).length;
+  const taskIds = new Set<string>();
+  const identities = new Set<string>();
+  const identity = (entry: LedgerEntry) => JSON.stringify([entry.plan, entry.unit, entry.role, entry.round ?? 1, entry.attempt ?? 1]);
+  for (const entry of terminalEntries) {
+    if (entry.taskId !== undefined) taskIds.add(entry.taskId);
+    else if (entry.unit !== undefined) identities.add(identity(entry));
+  }
+  const active = dispatchedEntries.filter((entry) =>
+    !(entry.taskId !== undefined && taskIds.has(entry.taskId)) &&
+    !(entry.unit !== undefined && identities.has(identity(entry))),
+  ).length;
   const stats: LedgerStats = {
     dispatched,
     active,

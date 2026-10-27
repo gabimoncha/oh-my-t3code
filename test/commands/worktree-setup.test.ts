@@ -362,6 +362,7 @@ assert.equal(cmd.options.windowsVerbatimArguments, true);
 const exe = launchSpec("pnpm", args, { platform: "win32", env, exists: p => p.endsWith(".exe") });
 assert.ok(exe.file.endsWith("pnpm.exe"));
 assert.deepEqual(exe.args, args);
+assert.throws(() => launchSpec("pnpm", args, { platform: "win32", env, exists: () => false }), /not found on PATH/);
 for (const bad of ['%', '!', '^', '\\"', '\\n']) assert.throws(() => launchSpec("pnpm", args, { platform: "win32", env: { PATH: 'C:\\\\' + bad }, exists: p => p.endsWith(".cmd") }), /unsafe path|unsafe argument/);
 assert.throws(() => launchSpec("pnpm", ["bad%arg"], { platform: "win32", env }), /unsafe argument/);
 console.log("Windows command assertions passed");
@@ -383,5 +384,33 @@ test("worktree runner rejects vulnerable unpinned package managers before instal
     assert.equal(result.code, 1);
     assert.ok(result.err.includes(`needs ${manager} ${minimum}`), result.err);
     assert.deepEqual(f.calls().map(call => call.args), [["--version"]]);
+  }
+});
+
+test("worktree linker inspection bounds long malformed assignment lines", () => {
+  for (const [manager, lock, file] of [["pnpm", "pnpm-lock.yaml", ".npmrc"], ["bun", "bun.lock", "bunfig.toml"]]) {
+    const f = fixture(manager, manager === "bun" ? "1.4.4" : "12.13.0", lock);
+    writeFile(join(f.project, file!), "x" + " ".repeat(100_000) + "x");
+    const source = `import { checkLinker } from ${JSON.stringify(`file://${join(PACKAGE_ROOT, "templates", "worktree-setup.mjs")}`)};
+console.log(JSON.stringify(checkLinker(${JSON.stringify(f.project)}, ${JSON.stringify(manager)}, { env: {}, home: ${JSON.stringify(f.env.HOME)} })));`;
+    const result = ok(f.run(NODE, ["--input-type=module", "-e", source]));
+    assert.equal(JSON.parse(result.out).status, "unverified");
+    assert.deepEqual(f.calls(), []);
+  }
+});
+
+test("Bun linker inspection ignores registry URLs and still rejects inline install tables", () => {
+  const f = fixture("bun", "1.4.4", "bun.lock");
+  const source = `import { checkLinker } from ${JSON.stringify(`file://${join(PACKAGE_ROOT, "templates", "worktree-setup.mjs")}`)};
+console.log(JSON.stringify(checkLinker(${JSON.stringify(f.project)}, "bun", { env: {}, home: ${JSON.stringify(f.env.HOME)} })));`;
+  for (const [text, status] of [
+    ['[install]\nregistry = "https://mirror.example/linker"\nlinker = "isolated"\n', "isolated"],
+    ['[install]\nregistry = "https://mirror.example/linker"\n', "default"],
+    ['[install]\nregistry = "https://mirror.example/linker"\nlinker = "hoisted"\n', "incompatible"],
+    ['install = { linker = "hoisted" }\n', "unverified"],
+  ] as const) {
+    writeFile(join(f.project, "bunfig.toml"), text);
+    const result = ok(f.run(NODE, ["--input-type=module", "-e", source]));
+    assert.equal(JSON.parse(result.out).status, status, text);
   }
 });

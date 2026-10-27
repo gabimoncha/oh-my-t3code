@@ -191,6 +191,7 @@ export interface ShimPaths {
 
 // Reads every shim format, also the old Node shim (`node="..."` and `exec "$node" "<cli>"`).
 export function shimPaths(text: string): ShimPaths {
+  if (text.length > 65_536) return {};
   const runtime = /^(?:node|runtime)="([^"]*)"$/m.exec(text)?.[1];
   const runtimeFallback = /\|\| (?:node|runtime)=(\w+)$/m.exec(text)?.[1];
   const cli = /^cli="([^"]*)"$/m.exec(text)?.[1] ?? /^exec "\$node" "([^"]*)"/m.exec(text)?.[1];

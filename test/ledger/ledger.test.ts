@@ -1,9 +1,9 @@
-import { appendFileSync, readFileSync } from "node:fs";
+import { appendFileSync, linkSync, mkdirSync, readFileSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "bun:test";
 import assert from "node:assert/strict";
 import { run } from "../../src/commands/ledger.ts";
-import { appendLedger, ledgerStats, readLedger, requestId } from "../../src/ledger/ledger.ts";
+import { appendLedger, closes, ledgerStats, readLedger, requestId } from "../../src/ledger/ledger.ts";
 import type { LedgerEntry } from "../../src/types.ts";
 import { omtExit, projectContext, tempDir, writeFile } from "../helpers.ts";
 
@@ -371,4 +371,49 @@ test("ledger rejects an invalid --plan or --unit with exit code 2", async () => 
       argv.join(" "),
     );
   }
+});
+
+test("ledger appends reject leaf, parent, and hard links without changing their targets", async () => {
+  for (const kind of ["leaf", "parent", "hard"] as const) {
+    const root = tempDir();
+    const path = join(root, ".omt", "ledger.jsonl");
+    const outside = join(tempDir(), "ledger.jsonl");
+    writeFile(outside, "keep\n");
+    if (kind === "parent") symlinkSync(join(outside, ".."), join(root, ".omt"));
+    else {
+      mkdirSync(join(root, ".omt"));
+      if (kind === "leaf") symlinkSync(outside, path);
+      else linkSync(outside, path);
+    }
+    await assert.rejects(appendLedger(path, entry({ taskId: "t1" })), { code: "unsafe_state_path" });
+    assert.equal(readFileSync(outside, "utf8"), "keep\n");
+  }
+});
+
+test("indexed ledger statistics preserve task and fallback identity matching", () => {
+  const dispatched = [
+    entry({ taskId: "t1", plan: "a", unit: "U1" }),
+    entry({ taskId: "t2", plan: "a", unit: "U1", round: 2 }),
+    entry({ plan: "a", unit: "U1", attempt: 2 }),
+    entry({ plan: "a", unit: "U1" }),
+    entry({}),
+  ];
+  const terminal = [
+    entry({ status: "completed", taskId: "t2", unit: "different" }),
+    entry({ status: "failed", plan: "a", unit: "U1", round: 1, attempt: 1 }),
+    entry({ status: "verified" }),
+  ];
+  const expected = dispatched.filter((d) => !terminal.some((t) => closes(t, d))).length;
+  assert.equal(ledgerStats([...terminal, ...dispatched], { maxParallel: 4, maxTasksPerRun: 24 }).active, expected);
+  const many = Array.from({ length: 30_000 }, (_, i) => entry({ taskId: `d${i}` }));
+  const closed = Array.from({ length: 30_000 }, (_, i) => entry({ taskId: `t${i}`, status: "completed" }));
+  assert.equal(ledgerStats([...many, ...closed], { maxParallel: 4, maxTasksPerRun: 24 }).active, many.length);
+});
+
+test("ledger reads reject malformed optional identities", async () => {
+  const path = join(tempDir(), "ledger.jsonl");
+  writeFile(path, JSON.stringify({ ts: TS, role: "execute", status: "completed", taskId: {} }) + "\n");
+  const result = await readLedger(path);
+  assert.equal(result.entries.length, 0);
+  assert.equal(result.warnings.length, 1);
 });

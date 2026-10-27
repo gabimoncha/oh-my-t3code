@@ -1,7 +1,7 @@
 import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { limitArg } from "../config/validate.ts";
-import { writeTargetFor } from "../install/fsops.ts";
+import { projectWriteTarget } from "../install/fsops.ts";
 import { findProjectRoot, planPath, plansDir } from "../paths.ts";
 import { findPlanHeader, parsePlan } from "../plan/parse.ts";
 import type { PlanStatus } from "../plan/parse.ts";
@@ -132,7 +132,7 @@ async function planNew(
     throw new OmtError("plan_exists", `plan already exists: ${path}`, { hint: "pass --force to overwrite it" });
   }
   const template = planTemplate(slug, options.title ?? slug, ctx.now().toISOString(), { light: options.light, maxParallel, maxTasks, profile: options.profile });
-  await writeFileAtomic(await writeTargetFor(path), template);
+  await writeFileAtomic(await projectWriteTarget(findProjectRoot(ctx.cwd), path), template);
   ctx.stdout(`${path}\n`);
   return 0;
 }
@@ -155,7 +155,7 @@ async function planMark(ctx: CliContext, root: string, positionals: string[]) {
   let text = lines.join("\n");
   if (!text.endsWith("\n")) text += "\n";
   text += `- ${ctx.now().toISOString()} ${id} -> ${state}\n`;
-  await writeFileAtomic(await writeTargetFor(path), text);
+  await writeFileAtomic(await projectWriteTarget(findProjectRoot(ctx.cwd), path), text);
   ctx.stdout(`marked ${id} ${state}\n`);
   return 0;
 }
@@ -174,7 +174,7 @@ async function planLimit(ctx: CliContext, root: string, positionals: string[], t
   const header = findPlanHeader(markdown);
   if (header === undefined) throw new OmtError("plan_header_not_found", `plan "${slug}" has no omt-plan header comment`);
   const updated = changes.reduce((text, change) => setHeaderKey(text, change.key, change.limit), header.text);
-  await writeFileAtomic(await writeTargetFor(path), markdown.slice(0, header.index) + updated + markdown.slice(header.index + header.text.length));
+  await writeFileAtomic(await projectWriteTarget(findProjectRoot(ctx.cwd), path), markdown.slice(0, header.index) + updated + markdown.slice(header.index + header.text.length));
   for (const { key, limit } of changes) {
     ctx.stdout(limit === undefined ? `removed the ${key} limit of ${slug}\n` : `set ${key}=${limit} for ${slug}\n`);
   }
@@ -191,7 +191,7 @@ async function planProfile(ctx: CliContext, root: string, positionals: string[])
   const header = findPlanHeader(markdown);
   if (header === undefined) throw new OmtError("plan_header_not_found", `plan "${slug}" has no omt-plan header comment`);
   const updated = setHeaderKey(header.text, "profile", name === "none" ? undefined : name);
-  await writeFileAtomic(await writeTargetFor(path), markdown.slice(0, header.index) + updated + markdown.slice(header.index + header.text.length));
+  await writeFileAtomic(await projectWriteTarget(findProjectRoot(ctx.cwd), path), markdown.slice(0, header.index) + updated + markdown.slice(header.index + header.text.length));
   ctx.stdout(name === "none" ? `removed the profile of ${slug}\n` : `set profile=${name} for ${slug}\n`);
   return 0;
 }
