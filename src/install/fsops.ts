@@ -1,6 +1,7 @@
 import { cp, lstat, readlink, realpath, rename, rm } from "node:fs/promises";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { ensureDir, errorCode, pathExists } from "../util/fs.ts";
+import { OmtError } from "../util/errors.ts";
 
 // Resolves the nearest existing ancestor with realpath and appends the rest, so a missing
 // path under a symlinked directory still compares equal to its real location.
@@ -41,6 +42,16 @@ export async function writeTargetFor(path: string): Promise<string> {
     if (errorCode(error) !== "ENOENT") throw error;
   }
   return path;
+}
+
+export async function projectWriteTarget(root: string, path: string): Promise<string> {
+  const base = await resolveReal(root);
+  const target = await resolveReal(path);
+  const rel = relative(base, target);
+  if (rel === "" || rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
+    throw new OmtError("unsafe_project_path", `refusing to write outside the project ${root}: ${path}`);
+  }
+  return target;
 }
 
 export async function movePath(source: string, target: string): Promise<void> {

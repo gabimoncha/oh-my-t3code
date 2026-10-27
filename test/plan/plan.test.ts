@@ -461,3 +461,20 @@ test("plan limit with neither a value nor --tasks exits 2", async () => {
   const bare = ctx.at(["limit", "demo"]);
   await assert.rejects(run(bare), omtExit(2));
 });
+
+test("plan mutations reject external leaf and parent symlinks", async () => {
+  for (const parent of [false, true]) {
+    const ctx = projectContext(["mark", "demo", "U1", "done"]);
+    const outside = join(tempDir(), "demo.md");
+    writeFileSync(outside, SAMPLE);
+    mkdirSync(join(ctx.cwd, ".omt"), { recursive: true });
+    const plans = join(ctx.cwd, ".omt", "plans");
+    if (parent) symlinkSync(join(outside, ".."), plans);
+    else {
+      mkdirSync(plans, { recursive: true });
+      symlinkSync(outside, join(plans, "demo.md"));
+    }
+    await assert.rejects(run(ctx), /outside the project/);
+    assert.equal(readFileSync(outside, "utf8"), SAMPLE);
+  }
+});

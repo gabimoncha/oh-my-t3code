@@ -348,18 +348,35 @@ function laneEnds(points: Point[], laneY: number): LaneEnds {
 // Lanes go in edge input order, except that an edge whose line comes down at x takes a lane above
 // an edge whose line drops into a node at the same x; otherwise the two lines overlap and read as one.
 function orderLanes(list: number[], ends: Map<number, LaneEnds>): number[] {
-  const left = [...list];
+  const left = new Set(list);
   const out: number[] = [];
-  const mustWait = (edge: number) =>
-    left.some((other) => {
-      if (other === edge) return false;
-      const above = ends.get(other)?.above ?? new Set<number>();
-      return [...(ends.get(edge)?.below ?? [])].some((x) => above.has(x));
-    });
-  while (left.length > 0) {
-    const next = left.find((edge) => !mustWait(edge)) ?? (left[0] as number);
+  const aboveAt = new Map<number, number[]>();
+  for (const edge of list) {
+    for (const x of ends.get(edge)?.above ?? []) {
+      const edges = aboveAt.get(x) ?? [];
+      edges.push(edge);
+      aboveAt.set(x, edges);
+    }
+  }
+  const waiting = new Map<number, number>();
+  const dependents = new Map<number, number[]>();
+  for (const edge of list) {
+    const before = new Set<number>();
+    for (const x of ends.get(edge)?.below ?? []) {
+      for (const other of aboveAt.get(x) ?? []) if (other !== edge) before.add(other);
+    }
+    waiting.set(edge, before.size);
+    for (const other of before) {
+      const edges = dependents.get(other) ?? [];
+      edges.push(edge);
+      dependents.set(other, edges);
+    }
+  }
+  while (left.size > 0) {
+    const next = list.find((edge) => left.has(edge) && waiting.get(edge) === 0) ?? left.values().next().value!;
     out.push(next);
-    left.splice(left.indexOf(next), 1);
+    left.delete(next);
+    for (const edge of dependents.get(next) ?? []) waiting.set(edge, waiting.get(edge)! - 1);
   }
   return out;
 }

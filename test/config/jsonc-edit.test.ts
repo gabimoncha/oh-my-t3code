@@ -178,3 +178,11 @@ test("invalid text, roots, and paths report the required OmtError code", () => {
     });
   }
 });
+
+test("edits reject excessive duplicates and path depth before repeated scans", () => {
+  const text = `{${'"profile":"normal",'.repeat(10_000)}"version":1}`;
+  for (const value of ["prototype", undefined]) {
+    assert.throws(() => setJsoncValue(text, ["profile"], value), /more than 16 duplicate keys/);
+  }
+  assert.throws(() => setJsoncValue("{}", Array(33).fill("x"), 1), /32 segments/);
+});

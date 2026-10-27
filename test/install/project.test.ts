@@ -795,7 +795,7 @@ test("--project refuses a root that is the home directory or shares the user-sco
 test("a dangling settings symlink stays a symlink, and uninstall removes only the target the install created", async () => {
   const f = projectFixture();
   const local = join(f.project, ".claude", "settings.local.json");
-  const target = join(f.root, "dot", "settings.local.json");
+  const target = join(f.project, "dot", "settings.local.json");
   mkdirSync(join(f.project, ".claude"));
   symlinkSync(target, local);
   await f.runOk(["install", "--project", "--hooks", "--yes"]);
@@ -1079,7 +1079,7 @@ test("a symlinked exclude file or .omt/.gitignore stays a symlink through instal
 
   const g = gitFixture({ ".omt/plans/.keep": "" });
   const gitignore = join(g.project, ".omt", ".gitignore");
-  const target = join(g.root, "dot", "omt-gitignore");
+  const target = join(g.project, ".omt", "dot", "omt-gitignore");
   writeFile(target, "mine\n");
   symlinkSync(target, gitignore);
   await g.runOk(["install", "--project", "--no-git-exclude", "--yes"]);
@@ -1386,4 +1386,47 @@ test("a kept edited config that the user reverts goes with the next uninstall", 
   const last = await f.runOk(["uninstall", "--project", "--yes"]);
   assert.match(last.ctx.out(), /remove {3}.*config\.jsonc/);
   assert.deepEqual(contentTree(f.project), treeBefore);
+});
+
+test("project hooks refuse dangling links to absent user settings", async () => {
+  for (const parent of [false, true]) {
+    const f = projectFixture();
+    const local = join(f.project, ".claude", "settings.local.json");
+    if (parent) symlinkSync(join(f.home, ".claude"), join(f.project, ".claude"));
+    else {
+      mkdirSync(dirname(local));
+      symlinkSync(f.settings, local);
+    }
+    const before = snapshot(f.home);
+    const result = await f.run(["install", "--project", "--hooks", "--yes"]);
+    assert.ok(result.code !== 0);
+    assert.match(result.ctx.err(), /outside the project|shares paths with the user install/);
+    assert.deepEqual(snapshot(f.home), before);
+    assert.ok(!existsSync(f.settings));
+  }
+});
+
+test("a forged gitignore restore cannot write through external leaf or parent links", async () => {
+  for (const parent of [false, true]) {
+    const f = projectFixture();
+    const target = join(f.root, "outside", ".gitignore");
+    const omt = join(f.project, ".omt");
+    writeFile(target, "keep\n");
+    if (parent) symlinkSync(dirname(target), omt);
+    else {
+      mkdirSync(omt);
+      symlinkSync(target, join(omt, ".gitignore"));
+    }
+    writeFile(join(omt, "install.json"), JSON.stringify({
+      scope: "project", root: f.project, package: "oh-my-t3code", version: "0.3.0", installedAt: "",
+      skillsRoot: join(f.project, ".agents", "skills"), skills: [], links: [], hooks: [], backups: [],
+      project: { omtDirCreated: false, gitignoreRestore: { before: "replaced", sha256: createHash("sha256").update("keep\n").digest("hex") } },
+    }));
+    const before = snapshot(f.project);
+    const result = await f.run(["uninstall", "--project", "--yes"]);
+    assert.equal(result.code, 1, result.ctx.err());
+    assert.match(result.ctx.err(), /outside the project/);
+    assert.equal(readFileSync(target, "utf8"), "keep\n");
+    assert.deepEqual(snapshot(f.project), before);
+  }
 });

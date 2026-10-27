@@ -6,7 +6,7 @@ import { errorMessage, OmtError } from "../util/errors.ts";
 import { copyDir, ensureDir, hashDir, pathExists, readFileIfExists, writeFileAtomic } from "../util/fs.ts";
 import { isOmtLayout, writeHookChange } from "./claudeHook.ts";
 import type { HookChange } from "./claudeHook.ts";
-import { movePath, newBackupDir, writeTargetFor } from "./fsops.ts";
+import { movePath, newBackupDir, projectWriteTarget, writeTargetFor } from "./fsops.ts";
 import { mergeManifest, writeManifest } from "./manifest.ts";
 import type { Manifest, ManifestFile, ManifestHook } from "./manifest.ts";
 import { replaceableSteps, sha256 } from "./plan.ts";
@@ -25,13 +25,17 @@ function scratchPath(agentsRoot: string, kind: "tmp" | "old"): string {
 
 // Lazily creates one backup directory per run, so a run without backups leaves no empty directory.
 // In project scope, `backups/.gitignore` holds `*`, so git never shows a backup; `onIgnore` gets it when this run wrote it.
-function backupDirFor(stateDir: string, now: Date, project: boolean, onIgnore?: (file: ManifestFile) => void): () => Promise<string> {
+function backupDirFor(stateDir: string, now: Date, root?: string, onIgnore?: (file: ManifestFile) => void): () => Promise<string> {
   let dir: string | undefined;
   return async () => {
     if (dir !== undefined) return dir;
     dir = await newBackupDir(stateDir, now);
     const ignore = join(stateDir, "backups", ".gitignore");
-    if (project && !(await pathExists(ignore))) {
+    if (root !== undefined) {
+      await projectWriteTarget(root, dir);
+      await projectWriteTarget(root, ignore);
+    }
+    if (root !== undefined && !(await pathExists(ignore))) {
       await writeFileAtomic(ignore, BACKUPS_GITIGNORE);
       onIgnore?.({ path: ignore, sha256: sha256(BACKUPS_GITIGNORE) });
     }
@@ -106,7 +110,8 @@ async function installSkill(step: SkillStep, plan: InstallPlan): Promise<void> {
 // backup. For a symlink, the install created its target, so the target goes and the link stays.
 // An exact restore writes the install-time backup's bytes back, then deletes that backup.
 // Returns the backup that this write made, if any.
-async function writeHook(step: HookStep, backupDir: () => Promise<string>, result: ApplyResult, skipBackup = false): Promise<string | undefined> {
+async function writeHook(step: HookStep, backupDir: () => Promise<string>, result: ApplyResult, skipBackup = false, root?: string): Promise<string | undefined> {
+  if (root !== undefined) await projectWriteTarget(root, step.settingsPath);
   let backup: string | undefined;
   if (step.removeFile === true) {
     if ((await readFileIfExists(step.settingsPath)) !== step.before) {
@@ -114,15 +119,15 @@ async function writeHook(step: HookStep, backupDir: () => Promise<string>, resul
         hint: "run the command again",
       });
     }
-    await rm(await writeTargetFor(step.settingsPath), { force: true });
+    await rm(root === undefined ? await writeTargetFor(step.settingsPath) : await projectWriteTarget(root, step.settingsPath), { force: true });
   } else if (step.restoreBackup !== undefined) {
-    await writeHookChange(step as HookChange, undefined);
+    await writeHookChange(step as HookChange, undefined, root);
     await rm(step.restoreBackup, { force: true });
     const stampDir = dirname(step.restoreBackup);
     if (await removeEmptyDir(stampDir)) await removeEmptyDir(dirname(stampDir));
   } else {
     const needsBackup = step.action !== "unchanged" && step.before !== undefined && !skipBackup;
-    backup = await writeHookChange(step as HookChange, needsBackup ? await backupDir() : undefined);
+    backup = await writeHookChange(step as HookChange, needsBackup ? await backupDir() : undefined, root);
     if (backup !== undefined) result.backups.push(backup);
   }
   result.changed.push(step.settingsPath);
@@ -132,13 +137,13 @@ async function writeHook(step: HookStep, backupDir: () => Promise<string>, resul
 // Writes `after` only when the file still holds what the plan read. A `deleteFile` step deletes the
 // file instead, and then its `removeDir` when that is empty. A symlink at the path stays a symlink:
 // the write goes to its real path, and a delete empties the target and keeps the link.
-async function writeFileStep(step: FileStep, mode?: number): Promise<void> {
+async function writeFileStep(step: FileStep, mode?: number, root?: string): Promise<void> {
   if ((await readFileIfExists(step.path)) !== step.before) {
     throw new OmtError("file_changed", `${step.path} changed after the plan was made; nothing more was written`, {
       hint: "run the command again",
     });
   }
-  const target = await writeTargetFor(step.path);
+  const target = root === undefined ? await writeTargetFor(step.path) : await projectWriteTarget(root, step.path);
   if (step.deleteFile === true && target === step.path) {
     await removePath(step.path);
     if (step.removeDir !== undefined) await removeEmptyDir(step.removeDir);
@@ -173,7 +178,7 @@ async function applyProjectInstall(
     result.changed.push(project.plans.path);
   }
   if (project.gitignore.action === "create" || project.gitignore.action === "update") {
-    await writeFileStep(project.gitignore);
+    await writeFileStep(project.gitignore, undefined, project.root);
     result.changed.push(project.gitignore.path);
     if (project.gitignoreCreated) files.push({ path: project.gitignore.path, sha256: sha256(project.gitignore.after) });
   }
@@ -185,7 +190,7 @@ async function applyProjectInstall(
     shim.before = undefined;
   }
   if (shim.action === "create" || shim.action === "update" || shim.action === "replace") {
-    await writeFileStep(shim, 0o755);
+    await writeFileStep(shim, 0o755, project.root);
     await chmod(shim.path, 0o755);
     result.changed.push(shim.path);
   }
@@ -314,9 +319,16 @@ async function beginProjectInstall(
 }
 
 export async function applyInstall(plan: InstallPlan, now: Date): Promise<ApplyResult> {
+  if (plan.project !== undefined) {
+    for (const path of [plan.stateDir, join(plan.stateDir, "backups"), plan.agentsRoot, plan.config.path, plan.manifestPath, plan.project.plans.path, plan.project.shim.path]) {
+      await projectWriteTarget(plan.project.root, path);
+    }
+    if (plan.hook !== undefined) await projectWriteTarget(plan.project.root, plan.hook.settingsPath);
+    if (["create", "update"].includes(plan.project.gitignore.action)) await projectWriteTarget(plan.project.root, plan.project.gitignore.path);
+  }
   const result: ApplyResult = { changed: [], backups: [] };
   const createdIgnores: ManifestFile[] = [];
-  const backupDir = backupDirFor(plan.stateDir, now, plan.project !== undefined, (file) => createdIgnores.push(file));
+  const backupDir = backupDirFor(plan.stateDir, now, plan.project?.root, (file) => createdIgnores.push(file));
 
   for (const step of replaceableSteps(plan)) {
     if (step.action === "conflict") {
@@ -368,7 +380,7 @@ export async function applyInstall(plan: InstallPlan, now: Date): Promise<ApplyR
   if (configCreated && plan.project !== undefined) createdFiles.push({ path: plan.config.path, sha256: sha256(starter) });
   let hookBackup: string | undefined;
   if (plan.hook !== undefined && plan.hook.action !== "unchanged") {
-    const backup = await writeHook(plan.hook, backupDir, result, skipHookBackup);
+    const backup = await writeHook(plan.hook, backupDir, result, skipHookBackup, plan.project?.root);
     // Only the backup taken before the entry was first added can restore the file exactly.
     if (plan.hook.action === "create") hookBackup = backup;
   }
@@ -387,8 +399,13 @@ export async function applyInstall(plan: InstallPlan, now: Date): Promise<ApplyR
 // The mirror of the install order: the exclude block changes last, so a run that fails midway leaves
 // every remaining path hidden from git, and the next run finishes the work.
 export async function applyUninstall(plan: UninstallPlan, now: Date): Promise<ApplyResult> {
+  if (plan.project !== undefined) {
+    for (const path of [plan.stateDir, join(plan.stateDir, "backups"), plan.config.path, plan.manifest.path]) await projectWriteTarget(plan.project.root, path);
+    for (const hook of plan.hooks) await projectWriteTarget(plan.project.root, hook.settingsPath);
+    if (plan.project.gitignore !== undefined) await projectWriteTarget(plan.project.root, plan.project.gitignore.path);
+  }
   const result: ApplyResult = { changed: [], backups: [] };
-  const backupDir = backupDirFor(plan.stateDir, now, plan.project !== undefined);
+  const backupDir = backupDirFor(plan.stateDir, now, plan.project?.root);
   await removeScratchDirs(plan.scratch, result);
 
   for (const link of plan.links) {
@@ -418,13 +435,13 @@ export async function applyUninstall(plan: UninstallPlan, now: Date): Promise<Ap
     await removeScratch(old);
     result.changed.push(skill.path);
   }
-  for (const hook of plan.hooks) await writeHook(hook, backupDir, result);
+  for (const hook of plan.hooks) await writeHook(hook, backupDir, result, false, plan.project?.root);
   if (plan.project?.shim !== undefined) {
     await removePath(plan.project.shim.path);
     result.changed.push(plan.project.shim.path);
   }
   if (plan.project?.gitignore !== undefined) {
-    await writeFileStep(plan.project.gitignore);
+    await writeFileStep(plan.project.gitignore, undefined, plan.project.root);
     result.changed.push(plan.project.gitignore.path);
   }
   for (const file of plan.project?.files ?? []) {

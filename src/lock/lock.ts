@@ -1,13 +1,13 @@
 import { spawn, spawnSync } from "node:child_process";
 import { constants as fsConstants, realpathSync } from "node:fs";
-import { access, open, readdir, stat } from "node:fs/promises";
+import { access, readdir, stat } from "node:fs/promises";
 import type { FileHandle } from "node:fs/promises";
 import { constants as osConstants } from "node:os";
 import { delimiter, join, relative, resolve } from "node:path";
 import { findProjectRoot, omtDir } from "../paths.ts";
 import type { CliContext } from "../types.ts";
 import { errorMessage, OmtError } from "../util/errors.ts";
-import { errorCode, readFileIfExists, writeFileAtomic } from "../util/fs.ts";
+import { errorCode, openStateFile, readFileIfExists } from "../util/fs.ts";
 import { isRecord } from "../util/json.ts";
 
 interface LockTool {
@@ -39,7 +39,7 @@ async function findLockTool(ctx: Pick<CliContext, "cwd" | "env">): Promise<LockT
   return undefined;
 }
 
-function locksDir(ctx: CliContext): string {
+function lockStorage(ctx: CliContext): { root: string; dir: string } {
   let root = findProjectRoot(ctx.cwd);
   const git = (args: string[]) => spawnSync("git", args, {
     cwd: root,
@@ -59,13 +59,13 @@ function locksDir(ctx: CliContext): string {
       if (common.status === 0) {
         const commonPath = resolve(root, common.stdout.replace(/\r?\n$/, ""));
         if (realpathSync(mainPath) === realpathSync(commonPath)) {
-          return join(commonPath, "omt", "locks", projectPath);
+          return { root: commonPath, dir: join(commonPath, "omt", "locks", projectPath) };
         }
       }
       root = join(mainPath, projectPath);
     }
   }
-  return join(omtDir(root), "locks");
+  return { root, dir: join(omtDir(root), "locks") };
 }
 
 function exitCode(code: number | null, signal: NodeJS.Signals | null): number {
@@ -149,10 +149,16 @@ export async function runLocked(ctx: CliContext, name: string, seconds: number, 
     ctx.stderr(`warning: no flock or lockf on PATH; running ${commandText} without a lock\n`);
     return runProcess(ctx, command);
   }
-  const dir = locksDir(ctx);
-  await writeFileAtomic(join(dir, ".gitignore"), "*\n");
+  const { root, dir } = lockStorage(ctx);
+  const ignore = await openStateFile(root, join(dir, ".gitignore"), false);
+  try {
+    await ignore.write("*\n", 0, "utf8");
+    await ignore.truncate(2);
+  } finally {
+    await ignore.close();
+  }
   const path = join(dir, `${name}.lock`);
-  const file = await open(path, "a+");
+  const file = await openStateFile(root, path);
   try {
     if (!(await takeLock(ctx, tool, file, 0))) {
       ctx.stderr(`waiting for lock ${name} (${holderLabel(await readHolder(path))})\n`);
@@ -171,7 +177,7 @@ export async function runLocked(ctx: CliContext, name: string, seconds: number, 
 }
 
 export async function listLocks(ctx: CliContext): Promise<number> {
-  const dir = locksDir(ctx);
+  const { root, dir } = lockStorage(ctx);
   let entries;
   try {
     entries = await readdir(dir, { withFileTypes: true });
@@ -184,7 +190,7 @@ export async function listLocks(ctx: CliContext): Promise<number> {
   for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
     if (!entry.isFile() || !entry.name.endsWith(".lock")) continue;
     const path = join(dir, entry.name);
-    const file = await open(path, "a+");
+    const file = await openStateFile(root, path);
     try {
       const free = await takeLock(ctx, tool, file, 0);
       const holder = free ? undefined : await readHolder(path);

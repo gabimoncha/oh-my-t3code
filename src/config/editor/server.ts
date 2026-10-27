@@ -43,6 +43,8 @@ const CLIENT_ERROR_STATUS: Readonly<Record<string, number>> = {
 };
 
 const ROUTES: Readonly<Record<string, "GET" | "POST">> = {
+  login: "GET",
+  "login.js": "GET",
   "": "GET",
   "app.css": "GET",
   "app.js": "GET",
@@ -130,7 +132,7 @@ function readBody(req: IncomingMessage): Promise<string> {
 
 // Serves the config editor on 127.0.0.1 under a random token. It stops on close(), a close beacon that no ping
 // follows within closeGraceMs, or no ping for idleMs after the first ping.
-export async function startConfigEditor(ctx: CliContext, opts: ConfigEditorOptions): Promise<ConfigEditor> {
+export async function startConfigEditor(ctx: CliContext, opts: ConfigEditorOptions, openBrowser = openUrl): Promise<ConfigEditor> {
   const idleMs = opts.idleMs ?? 120_000;
   const closeGraceMs = opts.closeGraceMs ?? 5_000;
   const token = randomBytes(32).toString("base64url");
@@ -201,7 +203,8 @@ export async function startConfigEditor(ctx: CliContext, opts: ConfigEditorOptio
     const target = req.url ?? "";
     const queryAt = target.indexOf("?");
     if (req.headers.host !== host) throw new EditorError(403, "forbidden", "the Host header does not name this editor");
-    const route = routeOf(queryAt === -1 ? target : target.slice(0, queryAt));
+    const pathname = queryAt === -1 ? target : target.slice(0, queryAt);
+    const route = pathname === "/" ? "login" : pathname === "/login.js" ? "login.js" : routeOf(pathname);
     if (route === undefined || !Object.hasOwn(ROUTES, route)) throw new EditorError(404, "not_found", "not found");
     const origin = req.headers.origin;
     const foreign = () => new EditorError(403, "forbidden", "the request does not come from the editor page");
@@ -299,7 +302,7 @@ export async function startConfigEditor(ctx: CliContext, opts: ConfigEditorOptio
   host = `127.0.0.1:${port}`;
   const url = `http://${host}/${token}/`;
   if (opts.open) {
-    void openUrl(url).then((opened) => {
+    void openBrowser(`http://${host}/`).then((opened) => {
       if (!opened) ctx.stderr("warning: could not open a browser; open the URL yourself\n");
     });
   }

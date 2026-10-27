@@ -41,7 +41,6 @@ export type UpdateAction = { kind: "run"; argv: string[]; display: string } | { 
 
 const MISE_GITHUB_TOOL = "github:gabimoncha/oh-my-t3code";
 const RELEASES_URL = "https://github.com/gabimoncha/oh-my-t3code/releases";
-const PACKAGES = "(oh-my-t3code|omt3)";
 // Set by omt update for the new CLI of a global channel: the CLI file that the package manager reported.
 const CONFIRMED_GLOBAL_CLI = "OMT_UPDATE_GLOBAL_CLI";
 
@@ -60,15 +59,30 @@ const LABELS: Readonly<Record<ChannelKind, string>> = {
 
 type GlobalKind = "npm-global" | "pnpm-global" | "bun-global";
 
-// Each pattern captures the global root before the package folder. Tested in this order. The pnpm store is
-// `shared`: with the global virtual store, project dependencies resolve into the same folder.
-const GLOBAL_PATTERNS: readonly { kind: GlobalKind; pattern: RegExp; shared?: true }[] = [
-  { kind: "pnpm-global", pattern: new RegExp(`^(.*/global/5/node_modules)/(?:\\.pnpm/[^/]+/node_modules/)?${PACKAGES}/dist/cli\\.js$`) },
-  { kind: "pnpm-global", pattern: new RegExp(`^(.*/global/v\\d+)/[^/]+/node_modules/${PACKAGES}/dist/cli\\.js$`) },
-  { kind: "pnpm-global", pattern: new RegExp(`^(.*/links)/(?:[^/]+/)*node_modules/${PACKAGES}/dist/cli\\.js$`), shared: true },
-  { kind: "bun-global", pattern: new RegExp(`^(.*/\\.bun/install/global)/node_modules/${PACKAGES}/dist/cli\\.js$`) },
-  { kind: "npm-global", pattern: new RegExp(`^(.*/lib/node_modules)/${PACKAGES}/dist/cli\\.js$`) },
-];
+interface GlobalCandidate {
+  kind: GlobalKind;
+  root: string;
+  shared: boolean;
+}
+
+function pathCandidates(path: string): (GlobalCandidate | undefined)[] {
+  const parts = path.split("/");
+  const n = parts.length;
+  if (parts[n - 1] !== "cli.js" || parts[n - 2] !== "dist" || !["oh-my-t3code", "omt3"].includes(parts[n - 3] ?? "") || parts[n - 4] !== "node_modules") return [];
+  const candidate = (kind: GlobalKind, end: number, shared = false): GlobalCandidate => ({ kind, root: parts.slice(0, end).join("/"), shared });
+  const five = parts[n - 5] === "5" && parts[n - 6] === "global" ? n - 3
+    : parts[n - 6] === ".pnpm" && parts[n - 7] === "node_modules" && parts[n - 8] === "5" && parts[n - 9] === "global" ? n - 6 : undefined;
+  const versioned = /^v\d+$/.test(parts[n - 6] ?? "") && parts[n - 7] === "global" && parts[n - 5] !== "";
+  const links = parts.lastIndexOf("links", n - 5);
+  const shared = links >= 1 && parts.slice(links + 1, n - 4).every((part) => part !== "");
+  return [
+    five === undefined ? undefined : candidate("pnpm-global", five),
+    versioned ? candidate("pnpm-global", n - 5) : undefined,
+    shared ? candidate("pnpm-global", links + 1, true) : undefined,
+    parts[n - 5] === "global" && parts[n - 6] === "install" && parts[n - 7] === ".bun" ? candidate("bun-global", n - 4) : undefined,
+    parts[n - 5] === "lib" ? candidate("npm-global", n - 3) : undefined,
+  ];
+}
 
 function slashes(path: string): string {
   return path.replaceAll("\\", "/");
@@ -99,32 +113,24 @@ function bunGlobalDirs(env: Env): string[] {
   return dirs;
 }
 
-function globalCandidate(paths: string[], env: Env): { kind: GlobalKind; root: string; shared: boolean } | undefined {
-  const normalized = paths.map(slashes);
-  for (const { kind, pattern, shared } of GLOBAL_PATTERNS.slice(0, 4)) {
-    for (const path of normalized) {
-      const root = pattern.exec(path)?.[1];
-      if (root !== undefined) return { kind, root, shared: shared === true };
+function globalCandidate(paths: string[], env: Env): GlobalCandidate | undefined {
+  const normalized = paths.filter((path) => path.length <= 32_768).map(slashes);
+  const candidates = normalized.map(pathCandidates);
+  for (let priority = 0; priority < 5; priority++) {
+    for (const options of candidates) {
+      const found = options[priority];
+      if (found !== undefined) return found;
     }
-    if (kind !== "bun-global") continue;
+    if (priority !== 3) continue;
     for (const dir of bunGlobalDirs(env)) {
       for (const root of new Set([slashes(dir), slashes(realOrSelf(dir))])) {
-        if (normalized.some((path) => new RegExp(`^${escapeRegExp(root)}/node_modules/${PACKAGES}/dist/cli\\.js$`).test(path))) {
-          return { kind, root, shared: false };
+        if (normalized.some((path) => ["oh-my-t3code", "omt3"].some((name) => path === `${root}/node_modules/${name}/dist/cli.js`))) {
+          return { kind: "bun-global", root, shared: false };
         }
       }
     }
   }
-  const npm = GLOBAL_PATTERNS[4]!;
-  for (const path of normalized) {
-    const root = npm.pattern.exec(path)?.[1];
-    if (root !== undefined) return { kind: npm.kind, root, shared: false };
-  }
   return undefined;
-}
-
-function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 // The folder above the first node_modules segment of a path.
@@ -227,6 +233,7 @@ export function confirmedGlobalEnv(found: Channel, cli: string[]): Env | undefin
 
 function detect(input: ChannelInput, sharedStore: SharedStore): Channel {
   const packageName = packageNameOf(input);
+  if (input.cliPath.length > 32_768) return channel("unknown", packageName, "unknown:oversized-path");
   const real = realOrSelf(input.cliPath);
   const paths = [input.cliPath, real].map(slashes);
   if (input.build === "source") return channel("source", packageName, `source:${input.packageRoot}`);

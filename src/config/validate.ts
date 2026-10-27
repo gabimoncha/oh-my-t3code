@@ -517,15 +517,16 @@ export function validateMergedProfiles(
         out.error(`profiles.${name}.extends`, `profile cycle: ${chain.join(" -> ")}`);
         break;
       }
+      if (chain.length > PROFILE_CHAIN_MAX) {
+        out.error(`profiles.${name}.extends`, `profile chain exceeds ${PROFILE_CHAIN_MAX} profiles: ${chain.join(" -> ")}`);
+        break;
+      }
       const profile: ProfileConfig | undefined = Object.hasOwn(config.profiles, current) ? config.profiles[current] : undefined;
       if (profile === undefined) {
         out.error(`profiles.${name}.extends`, `unknown profile "${current}" in chain: ${chain.join(" -> ")}`);
         break;
       }
       current = profile.extends ?? (current === "normal" ? undefined : "normal");
-    }
-    if (out.issues.length === 0 && chain.length > PROFILE_CHAIN_MAX) {
-      out.error(`profiles.${name}.extends`, `profile chain exceeds ${PROFILE_CHAIN_MAX} profiles: ${chain.join(" -> ")}`);
     }
     issues.push(...out.issues);
   }

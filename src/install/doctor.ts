@@ -416,7 +416,7 @@ export async function runDoctor(
   scope: InstallScope = "user",
   seams: UpdateCheckSeams = {},
 ): Promise<DoctorRun> {
-  const paths = scopePaths(ctx, scope);
+  const paths = await scopePaths(ctx, scope);
   const loadedConfig = await loadConfig(ctx);
   const bundled = await listBundledSkills(ctx.packageRoot);
   const names = bundled.map((skill) => skill.name);

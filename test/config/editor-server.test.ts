@@ -184,3 +184,24 @@ test("editor server stays open when a ping follows a close beacon", async () => 
     assert.equal((await send(editor, "api/state")).status, 200);
   } finally { await editor.close(); }
 });
+
+test("editor landing assets disclose no session token or configuration", async () => {
+  const { ctx } = setup();
+  let opened: string | undefined;
+  const editor = await startConfigEditor(ctx, { open: true }, async (url) => { opened = url; return true; });
+  try {
+    assert.equal(opened, `${new URL(editor.url).origin}/`);
+    const token = new URL(editor.url).pathname.split("/")[1]!;
+    for (const route of ["/", "/login.js"]) {
+      const response = await send(editor, route, { absolute: true });
+      assert.equal(response.status, 200);
+      assert.ok(!response.text.includes(token));
+      assert.equal(response.headers["cache-control"], "no-store");
+    }
+    assert.equal((await send(editor, "/api/state", { absolute: true })).status, 404);
+    assert.equal((await send(editor, "/", { absolute: true, method: "POST", body: "{}" })).status, 405);
+    assert.equal((await send(editor, "/", { absolute: true, headers: { Host: "other" } })).status, 403);
+  } finally {
+    await editor.close();
+  }
+});

@@ -3,7 +3,7 @@ import { isDeepStrictEqual } from "node:util";
 import { OmtError } from "../util/errors.ts";
 import { readFileIfExists, writeFileAtomic } from "../util/fs.ts";
 import { isRecord } from "../util/json.ts";
-import { writeTargetFor } from "./fsops.ts";
+import { projectWriteTarget, writeTargetFor } from "./fsops.ts";
 
 export const HOOK_SIGNATURE = "# oh-my-t3code";
 export const HOOK_EVENT = "UserPromptSubmit";
@@ -210,7 +210,7 @@ export async function planHookRemoval(settingsPath: string, installBackup?: stri
 
 // Backs up the old file into `backupDir` (no backup when it is undefined), then writes onto the real
 // path so a symlink stays a symlink. Returns the backup path, if one was written.
-export async function writeHookChange(change: HookChange, backupDir: string | undefined): Promise<string | undefined> {
+export async function writeHookChange(change: HookChange, backupDir: string | undefined, root?: string): Promise<string | undefined> {
   if (change.action === "unchanged") return undefined;
   const current = await readFileIfExists(change.settingsPath);
   if (current !== change.before) {
@@ -224,8 +224,10 @@ export async function writeHookChange(change: HookChange, backupDir: string | un
     for (let n = 1; (await readFileIfExists(backup)) !== undefined; n += 1) {
       backup = join(backupDir, `claude-settings-${n}.json`);
     }
-    await writeFileAtomic(backup, change.before, { mode: 0o600 });
+    const target = root === undefined ? backup : await projectWriteTarget(root, backup);
+    await writeFileAtomic(target, change.before, { mode: 0o600 });
   }
-  await writeFileAtomic(await writeTargetFor(change.settingsPath), change.after);
+  const target = root === undefined ? await writeTargetFor(change.settingsPath) : await projectWriteTarget(root, change.settingsPath);
+  await writeFileAtomic(target, change.after);
   return backup;
 }

@@ -6,7 +6,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, lstatSync, readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, resolve, win32 } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const RUNNER_MARKER = "oh-my-t3code worktree setup runner";
@@ -226,21 +226,22 @@ function npmrcLinker(text) {
   let section = false;
   let value;
   for (const raw of text.split(/\r?\n/)) {
+    if (raw.length > 16_384) return { unverified: "configuration line exceeds 16384 characters" };
     const line = raw.trim();
     if (line === "" || line.startsWith(";") || line.startsWith("#")) continue;
     if (/^\[.*\]$/.test(line)) {
       section = true;
       continue;
     }
-    const match = /^([^=]+?)\s*=(.*)$/.exec(line);
+    const equals = line.indexOf("=");
     const mentions = /node-?linker/i.test(line);
-    if (match === null) {
+    if (equals === -1) {
       if (mentions) return { unverified: line };
       continue;
     }
-    const key = match[1].trim();
+    const key = line.slice(0, equals).trim();
     if (!/^(node-linker|nodeLinker)$/.test(key)) continue;
-    const parsed = scalar(stripComment(match[2], ";#"));
+    const parsed = scalar(stripComment(line.slice(equals + 1), ";#"));
     if (section || parsed === undefined || parsed.includes("${")) return { unverified: line };
     value = parsed;
   }
@@ -361,6 +362,7 @@ function tomlLinker(text) {
   let section = "";
   let value;
   for (const raw of text.split(/\r?\n/)) {
+    if (raw.length > 16_384) return { unverified: "configuration line exceeds 16384 characters" };
     const line = stripComment(raw, "#", false).trim();
     if (line === "") continue;
     const header = /^\[\s*([^\[\]]+?)\s*\]$/.exec(line);
@@ -373,18 +375,20 @@ function tomlLinker(text) {
       section = "[]";
       continue;
     }
-    const match = /^([A-Za-z0-9_\-."' ]+?)\s*=(.*)$/.exec(line);
-    if (match === null) {
+    const equals = line.indexOf("=");
+    const rawKey = line.slice(0, equals).trim();
+    if (equals === -1 || !/^[A-Za-z0-9_\-."' ]+$/.test(rawKey)) {
       if (/linker/.test(line)) return { unverified: raw.trim() };
       continue;
     }
-    const key = section === "" ? tomlKey(match[1]) : `${section}.${tomlKey(match[1])}`;
+    const rawValue = line.slice(equals + 1);
+    const key = section === "" ? tomlKey(rawKey) : `${section}.${tomlKey(rawKey)}`;
     if (key !== "install.linker") {
-      if (/linker/.test(match[2])) return { unverified: raw.trim() };
+      if (/linker/.test(rawValue)) return { unverified: raw.trim() };
       continue;
     }
-    const parsed = scalar(match[2]);
-    if (parsed === undefined || !/^\s*["']/.test(match[2])) return { unverified: raw.trim() };
+    const parsed = scalar(rawValue);
+    if (parsed === undefined || !/^\s*["']/.test(rawValue)) return { unverified: raw.trim() };
     value = parsed;
   }
   return value === undefined ? undefined : { value };
@@ -509,19 +513,24 @@ export function launchSpec(name, args, { platform = process.platform, env = proc
   }
   const dirs = (envValue(env, "PATH") ?? "").split(";").filter((dir) => dir !== "");
   for (const dir of dirs) {
+    if (!win32.isAbsolute(dir) || /^[/\\](?![/\\])/.test(dir)) continue;
     for (const ext of [".exe", ".cmd", ".bat"]) {
       const full = `${dir.replace(/[\\/]+$/, "")}\\${name}${ext}`;
       if (!exists(full)) continue;
       if (ext === ".exe") return { file: full, args, options: {} };
       if (/["%!^\r\n]/.test(full)) throw new Error(`unsafe path for cmd.exe: ${full}`);
+      const command = envValue(env, "ComSpec");
+      if (command === undefined || !win32.isAbsolute(command) || /^[/\\](?![/\\])/.test(command)) {
+        throw new Error("ComSpec must name an absolute cmd.exe path");
+      }
       return {
-        file: envValue(env, "ComSpec") ?? "cmd.exe",
+        file: command,
         args: ["/d", "/s", "/c", `""${full}" ${args.join(" ")}"`],
         options: { windowsVerbatimArguments: true },
       };
     }
   }
-  return { file: `${name}.exe`, args, options: {} };
+  throw new Error(`${name} not found on PATH`);
 }
 
 function isTruthy(value) {

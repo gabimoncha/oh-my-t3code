@@ -376,3 +376,11 @@ test("config show prints the planned defaults and the roles.test warning", async
   const shown = await runOk(["config", "show"], options);
   assert.equal(shown.ctx.err(), `warning ${projectPath} roles.test: role "test" was split into "verify" and "qa"; rename it\n`);
 });
+
+test("long profile chains produce bounded diagnostics", () => {
+  const profiles: Record<string, ProfileConfig> = { normal: DEFAULT_CONFIG.profiles.normal! };
+  for (let i = 0; i < 10_000; i++) profiles[`p${i}`] = { description: "Test", extends: `p${i + 1}` };
+  const issues = validateMergedProfiles({ ...DEFAULT_CONFIG, profiles });
+  assert.equal(issues.length, 10_000);
+  assert.ok(issues.every((issue) => issue.message.length < 200));
+});

@@ -26,7 +26,7 @@ import { errorCode, hashDir, isSymlink, pathExists, readFileIfExists, realOrSelf
 import { plural } from "../util/output.ts";
 import { hookCommand, planHookInstall, planHookRemoval, shimHookCommand } from "./claudeHook.ts";
 import type { HookChange } from "./claudeHook.ts";
-import { resolveReal } from "./fsops.ts";
+import { projectWriteTarget, resolveReal } from "./fsops.ts";
 import { allDetected, DEFAULT_HARNESSES, detectHarnesses, formatHarnessLine, formatHarnessValue, harnessEffects } from "./harness.ts";
 import { planLinks } from "./links.ts";
 import type { LinkRoot, LinkRootName, SkippedRoot } from "./links.ts";
@@ -123,7 +123,7 @@ export interface ScopePaths {
 
 // A project root whose paths are the user-scope paths (the home directory, for example) would make
 // a project install write, and a project uninstall delete, the user install.
-function assertProjectRoot(ctx: CliContext, root: string): void {
+async function assertProjectRoot(ctx: CliContext, root: string): Promise<void> {
   const user = skillRoots(ctx.env, ctx.homedir);
   const project = projectSkillRoots(root);
   const pairs: [string, string][] = [
@@ -133,7 +133,8 @@ function assertProjectRoot(ctx: CliContext, root: string): void {
     [projectClaudeSettingsPath(root), claudeSettingsPath(ctx.env, ctx.homedir)],
     [omtDir(root), configDir(ctx.env, ctx.homedir)],
   ];
-  if (pairs.some(([a, b]) => resolve(a) === resolve(b) || realOrSelf(a) === realOrSelf(b))) {
+  const resolved = await Promise.all(pairs.map(async ([a, b]) => [await resolveReal(a), await resolveReal(b)]));
+  if (resolved.some(([a, b]) => a === b)) {
     throw usageError(
       `refusing --project: the project root ${root} is your home directory or shares paths with the user install`,
       "run the command inside a project directory (run git init there first when it has no .git), or drop --project for the user install",
@@ -141,7 +142,7 @@ function assertProjectRoot(ctx: CliContext, root: string): void {
   }
 }
 
-export function scopePaths(ctx: CliContext, scope: InstallScope): ScopePaths {
+export async function scopePaths(ctx: CliContext, scope: InstallScope): Promise<ScopePaths> {
   if (scope === "user") {
     const roots = skillRoots(ctx.env, ctx.homedir);
     return {
@@ -155,8 +156,9 @@ export function scopePaths(ctx: CliContext, scope: InstallScope): ScopePaths {
     };
   }
   const root = findProjectRoot(ctx.cwd);
-  assertProjectRoot(ctx, root);
+  await assertProjectRoot(ctx, root);
   const roots = projectSkillRoots(root);
+  for (const path of [omtDir(root), roots.agents, roots.claude]) await projectWriteTarget(root, path);
   return {
     scope,
     root,
@@ -554,7 +556,7 @@ async function planHarnesses(ctx: CliContext, config: ConfigStep, capabilities?:
 
 export async function buildInstallPlan(ctx: CliContext, options: InstallOptions): Promise<InstallPlan> {
   const scope = options.scope ?? "user";
-  const paths = scopePaths(ctx, scope);
+  const paths = await scopePaths(ctx, scope);
   const runner = assertInstallSource(ctx.cliPath, ctx.env, scope);
   let command: string | undefined;
   if (options.hooks) {
@@ -617,8 +619,16 @@ export async function buildInstallPlan(ctx: CliContext, options: InstallOptions)
     }
   }
   if (!sync) plan.harnesses = await planHarnesses(ctx, plan.config, options.capabilities);
-  if (command !== undefined) plan.hook = await planHookInstall(paths.settingsPath, command);
-  if (paths.root !== undefined) plan.project = await planProjectInstall(ctx, plan, paths.root, options.gitExclude !== false, from, runner, sync);
+  if (command !== undefined) {
+    if (paths.root !== undefined) await projectWriteTarget(paths.root, paths.settingsPath);
+    plan.hook = await planHookInstall(paths.settingsPath, command);
+  }
+  if (paths.root !== undefined) {
+    plan.project = await planProjectInstall(ctx, plan, paths.root, options.gitExclude !== false, from, runner, sync);
+    if (plan.project.gitignore.action === "create" || plan.project.gitignore.action === "update") {
+      await projectWriteTarget(paths.root, plan.project.gitignore.path);
+    }
+  }
   if (sync) {
     // An update runs with --yes or from an automatic check, so it never replaces what the user owns or edited.
     for (const step of replaceableSteps(plan)) {
@@ -730,9 +740,10 @@ async function planProjectUninstall(root: string, manifest: Manifest | undefined
   }
   const restore = manifest?.project?.gitignoreRestore;
   if (restore !== undefined) {
-    // The install appended to an existing file, which may be a symlink; the restore writes its target.
+    // A manifest hash does not authorize a destination outside the project.
     const text = (await isFileOrLinkToFile(gitignorePath)) ? await readFileIfExists(gitignorePath) : undefined;
     if (text !== undefined && sha256(text) === restore.sha256) {
+      await projectWriteTarget(root, gitignorePath);
       steps.gitignore = { path: gitignorePath, before: text, after: restore.before, action: "update", reason: "removes the lines that the install added" };
     }
   }
@@ -844,7 +855,7 @@ export async function buildUninstallPlan(
   options: { purge: boolean; force?: boolean; scope?: InstallScope },
 ): Promise<UninstallPlan> {
   const scope = options.scope ?? "user";
-  const paths = scopePaths(ctx, scope);
+  const paths = await scopePaths(ctx, scope);
   const manifestFile = paths.manifestPath;
   const { manifest, from } = await loadScopeManifest(paths);
 
