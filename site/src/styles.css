@@ -1068,7 +1068,7 @@ html:not(.js) .m-dim {
 }
 
 /* The state chart plays two trips while it is in view, one after the other. In the first, the
-   review requests changes, the unit goes back to Delegated, and its second pass draws in yellow;
+   review requests changes, the change goes back to Built, and its second pass draws in yellow;
    the next review approves it. In the second, the review blocks the unit. The verdict of each
    review lights up. */
 

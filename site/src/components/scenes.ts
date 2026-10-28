@@ -46,6 +46,8 @@ const loopBack = (x0: number, x1: number, y: number, height = 32): Point[] => [
   [x0, y],
 ];
 
+// The main thread plans and builds the units one after another. Then one review child and one QA
+// child check the whole change. A finding goes back to Build for a fix, and the second pass shows in yellow.
 function ulw(): Scene {
   const g = new Draw(W, H, "s", SKILL_SPEED);
   g.rail("M300 0 L300 256");
@@ -54,27 +56,27 @@ function ulw(): Scene {
   const plan = g.line([[0, MID], [96, MID]], 0);
   g.station(96, MID, "plan", plan);
   g.text(96, MID + 36, "Plan", plan);
-  const arrivals = LANES.map((lane, i) => {
-    let t = g.line(branch(96, MID, lane, 200), plan + i * 100);
-    g.station(200, lane, "work", t);
-    t = g.line([[200, lane], [300, lane]], t);
-    g.station(300, lane, "review", t);
-    if (i === 0) {
-      t += PAUSE;
-      g.verdict(150, 22, "request changes", "closed", t);
-      t = g.line(loopBack(200, 300, lane, 24), t, { dash: true }) + 150;
-      t = g.line([[200, lane], [300, lane]], t, { tone: "yellow" });
-    }
-    t = g.line([[300, lane], [380, lane]], t);
-    g.station(380, lane, "verify", t);
-    return g.line(join(380, lane, MID, 460), t);
-  });
-  const done = Math.max(...arrivals);
-  g.station(460, MID, "done", done);
-  g.text(200, 228, "Delegate", plan);
+  let t = plan;
+  let x = 96;
+  for (const unit of [160, 200, 240]) {
+    t = g.line([[x, MID], [unit, MID]], t + 100);
+    g.station(unit, MID, "work", t);
+    x = unit;
+  }
+  t = g.line([[240, MID], [300, MID]], t);
+  g.station(300, MID, "review", t);
+  t += PAUSE;
+  g.verdict(170, 80, "finding", "closed", t);
+  t = g.line(loopBack(200, 300, MID), t, { dash: true }) + 150;
+  t = g.line([[200, MID], [300, MID]], t, { tone: "yellow" });
+  t = g.line([[300, MID], [380, MID]], t + 150);
+  g.station(380, MID, "verify", t);
+  t = g.line([[380, MID], [460, MID]], t);
+  g.station(460, MID, "done", t);
+  g.text(200, 228, "Build", plan);
   g.text(292, 228, "Review", plan, { anchor: "end" });
-  g.text(380, 228, "Verify", plan);
-  g.text(460, MID + 36, "Done", done);
+  g.text(380, 228, "QA", plan);
+  g.text(460, MID + 36, "Done", t);
   return g.scene();
 }
 
@@ -84,16 +86,19 @@ function plan(): Scene {
   g.station(40, MID, "goal", 0);
   g.text(40, MID + 36, "Explore", 0);
   let t = g.line([[0, MID], [40, MID]], 0);
-  t = g.line([[40, MID], [160, MID]], t + 200);
-  g.station(160, MID, "plan", t);
-  g.text(160, MID + 36, "Write the plan", t);
-  t = g.line([[160, MID], [300, MID]], t);
+  t = g.line([[40, MID], [100, MID]], t + 200);
+  g.station(100, MID, "work", t);
+  g.text(100, MID + 36, "Ask", t);
+  t = g.line([[100, MID], [180, MID]], t + 200);
+  g.station(180, MID, "plan", t);
+  g.text(180, MID + 36, "Write", t);
+  t = g.line([[180, MID], [300, MID]], t);
   g.station(300, MID, "review", t);
   g.text(308, MID + 36, "Review", t, { anchor: "start" });
   t += PAUSE;
-  g.verdict(170, 80, "request changes", "closed", t);
-  t = g.line(loopBack(160, 300, MID), t, { dash: true }) + 150;
-  t = g.line([[160, MID], [300, MID]], t, { tone: "yellow" }) + 150;
+  g.verdict(190, 80, "blocker", "closed", t);
+  t = g.line(loopBack(180, 300, MID), t, { dash: true }) + 150;
+  t = g.line([[180, MID], [300, MID]], t, { tone: "yellow" }) + 150;
   g.verdict(312, 108, "approve", "open", t);
   t = g.line([[300, MID], [420, MID]], t + 200);
   g.station(420, MID, "done", t);
@@ -138,7 +143,7 @@ function design(): Scene {
   return g.scene();
 }
 
-function review(): Scene {
+function codeReview(): Scene {
   const g = new Draw(W, H, "s", SKILL_SPEED);
   g.rail("M260 0 L260 256");
   g.station(40, MID, "goal", 0);
@@ -184,89 +189,47 @@ function research(): Scene {
   });
   t = Math.max(...arrivals);
   g.station(352, MID, "verify", t);
-  g.text(352, MID + 36, "Collect", t);
+  g.text(352, MID + 36, "Check", t);
   t = g.line([[352, MID], [448, MID]], t + 200);
   g.station(448, MID, "done", t);
   g.text(448, MID + 36, "Answer", t);
   return g.scene();
 }
 
-function show(): Scene {
-  const g = new Draw(W, H, "s", SKILL_SPEED);
-  g.station(40, MID, "plan", 0);
-  g.text(40, MID + 36, "Plan", 0);
-  let t = g.line([[0, MID], [40, MID]], 0);
-  t = g.line([[40, MID], [140, MID]], t + 150);
-  g.station(140, MID, "work", t);
-  g.text(140, MID + 36, "Spec", t);
-  t = g.line([[140, MID], [240, MID]], t);
-  g.station(240, MID, "verify", t);
-  g.text(240, MID + 36, "Build", t);
-  t = g.line([[240, MID], [300, MID]], t);
-  // The page: its frame draws from the line, then a flowchart and a table fill it.
-  const frame = "M300 128 L300 48 Q300 40 308 40 L460 40 Q468 40 468 48 L468 208 Q468 216 460 216 L308 216 Q300 216 300 208 L300 128";
-  t = g.line(frame, t, { width: 4, speed: 0.6 });
-  const nodes = [330, 384, 438];
-  t = g.line([[330, 76], [438, 76]], t, { width: 3 });
-  nodes.forEach((x, i) => g.dot(x, 76, 7, t - 300 + i * 150));
-  [120, 152, 184].forEach((y, i) => {
-    const at = t + 200 + i * 160;
-    g.line([[324, y], [364, y]], at, { width: 8, tone: "muted", speed: 0.6 });
-    g.line([[380, y], [444, y]], at + 80, { width: 8, tone: i === 0 ? "green" : "faint", speed: 0.6 });
-  });
-  g.text(384, 244, "A page in the T3 thread", t, { style: "note", size: 13 });
-  return g.scene();
-}
-
 // The same grid as ulw, so that the two read side by side in the hero: the tracks leave the plan at
-// different times and speeds, and each ends in its own pull request instead of at Done.
+// different times and speeds, and each builds and checks in its own thread. Then one review covers
+// every track, the tracks merge, one QA run checks the merged code, and one pull request ends the run.
 function swarm(): Scene {
   const g = new Draw(W, H, "s", SKILL_SPEED);
   g.rail("M300 0 L300 256");
-  g.station(28, MID, "goal", 0);
-  g.text(28, MID + 36, "Goal", 0);
-  const plan = g.line([[0, MID], [96, MID]], 0);
-  g.station(96, MID, "plan", plan);
-  g.text(96, MID + 36, "Plan", plan);
+  g.station(28, MID, "plan", 0);
+  g.text(28, MID + 36, "Plan", 0);
+  const split = g.line([[0, MID], [96, MID]], 0);
+  g.station(96, MID, "plan", split);
+  g.text(96, MID + 36, "Split", split);
   const offsets = [0, 700, 1400];
   const speeds = [1, 1.3, 1.1];
-  LANES.forEach((lane, i) => {
+  const arrivals = LANES.map((lane, i) => {
     const speed = speeds[i]!;
-    let t = g.line(branch(96, MID, lane, 200), plan + offsets[i]!, { speed });
+    let t = g.line(branch(96, MID, lane, 200), split + offsets[i]!, { speed });
     g.station(200, lane, "work", t);
-    t = g.line([[200, lane], [300, lane]], t, { speed });
-    g.station(300, lane, "review", t);
-    t = g.line([[300, lane], [380, lane]], t + PAUSE, { speed });
-    g.station(380, lane, "verify", t);
-    t = g.line([[380, lane], [436, lane]], t, { speed });
-    g.bar(436, lane, t);
-    g.text(448, lane + 6, `PR ${i + 1}`, t, { anchor: "start" });
+    t = g.line([[200, lane], [250, lane]], t, { speed });
+    g.station(250, lane, "verify", t);
+    return g.line([[250, lane], [300, lane]], t, { speed });
   });
-  g.text(200, 228, "Delegate", plan);
-  g.text(292, 228, "Review", plan, { anchor: "end" });
-  g.text(380, 228, "Verify", plan);
-  return g.scene();
-}
-
-function loop(): Scene {
-  const g = new Draw(W, H, "s", SKILL_SPEED);
-  g.station(40, MID, "goal", 0);
-  g.text(40, MID + 36, "Condition", 0);
-  let t = g.line([[0, MID], [40, MID]], 0);
-  t = g.line([[40, MID], [160, MID]], t + 150);
-  g.station(160, MID, "work", t);
-  g.text(160, MID + 36, "Work", t);
-  t = g.line([[160, MID], [300, MID]], t);
-  g.station(300, MID, "verify", t);
-  g.text(300, MID + 36, "Check", t);
-  t += PAUSE;
-  g.verdict(158, 80, "fails: next turn", "closed", t);
-  t = g.line(loopBack(160, 300, MID), t, { dash: true }) + 150;
-  t = g.line([[160, MID], [300, MID]], t, { tone: "yellow" }) + 150;
-  g.verdict(312, 108, "passes", "open", t);
-  t = g.line([[300, MID], [440, MID]], t + 200);
-  g.station(440, MID, "done", t);
-  g.text(440, MID + 36, "Stop", t);
+  const review = Math.max(...arrivals);
+  for (const lane of LANES) g.station(300, lane, "review", review);
+  const merged = Math.max(...LANES.map((lane) => g.line(join(300, lane, MID, 380), review + PAUSE)));
+  g.station(380, MID, "work", merged);
+  g.text(380, MID + 36, "Merge", merged);
+  let t = g.line([[380, MID], [424, MID]], merged);
+  g.station(424, MID, "verify", t);
+  g.text(424, 100, "QA", t);
+  t = g.line([[424, MID], [456, MID]], t);
+  g.bar(456, MID, t);
+  g.text(456, MID + 36, "PR", t);
+  g.text(200, 228, "Build", split);
+  g.text(292, 228, "Review", split, { anchor: "end" });
   return g.scene();
 }
 
@@ -276,9 +239,9 @@ function router(): Scene {
   g.text(48, MID + 36, "omt", 0, { style: "code", size: 14 });
   let t = g.line([[0, MID], [48, MID]], 0);
   t = g.line([[48, MID], [120, MID]], t + 150);
-  const names = ["ulw", "plan", "design", "review", "research", "show", "swarm", "loop"];
+  const names = ["ulw", "plan", "grill", "design", "code-review", "research", "swarm"];
   names.forEach((name, i) => {
-    const lane = 23 + i * 30;
+    const lane = 38 + i * 30;
     const end = g.line(branch(120, MID, lane, 300), t + i * 90, { radius: 10 });
     g.bar(300, lane, end, { length: 20 });
     g.text(316, lane + 5, `omt-${name}`, end, { style: "code", size: 14, anchor: "start" });
@@ -290,10 +253,8 @@ export const SKILL_SCENES: Record<string, Scene> = {
   "omt-ulw": ulw(),
   "omt-plan": plan(),
   "omt-design": design(),
-  "omt-review": review(),
+  "omt-code-review": codeReview(),
   "omt-research": research(),
-  "omt-show": show(),
   "omt-swarm": swarm(),
-  "omt-loop": loop(),
   omt: router(),
 };

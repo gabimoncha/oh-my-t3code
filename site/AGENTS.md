@@ -38,7 +38,7 @@ Before you report done, run `typecheck`, `build`, and `e2e`, and look at the cha
 - A scene is a list of items, each with a start time in ms. Build it with `Draw`: each call takes its start time and returns its end time. Lines draw at one speed, from their path length.
 - CSS runs the timing from `--at` and `--dur`. A host element has the class `anim`; `useInView` sets `data-play` when the host first comes into view and `data-paused` while it is out of view.
 - A rotation (hero, skill tour) moves on when its `.m-clock` element ends its `clock` animation. Give the clock the scene's `end` plus a hold.
-- Skill scenes share one grid: a 480 x 256 canvas, lanes at y 64, 128, and 192. The ulw and swarm scenes put Delegate, Review, and Verify at x 200, 300, and 380, so the two hero pictures line up.
+- Skill scenes share one grid: a 480 x 256 canvas, lanes at y 64, 128, and 192. The ulw and swarm scenes put Build at x 200 and Review on the rail at x 300, so the two hero pictures line up.
 - With reduced motion, each picture shows its last frame and nothing rotates. Without JavaScript, the last frame shows too. The e2e tests check reduced motion.
 - In the end-to-end tests, use `finishAnimations` to end the animations at once, so a test does not wait in real time.
 
