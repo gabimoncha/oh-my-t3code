@@ -16,13 +16,13 @@ omt runs workflows in this T3 thread: the main thread explores, plans, and build
 | `omt-plan` | The user wants a reviewed plan before any code changes, or `omt-ulw` needs one for a HEAVY task. |
 | `omt-grill` | The user wants a goal grilled or stress-tested, its edge cases found, or a brainstorm before a plan, or `omt-plan` offers a grill for a vague goal. |
 | `omt-design` | The user wants designs, mockups, screens, or a design pass, or a plan needs a design spec before its UI units. |
-| `omt-review` | The user wants a review of uncommitted changes, a branch, a commit, or a PR. |
+| `omt-code-review` | The user wants a review of uncommitted changes, a branch, a commit, or a PR. |
 | `omt-research` | The user wants a cited answer from this repository, docs, or the web, with no code changes. |
 | `omt-swarm` | The user asks for separate threads: independent tracks in their own worktrees, each ending in a PR. |
 | `omt-help` | The user asks for help, what omt can do, what to do next, how to do something, which skill to use, or what a command means, or wants a tour. It only reads, and hands changes to `omt-setup`. |
 | `omt-setup` | The user wants omt set up, configured, or updated: harnesses, the default set, models, roles, profiles, or worktree setup. It asks before each write. |
 
-For a pull request review, load `omt-review` with `omt-review --profile pr-review <number>`.
+For a pull request review, load `omt-code-review` with `omt-code-review --profile pr-review <number>`.
 
 Before each commit, push, PR, or merge, a skill runs `omt git check` and follows the [Git actions](references/delegation.md#git-actions) rules.
 

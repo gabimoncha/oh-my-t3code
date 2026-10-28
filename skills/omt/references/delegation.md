@@ -18,7 +18,7 @@ When none exists, follow the manual steps in [roles.md](roles.md) and [brief.md]
 
 - A child gets only the task text, after one line T3 adds: `Act as the <role> sub-agent for this task.` It does not see your conversation. The brief is its full context ([brief.md](brief.md)).
 - A child works in the same project, branch, and worktree as you. Two editing children with overlapping files damage each other's work. Run editing children in parallel only when their scopes are disjoint.
-- A child may keep or narrow your modes, never widen them. Runtime: `approval-required` < `auto-accept-edits` < `auto` < `full-access`. Interaction: `plan` < `default`. From a `plan` thread you can dispatch only read-only roles.
+- A child may keep or narrow your modes, never widen them. Runtime: `approval-required` < `auto-accept-edits` < `auto` < `full-access`. Interaction: `plan` < `default`. From a `plan` thread you can dispatch only children in `plan` interaction mode.
 - A child in `plan` interaction mode is read-only. Its brief tells it to stay in plan mode and put the result block in its final assistant message, because a proposed plan does not show in `task_status.summary`.
 
 ## Your interaction mode
@@ -32,7 +32,7 @@ ELECTRON_RUN_AS_NODE=1 "$T3_ACP_MCP_NODE" ${T3_ACP_MCP_ENTRYPOINT:+"$T3_ACP_MCP_
 Do not call `orchestrator_capabilities` to read your modes. Use it only for the provider and model catalog ([roles.md](roles.md)). Its result is large, so save it to a temp file and read only the fields you need.
 
 - `default`: follow the skill as written.
-- `plan`: you are read-only too. Dispatch only read-only roles (`explore`, `research`, `plan-review`, `grill`, `review`, `oracle`). Write no files: run no `omt init`, `omt plan new`, `omt plan mark`, or `omt ledger add`, and save no evidence files. Commands that only print (`omt roles`, `omt brief`, `omt ledger stats`, `omt plan status`) are fine. Count your dispatched and active tasks yourself against the limits. Settle each child after you read its result ([Releasing children](#releasing-children)). Deliver the plan or the report in your final message. When the work needs files or edit roles, ask the user to switch the thread to default mode and stop.
+- `plan`: you are read-only too. Dispatch only children in `plan` interaction mode: the read-only roles (`explore`, `research`, `plan-review`, `grill`), and `review` or `oracle` with `interactionMode: "plan"` set in `delegateTask`, because set 2026-12 makes them edit roles. Write no files: run no `omt init`, `omt plan new`, `omt plan mark`, or `omt ledger add`, and save no evidence files. Commands that only print (`omt roles`, `omt brief`, `omt ledger stats`, `omt plan status`) are fine. Count your dispatched and active tasks yourself against the limits. Settle each child after you read its result ([Releasing children](#releasing-children)). Deliver the plan or the report in your final message. When the work needs files or edit roles, ask the user to switch the thread to default mode and stop.
 
 ## Branch check
 
@@ -226,7 +226,7 @@ When you create a pull request, also after the run ends, watch it at once. Do no
 2. On each wake, read the checks with `gh pr checks <number>`. When a check fails, find the cause in its log, fix it, push the fix by the [Git actions](#git-actions) rules, and keep the watch.
 3. When every check has passed or was skipped, call `unwatch_pull_request` and tell the user the result.
 
-Without the watch tool, run `gh pr checks <number> --watch` instead, and apply steps 2 and 3. `omt-review` and `omt-swarm` have their own PR rules; follow those inside those skills.
+Without the watch tool, run `gh pr checks <number> --watch` instead, and apply steps 2 and 3. `omt-code-review` and `omt-swarm` have their own PR rules; follow those inside those skills.
 
 ## Top-level threads
 

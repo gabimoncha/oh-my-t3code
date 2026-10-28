@@ -372,7 +372,7 @@ test("briefs pin the CLI, test policy, saved files, and the qa device rule", () 
 
 test("omt routes pull request reviews to pr-review and lists the profile commands", () => {
   const text = readSkill("omt");
-  assert.match(text, /For a pull request review, load `omt-review` with `omt-review --profile pr-review <number>`\./);
+  assert.match(text, /For a pull request review, load `omt-code-review` with `omt-code-review --profile pr-review <number>`\./);
   assert.match(text, /\| `omt brief <role> --task-file - --title "<role> <unit>: <title>" --scope <p> --done <c> --verify <cmd> --plan <slug> --unit <id> --round <n> --attempt <n> \[--against <provider\\\|driver\\\|auto>\] --save --json` \| `\{ delegateTask, fallbacks, ledger \}`; the full brief is in a file and `delegateTask\.task` names it \|/);
   assert.match(text, /\| `omt profile list` \| available workflow profiles \|/);
   assert.match(text, /\| `omt profile show \[<name>\] \[--plan <slug>\] --json` \| the effective `profile`, `source`, `workflow`, `limits`, `roles`, and `models` \|/);
@@ -406,7 +406,7 @@ test("the main thread and delegating children settle each finished child", () =>
   const brief = readFileSync(join(REFS, "brief.md"), "utf8");
   assert.match(brief, /- Children, below maximum depth: ``Children: after you read a child's result, settle the child with the T3 `t3_thread_organize` tool/);
   const sweep = /Before you report, run the settle sweep \(\[delegation\.md\]\(\.\.\/omt\/references\/delegation\.md#releasing-children\)\)\./;
-  for (const [name, heading] of [["omt-ulw", "### 12. Ship and report"], ["omt-review", "### 6. Write and report"], ["omt-review", "### PR 10. Report"], ["omt-research", "### 5. Synthesize"], ["omt-plan", "### 5. Hand off"], ["omt-design", "### 6. Hand off"]] as const) {
+  for (const [name, heading] of [["omt-ulw", "### 12. Ship and report"], ["omt-code-review", "### 6. Write and report"], ["omt-code-review", "### PR 10. Report"], ["omt-research", "### 5. Synthesize"], ["omt-plan", "### 5. Hand off"], ["omt-design", "### 6. Hand off"]] as const) {
     assert.match(section(readSkill(name), heading), sweep, `${name} ${heading}`);
   }
   const plan = readSkill("omt-plan");

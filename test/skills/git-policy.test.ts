@@ -13,8 +13,8 @@ test("omt-ulw applies the shared Git actions rules to each commit, push, and PR"
   assert.match(text, /make one commit for the run, then push and open or update the PR, each by the \[Git actions\]\(\.\.\/omt\/references\/delegation\.md#git-actions\) rules/);
 });
 
-test("omt-review applies the shared Git actions rules to each commit and push", () => {
-  const text = section(readSkill("omt-review"), "### PR 11. ");
+test("omt-code-review applies the shared Git actions rules to each commit and push", () => {
+  const text = section(readSkill("omt-code-review"), "### PR 11. ");
   assert.match(text, /Commit and push by the \[Git actions\]\(\.\.\/omt\/references\/delegation\.md#git-actions\) rules, with `--profile <profile>`/);
 });
 

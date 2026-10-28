@@ -52,12 +52,12 @@ function relativeLinks(markdown: string): string[] {
 test("the bundled skills are all present", () => {
   assert.deepEqual(skillDirs().sort(), [
     "omt",
+    "omt-code-review",
     "omt-design",
     "omt-grill",
     "omt-help",
     "omt-plan",
     "omt-research",
-    "omt-review",
     "omt-setup",
     "omt-swarm",
     "omt-ulw",
