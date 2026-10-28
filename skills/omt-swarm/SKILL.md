@@ -47,6 +47,8 @@ Done when: the plan exists, you know its units, its `## Summary`, its `## Tests`
 
 ### 2. Split
 
+Run the `omt-ulw` step 6 design check in the main thread before the split. If `omt-design` is required, run it and get the owner's approval. Commit the approved design spec by the [Git actions](../omt/references/delegation.md#git-actions) rules before you record `<base>`, so the spec is in `<base>`. Tracks only cite the approved spec. A track does not run `omt-design`.
+
 Split the open units of the plan into tracks. Each track gets a kebab-case name, its units, and its scope paths.
 
 - Two tracks share no file. Units that touch the same file go in one track.
@@ -77,7 +79,7 @@ For each track, call `t3_thread_launch` with:
 The launch message is a plain task, not an `omt brief`. It says:
 
 1. You are track `<track>` of the swarm plan `<slug>`. Your plan is `<slug>-<track>`. Your scope is `<scope paths>`. Edit no file outside it.
-2. First call `t3_thread_configuration` to read your own modes and `modelSelection`. Read `omt profile show --plan <slug>-<track> --json`, the track plan, and its tier. Use your own driver as `<your family>` for review. Apply the `F2` rule from `omt-ulw` step 5 and its step 6 design check. Then run steps 7 to 12 of the `omt-ulw` skill for the units of plan `<slug>-<track>` only. Build, run your own review child and QA child, and fix.
+2. First call `t3_thread_configuration` to read your own modes and `modelSelection`. Read `omt profile show --plan <slug>-<track> --json`, the track plan, and its tier. Use your own driver as `<your family>` for review. Apply the `F2` rule from `omt-ulw` step 5. Cite the approved design spec in `<base>`. Do not run `omt-design`. The main thread completed the step 6 design check before the split. Then run steps 7 to 12 of the `omt-ulw` skill for the units of plan `<slug>-<track>` only. Build, run your own review child and QA child, and fix.
 3. Commit on branch `omt/<slug>/<track>` by the `Git actions` rules of the omt `delegation.md` reference, with `--plan <slug>-<track>`. Do not push. Do not open a PR. The main thread owns the PR.
 4. Report what changed, each check with its exit code and log path, and the commit hash.
 5. End with one line: `TRACK <track>: DONE <commit hash>`, or `TRACK <track>: BLOCKED <reason>`.

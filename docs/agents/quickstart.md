@@ -290,7 +290,7 @@ In these steps, `omt` means the command of the install. With a project install, 
    omt update --yes
    ```
 
-   Check: the command exits 0. Show the user each `kept <skill>  (<reason>)` line, and each skill that the update removed because this version no longer ships it. These skills stay as they are. `omt install --project --force` replaces a locally modified skill.
+   Check: the command exits 0. Show the user each `kept <skill>  (<reason>)` line, and each skill that the update removed because this version no longer ships it. Locally edited skills stay unchanged. Unmodified skills that this version no longer ships are removed. `omt install --project --force` replaces a locally modified skill.
 
 3. Check the skills. With only a global install, run `omt doctor` instead of `omt doctor --project`:
 

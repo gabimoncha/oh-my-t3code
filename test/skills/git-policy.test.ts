@@ -49,7 +49,12 @@ test("no skill requires a separate user request for every commit", () => {
 test("Git actions caps a PR at maxPrFiles and splits a larger branch into a stack", () => {
   const text = gitActions();
   assert.match(text, /A PR holds at most `maxPrFiles` changed files, from the `maxPrFiles` field of `omt git check pr --json`\. `0` or `null` means no limit\./);
-  assert.match(text, /count the files with `git diff --name-only <base>\.\.\.HEAD \| wc -l`/);
+  assert.match(text, /For an open PR, read its base branch with `gh pr view <n> --repo <host>\/<owner>\/<repo> --json baseRefName`\./);
+  assert.match(text, /Otherwise use the run's base, or the `defaultBranch` field when the run has no base\./);
+  assert.match(text, /When no base is available, stop and ask the owner\./);
+  assert.match(text, /Run `git fetch origin <base>`\. Then run `git diff --name-only origin\/<base>\.\.\.HEAD` and count the file paths in its output\./);
+  assert.match(text, /When the fetch or the diff fails, stop and ask the owner\. Never treat a failed command as 0 files\./);
+  assert.doesNotMatch(text, /git diff --name-only[^`]*\| wc -l/);
   const stack = section(readFileSync(join(SKILLS_DIR, "omt/references/delegation.md"), "utf8"), "### Stacked PRs");
   assert.match(stack, /When `gh stack --help` fails, ask the owner\./);
   assert.match(stack, /Cut only between existing commits, and do not rewrite them\./);
@@ -57,5 +62,11 @@ test("Git actions caps a PR at maxPrFiles and splits a larger branch into a stac
   assert.match(stack, /Run the typecheck and the tests on the last commit of each slice\./);
   assert.match(stack, /The top slice keeps the run's branch, so an open PR on it stays\./);
   assert.match(stack, /--base <branch below> --head <slice branch>/);
-  assert.match(stack, /`gh stack link <number> <number> \.\.\.`/);
+  assert.match(stack, /Push each new slice branch with `git push origin <slice branch>:<slice branch>`, after `omt git check push` for it\./);
+  assert.match(stack, /Also push the top branch \(the run's branch\) with `git push origin HEAD:<branch>`, after `omt git check push` for it\./);
+  assert.match(stack, /`GH_REPO=<host>\/<owner>\/<repo> gh stack link --base <run base> <number> <number> \.\.\.`/);
+  assert.match(stack, /Set `GH_REPO` from the `host`, `owner`, and `repo` fields of `omt git check pr --json`\./);
+  assert.match(stack, /`--base` sets the base for the bottom PR\. Without it, `gh stack link` uses the repository's default branch\. This command has no `--repo` flag\./);
+  assert.match(text, /Never read the repo from an existing `GH_REPO` environment value or the current folder\./);
+  assert.match(text, /For `gh stack link`, which has no `--repo` flag, set `GH_REPO` from the check as below\./);
 });

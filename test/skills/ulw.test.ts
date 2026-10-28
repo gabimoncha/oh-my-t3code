@@ -161,7 +161,7 @@ test("omt-ulw builds every unit in the main thread", () => {
   assert.match(build, /Dispatch only while `omt ledger stats --plan <slug>` reports `can dispatch: yes`\./);
   assert.match(build, /run its printed `ledger\.dispatched` line/);
   assert.match(build, /Then write its planned tests and make its failure proofs with items 3 and 4 above/);
-  assert.match(build, /Run the verify command again with those tests before you mark the unit done/);
+  assert.match(build, /Run those planned tests and the verify command again\. Both must pass before you mark the unit done\./);
   assert.match(build, /\[delegation\.md\]\(\.\.\/omt\/references\/delegation\.md#shared-builds\)/);
 });
 

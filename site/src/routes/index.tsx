@@ -415,7 +415,7 @@ function WhoItIsFor() {
               has that tool.
             </li>
             <li>
-              You want a quick edit with no plan and no review. omt plans, reviews, and tests also a small task, with
+              You want a quick edit with no plan and no review. omt plans, reviews, and tests even a small task, with
               at least 2 child tasks.
             </li>
             <li>You want a hosted service or a scheduler that runs in the background. omt has neither.</li>

@@ -186,30 +186,30 @@ async function removeSkillDir(path: string, hash?: string): Promise<void> {
   await removeScratch(old);
 }
 
-// Removes the links to the retired skills, then the skills. A `replace` skill goes to the backups.
+// Removes each retired skill before its links, so a failed skill check keeps the links in place.
 async function removeRetired(plan: InstallPlan, backupDir: () => Promise<string>, result: ApplyResult): Promise<void> {
-  for (const link of plan.links) {
-    if (!removesRetired(link)) continue;
-    if ((await readlink(link.path).catch(() => undefined)) !== link.target) {
-      throw new OmtError("file_changed", `${link.path} changed after the plan was made; it was kept`, { hint: "run the command again" });
-    }
-    await removePath(link.path);
-    result.changed.push(link.path);
-  }
   for (const step of plan.skills) {
     if (!removesRetired(step)) continue;
     if (step.action === "replace") {
       const backup = join(await backupDir(), "agents", step.name);
       await movePath(step.path, backup);
       result.backups.push(backup);
-    } else {
-      if (await lstatIfExists(step.path) === undefined) continue;
+      result.changed.push(step.path);
+    } else if (await lstatIfExists(step.path) !== undefined) {
       if (step.installedHash === undefined) {
         throw new OmtError("file_changed", `${step.path} appeared after the plan was made; it was kept`, { hint: "run the command again" });
       }
       await removeSkillDir(step.path, step.installedHash);
+      result.changed.push(step.path);
     }
-    result.changed.push(step.path);
+    for (const link of plan.links) {
+      if (link.name !== step.name || !removesRetired(link)) continue;
+      if ((await readlink(link.path).catch(() => undefined)) !== link.target) {
+        throw new OmtError("file_changed", `${link.path} changed after the plan was made; it was kept`, { hint: "run the command again" });
+      }
+      await removePath(link.path);
+      result.changed.push(link.path);
+    }
   }
 }
 

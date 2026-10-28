@@ -146,6 +146,7 @@ test("install keeps a retired folder whose ownership marker is removed after pla
 
   await assert.rejects(applyInstall(plan, ctx.now()), /changed after the plan was made/);
   assert.ok(existsSync(join(f.agents, "beta", "SKILL.md")));
+  assert.ok(lstatSync(join(f.claudeSkills, "beta")).isSymbolicLink());
 });
 
 test("install keeps a link replaced after planning retired skill removal", async () => {
@@ -167,10 +168,12 @@ test("install keeps a folder created after planning dangling link removal", asyn
   retireBeta(f.packageRoot);
   rmSync(join(f.agents, "beta"), { recursive: true });
   const plan = await buildInstallPlan(ctx, { targets: ["agents", "claude"], hooks: false, force: false });
+  assert.ok(lstatSync(join(f.claudeSkills, "beta")).isSymbolicLink());
   writeFile(join(f.agents, "beta", "SKILL.md"), "Owner beta.\n");
 
   await assert.rejects(applyInstall(plan, ctx.now()), /appeared after the plan was made/);
   assert.equal(readFileSync(join(f.agents, "beta", "SKILL.md"), "utf8"), "Owner beta.\n");
+  assert.ok(lstatSync(join(f.claudeSkills, "beta")).isSymbolicLink());
 });
 
 test("project reinstall preserves ownership exclusions for retired pre-existing skills", async () => {

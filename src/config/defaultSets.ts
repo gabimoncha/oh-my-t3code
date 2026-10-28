@@ -294,7 +294,7 @@ const SET_2026_12: OmtConfig = (() => {
         ...base.profiles.normal!,
         workflow: {
           ...base.profiles.normal!.workflow,
-          // Free CodeRabbit reviews at most 100 files of a PR.
+          // omt defaults to 100, the file limit of a CodeRabbit review on its free plan for open-source repos, as of 2026-10.
           git: { ...base.profiles.normal!.workflow?.git, maxPrFiles: 100 },
         },
       },
