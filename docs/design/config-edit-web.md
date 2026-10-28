@@ -155,7 +155,7 @@ What runs for the selected profile, with the layer that set each value.
   - Effective card: "EFFECTIVE" in `--accent`, "what runs" in `--text`, background `--accent-tint`, border `--accent`.
   - Card widths: flex 1, 1.3, 1.3, 1.1, and 120px fixed for the effective card. Padding 8px × 12px. The first card has a 4px left radius and the last file card a 4px right radius.
 - **Filter row**: an input with the "/" prefix and the placeholder "filter keys, e.g. roles.review", then the strip legend: "strip = D U P F", a sample strip, and "purple wins · gray overridden".
-- **Key tree**: groups in this order: `roles`, `profiles`, `limits`, `harnesses · visuals · models · defaults`. Each group header shows the name in bold, the count, and an action link at the right ("+ role", "+ profile"). Paths that start with `roles`, `limits`, `models`, or `workflow` come from `explain.effective`. All other paths come from `explain.root`. Collapse a role to one row (`▸ review.crossFamily`) when only one field differs from the defaults. Collapse roles that only the default set defines into one row: "▸ N roles · defaults 2026-10 only".
+- **Key tree**: groups in this order: `roles`, `profiles`, `limits`, `harnesses · models · defaults`. Each group header shows the name in bold, the count, and an action link at the right ("+ role", "+ profile"). Paths that start with `roles`, `limits`, `models`, or `workflow` come from `explain.effective`. All other paths come from `explain.root`. Collapse a role to one row (`▸ review.crossFamily`) when only one field differs from the defaults. Collapse roles that only the default set defines into one row: "▸ N roles · defaults 2026-10 only".
   - A value that differs from the root value shows "(root X)" after it in `--text-muted`. X is the value of the `explain.root` entry with the same path.
   - Entries in `explain.removed` show as rows with the struck-through key and the label "removed by <source>".
 - **Inspector** (s2 describes it in full) shows the selected key. With no key selected, it shows "Select a key to see where its value comes from." in `--t-prose` `--text-muted`.
@@ -213,12 +213,11 @@ A form shaped like the JSON file of the **Edit in** file.
   - `"profile"`: a select of `state.profiles`, plus "inherit" (remove the key). The hint: "user sets \"hackathon\"".
   - `"limits"`: one number input (64px) per key in `vocab.limitKeys`, with the range from `vocab.limitRanges` in the hint ("1–32"), and the override note when a profile or the project file sets the key, for example "1–500 · inherited · ▲ profile hackathon overrides this value (sets 12)".
   - `"harnesses"`: chips of driver kinds. A filled `--accent` square marks a kind in the list. A dashed chip with an outlined square is a known kind that is not in the list. "+ kind" opens an input that checks `vocab.providerPattern`. "remove key (every driver)" queues `remove: true`. A sentence in `--warn-text` warns when a removed kind leaves roles without a driver.
-  - `"visuals"`: `{ "plan": ` and a segmented `true` | `false` and `}`.
   - `"models"`: one row per model id from `explain.root` paths `models.<id>.fast`, with a select `true` | `false` | `inherit (X)`. "+ model" adds a row with an id input.
-- Footer sentence in `--t-prose` `--text-muted`: "Solid box: the project file sets this key. Dashed box: not set here, the value is inherited. Profiles cannot set defaults, harnesses, or visuals."
+- Footer sentence in `--t-prose` `--text-muted`: "Solid box: the project file sets this key. Dashed box: not set here, the value is inherited. Profiles cannot set defaults or harnesses."
 - **Preview panel**: "PREVIEW · defaults A -> B", then one line per item in `defaultsChanges` (`path: from -> to`). An item with `overriddenBy` shows in `--text-muted` with "(overridden by <path>)". A dashed `--line` divider, then the sentence "Lines that end with \"overridden by\" change nothing for you, because a file sets that value." When the `defaults` pin has no queued change, the panel shows "Pick another default set to see what changes." in `--text-muted`.
 
-API: `state.defaults` (`selected`, `source`, `latest`, `sets`), `vocab.limitKeys`, `vocab.limitRanges`, `vocab.visualsKeys`, `vocab.modelKeys`, `vocab.harnessesMin`, `vocab.harnessesMax`, `vocab.providerPattern`, and `explain.root`. The preview list comes from `POST api/preview` with the queued edits of this file: `defaultsChanges` is in the response when an edit's path is `["defaults"]`. Call it 300ms after the last change of the `defaults` select.
+API: `state.defaults` (`selected`, `source`, `latest`, `sets`), `vocab.limitKeys`, `vocab.limitRanges`, `vocab.modelKeys`, `vocab.harnessesMin`, `vocab.harnessesMax`, `vocab.providerPattern`, and `explain.root`. The preview list comes from `POST api/preview` with the queued edits of this file: `defaultsChanges` is in the response when an edit's path is `["defaults"]`. Call it 300ms after the last change of the `defaults` select.
 
 ### s6 · Review
 
@@ -281,7 +280,7 @@ See s1. Each card starts with a 4-cell strip at 12px high where only the card's 
   - Winning layer: `--accent` fill.
   - Overridden layer (in `overridden`): `--strip-over` fill.
   - A layer that does not set the path: 1px `--control` outline, no fill.
-  - A layer that cannot set the path: an empty 6px slot with no outline. The profile cell is empty for `defaults`, `profile`, `harnesses`, `visuals`, and `profiles.*`. The defaults cell is empty for `defaults`.
+  - A layer that cannot set the path: an empty 6px slot with no outline. The profile cell is empty for `defaults`, `profile`, `harnesses`, and `profiles.*`. The defaults cell is empty for `defaults`.
 - The strip has `role="img"` and an `aria-label` such as "project wins; defaults and user overridden".
 - Source label: `defaults <set>`, `user`, `project`, or `profile <name> (<declared label>)` in `--text-2`. A profile source uses `--accent`. "· new role" follows when the source layer created the role.
 - Rows are `role="treeitem"` inside `role="tree"`. A collapsed group row has `aria-expanded="false"` and a "▸" mark. An expanded one has "▾".
@@ -301,7 +300,7 @@ See s2. The rail is 20px wide, the dot 10px, the connector 1px. The connector of
 - Options for a path P with the selected profile S:
   - P starts with `roles`, `limits`, or `models`: `profiles.S.P` and `P` (root). Show the profile option first when the entry's source is a profile, else the root option first. The first option is selected by default.
   - P starts with `workflow`: only `profiles.S.P`. Show it as one selected card.
-  - Any other P (`defaults`, `profile`, `harnesses`, `visuals`, `profiles.*`): only `P`.
+  - Any other P (`defaults`, `profile`, `harnesses`, `profiles.*`): only `P`.
 - Notes: "wins" when the option would set what runs. "would win" on an unselected option that would set what runs.
 - **Override warning**: a full-width line inside the card, under the path, indented 22px to the path text, in `--warn-text`, starting with "▲". The card wraps (`flex-wrap: wrap`) so the warning takes its own line. Show one line per higher layer that sets the edited path, highest first:
   - Root path P in the user file: "▲ project overrides this value · it sets X" when the `explain.root` entry for P has `source.kind === "project"`.
@@ -350,7 +349,7 @@ From left: the connection dot (7px, `--ok` or `--err`) and "connected · 127.0.0
 1. **Look up a value.** The page loads (`api/state`, then `api/ping` every 5 seconds). The user filters or browses the tree and selects a row. The inspector shows the stack.
 2. **Change a value.** The user sets **Edit in**, selects a key, picks the path in the path choice, enters a value, and clicks "Queue edit". The tree row shows "· <file> X queued". The status bar count goes up.
 3. **Edit a role or a profile.** The user opens s3 or s4, changes fields, and clicks "Queue N edits". The edits join the queue of the **Edit in** file.
-4. **Change root settings.** The user opens s5 from the "harnesses · visuals · models · defaults" group header or `#/root`. A change of the `defaults` pin shows the preview list before any write.
+4. **Change root settings.** The user opens s5 from the "harnesses · models · defaults" group header or `#/root`. A change of the `defaults` pin shows the preview list before any write.
 5. **Review and write.** The user opens s6. The page calls `api/preview` for each file with queued edits. The user reads the diff and clicks "Write N edits to <file>". The page calls `api/write` and loads the returned state.
 6. **Recover.** A 409 leads to state 1. A 422 leads to state 2. A failed ping leads to state 4.
 7. **Close.** On `pagehide` the page sends `navigator.sendBeacon("api/close")`. A reload sends close and pings again, so the server stays.

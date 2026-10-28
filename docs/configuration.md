@@ -170,7 +170,7 @@ Add the profile under `profiles` in either config file. The starter configs hold
 | `roles` | Role overrides, with the fields of [Add a custom role](#add-a-custom-role). |
 | `models` | Settings per model id. The only setting is `fast`. |
 
-A profile cannot set `visuals`, `harnesses`, `update`, or `defaults`. These keys apply to the whole config file.
+A profile cannot set `harnesses`, `update`, or `defaults`. These keys apply to the whole config file.
 
 This profile builds like `prototype`, with no check-ins, fast `execute` and `ui` workers, a task limit of 12 instead of 24, and GPT-6.1-Sol without fast mode in the other roles:
 
@@ -228,7 +228,7 @@ The first value that is set wins: the rung `fast`, the role `fast`, the model `f
 
 ## Pin the default set
 
-Each omt release ships dated default sets. A set holds every built-in role, profile, limit, model setting, and visual setting. The sets today are `2026-10` and `2026-11`, which adds the `grill` role. A set does not change after its release. New defaults go into a new set with a later name.
+Each omt release ships dated default sets. A set holds every built-in role, profile, limit, and model setting. The sets today are `2026-10` and `2026-11`, which adds the `grill` role. A set does not change after its release. New defaults go into a new set with a later name.
 
 The `"defaults"` key pins one set:
 
@@ -295,15 +295,9 @@ A harness is detected when T3 does not disable it in `~/.t3/userdata/settings.js
 
 The `test` role is now two roles. Move each `roles.test` override to `verify` for checks, or to `qa` for test writing. omt now reads the old key as a custom role and warns. A partial `roles.test` override fails validation, because it has no `description`, `access`, or `chain`.
 
-## Turn off plan pages
+## Remove the `visuals` key
 
-By default, `omt-plan` shows a final plan as a page in the T3 thread. To get the plan summary as text in the reply instead, set:
-
-```jsonc
-{
-  "visuals": { "plan": false }
-}
-```
+omt no longer shows a plan as a page, so the `visuals` key has no effect. `omt-plan` writes the plan summary in its reply. A config file that still sets `visuals` loads with the warning `visuals is no longer used; remove it`. Delete the key to clear the warning.
 
 ## Check for updates
 
@@ -388,7 +382,7 @@ To change one value:
 The page follows these rules:
 
 - `Reset to inherited` queues the removal of the key from the selected file. The sentence below the button gives the value that runs after the removal. The button is off when the file does not set the key.
-- Click a role or a profile in the tree to open its editor. The `edit` link of the `harnesses · visuals · models · defaults` group opens the root settings. These screens queue edits in the same way. To go back to the tree, press Esc when no field has focus.
+- Click a role or a profile in the tree to open its editor. The `edit` link of the `harnesses · models · defaults` group opens the root settings. These screens queue edits in the same way. To go back to the tree, press Esc when no field has focus.
 - Queued edits stay in the page until you write them. The status bar counts the queued edits of each file.
 - When the page loads the config again, for example after a write, an editor that you did not change shows the new values. An editor that you changed but did not queue keeps your input. If its file changed, also after a write from the page to that file, the editor shows `Based on older text. The file changed after you started this edit.` You cannot queue that input until you click `Keep my edit` or `Discard`. `Keep my edit` keeps your input on the new text, and the review shows what the write changes. `Discard` shows the new values. When you leave an editor that has input that you did not queue, the editor keeps that input. When you open the same editor again with the same profile and the same `Edit in` file, it shows your input. Each path in the file keeps its own input: when you select the other path in `PATH IN THIS FILE` and then select the first path again, the editor shows your input for that path. Each file keeps its input when you select the other file in `Edit in`, and when the page selects the other file because the selected file was deleted or stops parsing. When you select that file again, the editors show your input.
 - In a chain, an option key that you clear removes the option when you queue the chain. A key that is the same as another key of the rung stops the queue, and a message shows next to the key. The page keeps your text until you change it. While a `+ key=value` form has text, you cannot queue the chain, and the form shows `Press Enter to add the option, or clear it.`
@@ -410,7 +404,7 @@ The server listens on 127.0.0.1 only, and the URL holds a random port and a rand
 ## Inspect the config
 
 - `omt config path` prints the paths of the user and project configs.
-- `omt config show --defaults` prints the selected default set: the built-in profiles, roles, models, limits, and visuals.
+- `omt config show --defaults` prints the selected default set: the built-in profiles, roles, models, and limits.
 - `omt config show` prints the merged config before omt applies the profile.
 - `omt config explain` prints the layer that sets each value. See [See where each value comes from](#see-where-each-value-comes-from).
 - `omt config edit --web` opens an editor for both config files in a browser. See [Edit the config in a browser](#edit-the-config-in-a-browser).

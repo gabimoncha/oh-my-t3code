@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { test } from "bun:test";
 import assert from "node:assert/strict";
 import { run } from "../../src/commands/plan.ts";
-import { parsePlan } from "../../src/plan/parse.ts";
+import { dependencyWarnings, parsePlan } from "../../src/plan/parse.ts";
 import { planTemplate } from "../../src/plan/template.ts";
 import { omtExit, projectContext, spawnOmt, tempDir } from "../helpers.ts";
 
@@ -180,6 +180,51 @@ test("plan status CLI lists only dependency-ready units in text and JSON", () =>
   assert.equal(json.code, 0, json.stderr);
   const parsed = JSON.parse(json.stdout);
   assert.deepEqual(parsed.ready.map((item: { id: string }) => item.id), readyIds);
+});
+
+test("dependencyWarnings is empty for a clean plan", () => {
+  assert.deepEqual(dependencyWarnings(SAMPLE), []);
+  assert.deepEqual(dependencyWarnings("# P\n\n- [ ] U1. a\n  - Depends on: none\n- [ ] U2. b\n  - Depends on: U1\n"), []);
+});
+
+test("dependencyWarnings names unknown units, self-dependencies, and a cycle", () => {
+  const text = `# P
+
+- [ ] U1. a
+  - Depends on: U3
+- [ ] U2. b
+  - Depends on: U2, U9
+- [ ] U3. c
+  - Depends on: U1
+
+\`\`\`
+- [ ] U4. fenced
+  - Depends on: U8
+\`\`\`
+`;
+  assert.deepEqual(dependencyWarnings(text), [
+    "U2 depends on itself",
+    "U2 depends on U9, which is not a unit of the plan",
+    "the unit dependencies form a cycle: U1 -> U3 -> U1",
+  ]);
+});
+
+test("plan status prints one warning line per dependency problem, and --json has warnings", async () => {
+  const ctx = projectContext(["status", "p"]);
+  const dir = join(ctx.cwd, ".omt", "plans");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, "p.md"), `${header("")}\n- [ ] U1. a\n  - Depends on: U7\n`);
+  assert.equal(await run(ctx), 0);
+  assert.match(ctx.out(), /^ready: none\nwarning: U1 depends on U7, which is not a unit of the plan\n$/m);
+
+  const json = ctx.at(["status", "p", "--json"]);
+  assert.equal(await run(json), 0);
+  assert.deepEqual(JSON.parse(json.out()).warnings, ["U1 depends on U7, which is not a unit of the plan"]);
+
+  writeFileSync(join(dir, "p.md"), `${header("")}\n- [ ] U1. a\n`);
+  const clean = ctx.at(["status", "p", "--json"]);
+  assert.equal(await run(clean), 0);
+  assert.deepEqual(JSON.parse(clean.out()).warnings, []);
 });
 
 test("plan status fails when there is no plan or the slug is missing", async () => {

@@ -22,7 +22,6 @@ import * as roles from "./commands/roles.ts";
 import * as route from "./commands/route.ts";
 import * as uninstall from "./commands/uninstall.ts";
 import * as update from "./commands/update.ts";
-import * as visual from "./commands/visual.ts";
 import * as worktree from "./commands/worktree.ts";
 import type { CliBuild, CliContext, CommandRun } from "./types.ts";
 import { findProjectRoot, hasProjectMarker, omtDir, shadowedWorktreeState } from "./paths.ts";
@@ -50,16 +49,15 @@ export const COMMANDS: Readonly<Record<string, CommandModule>> = {
   profile,
   ledger,
   lock,
-  visual,
   worktree,
   git,
   paths,
   hook,
 };
 
-const STATE_COMMANDS = new Set(["plan", "ledger", "brief", "route", "init", "visual"]);
+const STATE_COMMANDS = new Set(["plan", "ledger", "brief", "route", "init"]);
 // Run from a folder outside any project, these commands would write plans, ledger entries, or evidence paths there.
-const PROJECT_COMMANDS = new Set(["plan", "profile", "ledger", "brief", "visual", "lock"]);
+const PROJECT_COMMANDS = new Set(["plan", "profile", "ledger", "brief", "lock"]);
 
 // scripts/build.ts defines OMT_BUILD as "bundle" or "binary". The sources run without it.
 declare const OMT_BUILD: string | undefined;

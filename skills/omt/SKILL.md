@@ -20,7 +20,6 @@ omt turns this T3 thread into a conductor: it plans, delegates each unit to a ro
 | `omt-research` | The user wants a cited answer from this repository, docs, or the web, with no code changes. |
 | `omt-swarm` | The user asks for separate threads: independent tracks in their own worktrees, each ending in a PR. |
 | `omt-loop` | The user wants the work to keep going across turns until a condition holds. |
-| `omt-show` | The user wants to see a plan, a flow, or a status as a page with flowcharts and tables. `omt-plan` runs it when it hands off a plan. |
 | `omt-help` | The user asks for help, what omt can do, what to do next, how to do something, which skill to use, or what a command means, or wants a tour. It only reads, and hands changes to `omt-setup`. |
 | `omt-setup` | The user wants omt set up, configured, or updated: harnesses, the default set, models, roles, profiles, or worktree setup. It asks before each write. |
 
@@ -47,11 +46,11 @@ To find the CLI (`omt`, `.omt/bin/omt`, or the manual steps), follow [The CLI](r
 | `omt plan new <slug> [--light] [--profile <name>]` | path of a new plan file under `.omt/plans/`; `--light` leaves out the `F2` oracle item |
 | `omt plan profile <slug> <name\|none>` | switches the plan's profile; `none` removes the plan override |
 | `omt plan mark <slug> <id> <done\|open\|blocked>` | ticks one plan item, for example `omt plan mark auth U3 done` |
-| `omt plan status [<slug>]` | unit counts and the next open unit |
+| `omt plan status [<slug>]` | unit counts, the next open unit, the ready units, and one `warning:` line per dependency problem |
 | `omt ledger add --plan <slug> --unit <id> --role <r> --round <n> --attempt <n> --status <s> ...` | appends one ledger entry; a terminal entry closes the matching dispatched entry ([results.md](references/results.md#recording)) |
 | `omt ledger stats --plan <slug>` | `dispatched` and `active` counts, the limits, and `can dispatch: yes` or `no` |
 | `omt ledger request-id --plan <slug> --unit <id> --role <r> --round <n> --attempt <n>` | the `clientRequestId` |
-| `omt config show` | the merged config before profile selection, including limits and `visuals` |
+| `omt config show` | the merged config before profile selection, including limits |
 | `omt config explain [--profile <name>] [--json]` | the layer that sets each value (the default set, the user or project config, or a profile and the file that declares it) and the lower layers that it overrides |
 | `omt defaults list` | each default set, with the `latest` mark and the `selected (<source>)` mark |
 | `omt defaults diff [<from>] [<to>]` | one `<path>: <from> -> <to>` line per change, with ` (overridden by <file>)` when a config file sets that value; `no changes` when none. `<from>` defaults to the selected set, `<to>` to `latest` |
@@ -60,7 +59,6 @@ To find the CLI (`omt`, `.omt/bin/omt`, or the manual steps), follow [The CLI](r
 | `omt update [--check] [--dry-run] [--yes] [--skills-only] [--project] [--json]` | updates the CLI with the command of its channel, then syncs the skills in user scope and in each recorded project; keeps an edited skill and prints `kept <skill>  (<reason>)`; `--check` writes nothing; `--yes` never moves the `defaults` pin |
 | `omt lock run <name> [--wait <seconds>] -- <command>` | runs a command under a shared build lock and returns its exit code |
 | `omt lock list` | each lock's state and the holder of a held lock |
-| `omt visual [--plan <slug>] --spec - --json` | path of a self-contained HTML page: the plan's summary, units by dependency layer, and checks, plus the tabs of the spec ([page-spec.md](../omt-show/references/page-spec.md)) |
 
 Pass `delegateTask` to `delegate_task` unchanged. Record the dispatch with the printed `ledger.dispatched` line after replacing `<taskId>`. Use [delegation.md](references/delegation.md#getting-the-arguments) for retries and plan-mode dispatch.
 

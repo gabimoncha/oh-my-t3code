@@ -37,10 +37,6 @@ export interface Limits {
   maxReviewRounds: number;
 }
 
-export interface Visuals {
-  plan: boolean;
-}
-
 export interface Workflow {
   plan: {
     review: "two-families" | "one" | "owner";
@@ -105,7 +101,6 @@ export interface OmtConfig {
   models: Record<string, ModelConfig>;
   roles: Record<string, RoleConfig>;
   limits: Limits;
-  visuals: Visuals;
   harnesses?: string[]; // the driver kinds that routing may use; absent means every driver
   update?: UpdateMode; // absent means "off"
 }
@@ -118,7 +113,6 @@ export interface ConfigLayer {
   models?: Record<string, ModelConfig>;
   roles?: Record<string, Partial<RoleConfig> | null>;
   limits?: Partial<Limits>;
-  visuals?: Partial<Visuals>;
   harnesses?: string[];
   update?: UpdateMode;
 }

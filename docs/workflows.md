@@ -1,6 +1,6 @@
 # How the omt workflows run
 
-This page tells you what omt does in a pull request review, when it commits and opens a PR, how it adds tests, how parallel workers share builds, and what a plan page shows. To change these steps, see [Configure roles and profiles](configuration.md).
+This page tells you what omt does in a pull request review, when it commits and opens a PR, how it adds tests, and how parallel workers share builds. To change these steps, see [Configure roles and profiles](configuration.md).
 
 ## Review a pull request
 
@@ -59,11 +59,3 @@ omt lock list
 A command waits up to 900 seconds for a busy lock. `--wait <seconds>` changes the wait. After a timeout, the command exits with code 75. The lock uses `flock` or `lockf`, and omt never takes a lock from its holder. If neither tool is installed, the command runs with a warning, and the planner runs shared builds one at a time.
 
 A command that leaves a server or a watcher running cannot use the lock. The planner runs such commands one at a time, outside the lock.
-
-## Read a plan page
-
-When a plan is final, `omt-plan` shows it as a page in the T3 thread. The page has the plan summary, status cards, a flowchart of the units by dependency layer, a unit table, the checks, and diagrams that explain the design.
-
-T3 does not draw flowcharts in chat. So `omt visual` builds the page, and the T3 `html_render` tool shows it. omt also saves a copy as `visuals/<slug>.html` in the evidence directory, which `omt paths --evidence` prints. You can open the copy in a browser.
-
-To see a page at any time, ask for it, for example "show me the plan as a flowchart". The `omt-show` skill builds it. To turn off the plan page, see [Turn off plan pages](configuration.md#turn-off-plan-pages).

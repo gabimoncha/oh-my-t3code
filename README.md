@@ -103,14 +103,13 @@ If you do not know what to do next, type `$omt-help`. To change the setup, type 
 | `omt-design` | You want designs or mockups before UI work. |
 | `omt-review` | You want a review of uncommitted changes, a branch, a commit, or a pull request. |
 | `omt-research` | You need an answer with sources from the repository, library docs, or the web. |
-| `omt-show` | You want to see a plan or a status as a page with flowcharts and tables. |
 | `omt-help` | You want to know what omt can do, what to do next, or how to do something. It only reads and changes nothing. |
 | `omt-setup` | You want omt set up, configured, or updated: the harnesses, the default set, models, roles, or profiles. It asks before each write. |
 | `omt-swarm` | You have independent tracks, and each needs its own worktree thread and pull request. |
 | `omt-loop` | Work must continue across turns until a check passes. |
 | `omt` | You want the list of workflows and CLI commands. |
 
-The agent can start the first nine skills itself. You start `omt-swarm`, `omt-loop`, and `omt` by name.
+The agent can start the first eight skills itself. You start `omt-swarm`, `omt-loop`, and `omt` by name.
 
 A plan and its ledger stay in `.omt/` after context compaction and across sessions, so one plan can run for days. A profile in `.omt/config.jsonc` can change the models, the checks, and the limits. See [Configure roles and profiles](docs/configuration.md), or ask `$omt-setup` to make the change.
 
@@ -135,8 +134,6 @@ T3 gives each agent session tools to start, check, and cancel child tasks on any
 Each role, such as `execute` or `review`, has an ordered list of models. If T3 refuses the first model, the agent uses the next one. When both families are available, the reviewer comes from the other family than the worker. `omt roles` shows the model of each role.
 
 The [walkthrough](docs/walkthrough.md) follows two real runs on this repository. One run had 4 units and used 29 child tasks in 2 hours 20 minutes. The other had 10 units and used 128 child tasks over 5 days.
-
-![The Units tab of the code-health plan page: a flowchart of U1 to U4, each unit depending on the one before it, and a table of the units with their dependencies](docs/assets/walkthrough-plan.png)
 
 ## Glossary
 

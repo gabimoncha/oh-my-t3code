@@ -9,7 +9,7 @@ const LAYERS = ["defaults", "user", "project", "profile"];
 const LAYER_NUM = { defaults: 1, user: 2, project: 3, profile: 4 };
 const LETTER = { defaults: "D", user: "U", project: "P", profile: "F" };
 const FILES = ["user", "project"];
-const ROOT_ONLY = new Set(["defaults", "profile", "harnesses", "visuals", "profiles"]);
+const ROOT_ONLY = new Set(["defaults", "profile", "harnesses", "profiles"]);
 const PING_MS = 5000;
 
 const app = {
@@ -1069,14 +1069,13 @@ function treeModel() {
   if (matches(["harnesses"])) {
     rootRows.push(leafRow({ path: ["harnesses"] }, 1, "harnesses", harness.noKey ? { stack: harness, value: "every driver (no key)" } : { stack: harness }));
   }
-  for (const entry of ex.root.filter((item) => item.path[0] === "visuals")) if (matches(entry.path)) rootRows.push(leafRow(entry, 1, dotted(entry.path)));
   for (const entry of leaves("models")) if (matches(entry.path)) rootRows.push(leafRow(entry, 1, dotted(entry.path)));
   for (const path of [["defaults"], ["profile"]]) {
     const entry = app.rootMap.get(pk(path));
     if (entry && matches(path)) rootRows.push(leafRow(entry, 1, path[0], { value: JSON.stringify(entry.value) }));
   }
   if (!filter || rootRows.length > 0) {
-    rows.push({ kind: "group", id: "g:root", group: "root", label: "harnesses · visuals · models · defaults", count: "", action: "edit", actionHash: "#/root" });
+    rows.push({ kind: "group", id: "g:root", group: "root", label: "harnesses · models · defaults", count: "", action: "edit", actionHash: "#/root" });
     if (filter || app.open.has("root")) rows.push(...rootRows);
   }
   return rows;
@@ -2623,16 +2622,6 @@ function rootScreen() {
     !harnessOwn.set && harnessEff.noKey ? h("div", { class: "muted small", text: "No key: every driver kind runs." }) : null,
   ];
 
-  // visuals
-  const visualsOwn = own(["visuals", "plan"]);
-  const visualsCtl = h("span", { class: "inline" }, h("span", { class: "faint", text: '{ "plan": ' }),
-    seg(["true", "false"], visualsOwn.set ? String(visualsOwn.value) : String(rootValue(["visuals", "plan"]) ?? ""), (value) => {
-      const next = value === "true";
-      if (next === fileValue(kind, ["visuals", "plan"])) unqueue(kind, ["visuals", "plan"]);
-      else enqueue(kind, ["visuals", "plan"], { value: next }, seen);
-      render();
-    }, { label: "visuals.plan", disabled, fk: "root:visuals", small: true }), h("span", { class: "faint", text: " }," }));
-
   // models
   const modelIds = [];
   for (const entry of app.explain.root) if (entry.path[0] === "models" && !modelIds.includes(entry.path[1])) modelIds.push(entry.path[1]);
@@ -2682,13 +2671,12 @@ function rootScreen() {
     h("div", { class: "jpunct in1", text: "}," }),
     row("harnesses", ["harnesses"], harnessCtl, null),
     h("div", { class: "jnote" }, harnessNote),
-    row("visuals", ["visuals", "plan"], visualsCtl, null),
     modelRows.length ? modelRows : null,
     h("div", { class: "jrow" }, h("span", { class: "jkey" }), h("span", { class: "jctl" },
       h("button", { type: "button", class: "link", text: "+ model", disabled, "data-fk": "root:m:+", onclick: () => { app.drafts.mAdd = fresh({}, (d) => { d.value = ""; }); render(); } }), mInput)),
     mNote ? h("div", { class: "jnote" }, mNote) : null,
     h("div", { class: "jpunct", text: "}" }),
-    h("p", { class: "prose muted foot", text: `Solid box: the ${kind} file sets this key. Dashed box: not set here, the value is inherited. Profiles cannot set defaults, harnesses, or visuals.` }));
+    h("p", { class: "prose muted foot", text: `Solid box: the ${kind} file sets this key. Dashed box: not set here, the value is inherited. Profiles cannot set defaults or harnesses.` }));
   return h("section", { class: "screen-root" }, h("div", { class: "root-main" }, blockedCard(), content), previewPanel());
 }
 

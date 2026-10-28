@@ -37,7 +37,6 @@ import {
   RUNG_KEYS,
   RUNTIME_MODE_VALUES,
   T3_ROLE_VALUES,
-  VISUALS_KEYS,
   WORKFLOW_RULES,
 } from "../validate.ts";
 import { lineDiff } from "./diff.ts";
@@ -68,7 +67,6 @@ const VOCAB = {
   roleKeys: ROLE_KEYS,
   rungKeys: RUNG_KEYS,
   limitKeys: LIMIT_KEYS,
-  visualsKeys: VISUALS_KEYS,
   profileKeys: PROFILE_KEYS,
   modelKeys: MODEL_KEYS,
   presetProfiles: PRESET_PROFILE_NAMES,

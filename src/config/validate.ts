@@ -11,7 +11,6 @@ import type {
   RoleConfig,
   Rung,
   UpdateMode,
-  Visuals,
   Workflow,
   WorkflowLayer,
 } from "../types.ts";
@@ -19,7 +18,9 @@ import { usageError } from "../util/errors.ts";
 import { defaultSetNames, isDefaultSet } from "./defaultSets.ts";
 import { isRecord } from "../util/json.ts";
 
-export const ROOT_KEYS: readonly string[] = ["$schema", "version", "defaults", "profile", "profiles", "models", "roles", "limits", "visuals", "harnesses", "update"];
+export const ROOT_KEYS: readonly string[] = ["$schema", "version", "defaults", "profile", "profiles", "models", "roles", "limits", "harnesses", "update"];
+// Keys of older releases: a layer that still has one loads, with a warning.
+export const RETIRED_ROOT_KEYS: readonly string[] = ["visuals"];
 export const UPDATE_VALUES: readonly UpdateMode[] = ["off", "check", "apply"];
 export const ROLE_KEYS: readonly string[] = [
   "description",
@@ -34,7 +35,6 @@ export const ROLE_KEYS: readonly string[] = [
 ];
 export const RUNG_KEYS: readonly string[] = ["provider", "driver", "model", "effort", "fast", "options"];
 export const LIMIT_KEYS: readonly string[] = ["maxParallel", "maxTasksPerRun", "maxDepth", "maxReviewRounds"];
-export const VISUALS_KEYS: readonly string[] = ["plan"];
 export const PROFILE_KEYS: readonly string[] = ["description", "extends", "workflow", "limits", "roles", "models"];
 export const MODEL_KEYS: readonly string[] = ["fast"];
 export const PRESET_PROFILE_NAMES: readonly string[] = ["normal", "prototype", "pr-review"];
@@ -256,25 +256,6 @@ function validateLimits(value: unknown, path: string, out: Collector): Partial<L
   return limits;
 }
 
-function validateVisuals(value: unknown, out: Collector): Partial<Visuals> | undefined {
-  if (!isRecord(value)) {
-    out.error("visuals", `must be an object, got ${describe(value)}`);
-    return undefined;
-  }
-  const visuals: Partial<Visuals> = {};
-  for (const [key, item] of Object.entries(value)) {
-    const path = `visuals.${key}`;
-    if (!VISUALS_KEYS.includes(key)) {
-      out.error(path, `unknown visuals key "${key}"; allowed keys: ${VISUALS_KEYS.join(", ")}`);
-    } else if (typeof item === "boolean") {
-      visuals[key as keyof Visuals] = item;
-    } else {
-      out.error(path, `must be a boolean, got ${describe(item)}`);
-    }
-  }
-  return visuals;
-}
-
 function validateRoles(value: unknown, path: string, out: Collector): ConfigLayer["roles"] {
   if (!isRecord(value)) {
     out.error(path, `must be an object, got ${describe(value)}`);
@@ -457,7 +438,9 @@ export function validateLayer(value: unknown, source: string): { layer: ConfigLa
     return { layer, issues: out.issues };
   }
   for (const [key, item] of Object.entries(value)) {
-    if (!ROOT_KEYS.includes(key)) {
+    if (RETIRED_ROOT_KEYS.includes(key)) {
+      out.issues.push({ source: out.source, path: key, message: `${key} is no longer used; remove it`, severity: "warning" });
+    } else if (!ROOT_KEYS.includes(key)) {
       out.error(key, `unknown key "${key}"; allowed keys: ${ROOT_KEYS.join(", ")}`);
     } else if (key === "$schema") {
       if (typeof item !== "string") out.error(key, `must be a string, got ${describe(item)}`);
@@ -473,9 +456,6 @@ export function validateLayer(value: unknown, source: string): { layer: ConfigLa
     } else if (key === "limits") {
       const limits = validateLimits(item, key, out);
       if (limits !== undefined) layer.limits = limits;
-    } else if (key === "visuals") {
-      const visuals = validateVisuals(item, out);
-      if (visuals !== undefined) layer.visuals = visuals;
     } else if (key === "profile") {
       if (typeof item === "string" && ROLE_NAME_RE.test(item)) layer.profile = item;
       else out.error(key, `must be a string that matches ${ROLE_NAME_PATTERN}, got ${describe(item)}`);

@@ -578,7 +578,7 @@ async function update(ctx: CliContext, options: UpdateOptions, seams: UpdateSeam
   return finish(ctx, options, say, report, childDefaults(cli, run, say), failed);
 }
 
-// The flow of omt update, shared with auto-apply in install and doctor (section 5.15).
+// The flow of omt update, shared with auto-apply in install and doctor (section 5.14).
 export async function runUpdate(base: CliContext, options: UpdateOptions, seams: UpdateSeams = {}): Promise<number> {
   const ctx: CliContext = { ...base, isTTY: seams.isTTY ?? base.isTTY, prompt: seams.prompt ?? base.prompt };
   const run = seams.run ?? spawnFor(ctx);

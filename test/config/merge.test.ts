@@ -135,12 +135,3 @@ test("the result does not share arrays with the layer", () => {
   chain.push(RUNG);
   assert.equal(config.roles.review?.chain.length, 1);
 });
-
-test("visuals merge per key", () => {
-  const { config, issues } = mergeLayer(DEFAULT_CONFIG, { visuals: { plan: false } }, "src");
-  assert.deepEqual(issues, []);
-  assert.deepEqual(config.visuals, { plan: false });
-  assert.deepEqual(DEFAULT_CONFIG.visuals, { plan: true });
-  assert.deepEqual(mergeLayer(config, { visuals: {} }, "src").config.visuals, { plan: false });
-  assert.deepEqual(mergeLayer(config, { visuals: { plan: true } }, "src").config.visuals, { plan: true });
-});

@@ -72,11 +72,11 @@ The defaults change between releases, for example when a new model enters a chai
 
 Many users run only Claude Code or only Codex. A config that rewrote all 15 chains for one harness would stop getting new defaults. The `harnesses` key instead removes the rungs of a missing harness when omt resolves a role, so the chains still come from the pinned set. omt detects the harnesses from the T3 settings and `PATH`, or from the live provider list that an agent passes with `--capabilities`. T3's rule for an enabled provider comes from its source code, not a documented API, and omt does not read T3's settings per project. So the install and `omt detect` show the result and ask before they write the key.
 
-### The owner sees a plan as a page
+### The owner reads a plan summary
 
-The owner does not read long plans. Each plan therefore opens with a summary of at most 15 lines in plain words, and a plan reviewer blocks a summary line that the plan does not support, because the owner may read nothing else. A summary still hides the shape of the work: which units wait for which, and how a new process runs. T3 renders no flowcharts in chat, but its `html_render` tool shows an HTML page above the agent's reply. So when a plan is final, `omt-plan` shows it as a page with the summary, the units as a flowchart by dependency layer, the checks, and up to 3 flowcharts or tables of the design.
+The owner does not read long plans. Each plan therefore opens with a summary of at most 15 lines in plain words, and a plan reviewer blocks a summary line that the plan does not support, because the owner may read nothing else. `omt-plan` writes that summary in full in its reply when it hands off a plan.
 
-The split follows the rule of the section above. The `omt-show` skill decides what to draw, which needs judgment. `omt visual` lays out the page: the rows of a flowchart, the edge routes, the text wrapping, and the escaping. Agents that draw SVG by hand get coordinates wrong, edges cross boxes, and each page looks different. A fixed layout gives every plan the same look and a check for crossing edges. The page uses T3's theme variables, so it follows the reader's light or dark theme. The owner can turn the page off with `visuals.plan`, and then the summary goes in the reply as text.
+omt once drew each final plan as an HTML page with a flowchart of the units. Owners rarely asked for it, and a fixed page layout could not draw what they did ask for, such as lanes that show which steps run in a child thread. So omt no longer builds pages. When the owner asks for a diagram, the agent writes the HTML and shows it with T3's `html_render` tool.
 
 ### Briefs and result contracts
 

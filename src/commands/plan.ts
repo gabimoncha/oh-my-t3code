@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { limitArg } from "../config/validate.ts";
 import { projectWriteTarget } from "../install/fsops.ts";
 import { findProjectRoot, planPath, plansDir } from "../paths.ts";
-import { findPlanHeader, parsePlan } from "../plan/parse.ts";
+import { dependencyWarnings, findPlanHeader, parsePlan } from "../plan/parse.ts";
 import type { PlanStatus } from "../plan/parse.ts";
 import { planTemplate } from "../plan/template.ts";
 import type { CliContext, CommandRun } from "../types.ts";
@@ -55,6 +55,10 @@ type MarkState = keyof typeof MARKS;
 
 export interface PlanSummary extends PlanStatus {
   path: string;
+}
+
+interface PlanStatusReport extends PlanSummary {
+  warnings: string[];
 }
 
 async function listPlanFiles(dir: string): Promise<{ slug: string; path: string; mtimeMs: number }[]> {
@@ -196,7 +200,7 @@ async function planProfile(ctx: CliContext, root: string, positionals: string[])
   return 0;
 }
 
-function formatPlanStatus(status: PlanSummary): string {
+function formatPlanStatus(status: PlanStatusReport): string {
   return [
     `plan: ${status.slug} (${status.path})`,
     `profile: ${status.profile}`,
@@ -207,6 +211,7 @@ function formatPlanStatus(status: PlanSummary): string {
     ...(status.maxTasks === undefined ? [] : [`max tasks: ${status.maxTasks}`]),
     `next: ${nextText(status)}`,
     `ready: ${status.ready.length === 0 ? "none" : status.ready.map((item) => item.id).join(", ")}`,
+    ...status.warnings.map((warning) => `warning: ${warning}`),
     "",
   ].join("\n");
 }
@@ -235,7 +240,9 @@ async function planStatus(ctx: CliContext, root: string, positionals: string[], 
   } else {
     checkPlanSlug(slug);
   }
-  const status = await loadPlan(root, slug);
+  const { path, markdown } = await readPlan(root, slug);
+  const parsed = parsePlan(markdown);
+  const status: PlanStatusReport = { ...parsed, slug: parsed.slug ?? slug, path, warnings: dependencyWarnings(markdown) };
   const { profile } = await loadEffectiveConfigReporting(ctx, { planProfile: status.profile });
   status.profile = profile.name;
   ctx.stdout(json ? formatJson(status) : formatPlanStatus(status));

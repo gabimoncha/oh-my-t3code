@@ -112,7 +112,7 @@ Done when: a round returned `APPROVE`, the owner approved under `plan.review=own
 
 Before you report, run the settle sweep ([delegation.md](../omt/references/delegation.md#releasing-children)).
 
-Show the plan to the owner first, also when `omt-ulw` called this skill. Run `omt config show` and read `visuals.plan`. When it is `true` and you have the T3 `html_render` tool, run the `omt-show` skill with the plan slug (in `plan` mode, with the temp plan file of step 4). When the page is in the thread, it holds the summary, so the reply leaves the summary out. Otherwise, write the `## Summary` text in full in the reply, also when `omt-show` could not show the page. Either way, the reply gives the plan path, the review result, and each decision still open.
+Show the plan to the owner first, also when `omt-ulw` called this skill. Write the `## Summary` text in full in the reply. The reply also gives the plan path, the review result, and each decision still open.
 
 When `omt-ulw` called this skill and step 4 has approval from the owner or a review round (approval with notes counts), return to its step 5 with the plan slug. Step 5 starts with the design check, so the `omt-design` step runs before any `ui` unit is dispatched. When the rounds ended at `maxReviewRounds` with blockers open, stop and give the user the open blockers; start no units.
 

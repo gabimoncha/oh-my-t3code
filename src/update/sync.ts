@@ -255,7 +255,7 @@ async function projectTargets(ctx: CliContext, projectOnly: boolean): Promise<Pr
   return projectOnly ? targets.filter((target) => sameRoot(target.root, current)) : targets;
 }
 
-// The shim rules of section 5.15, in order.
+// The shim rules of section 5.14, in order.
 async function planProject(ctx: CliContext, channel: Channel, options: SyncOptions, target: ProjectTarget): Promise<SyncEntry> {
   const { root } = target;
   const base: SyncEntry = {

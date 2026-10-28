@@ -209,9 +209,6 @@ const SET_2026_10: OmtConfig = {
     maxDepth: 1,
     maxReviewRounds: 4,
   },
-  visuals: {
-    plan: true,
-  },
 };
 
 const SET_2026_11: OmtConfig = {
