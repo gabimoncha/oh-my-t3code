@@ -19,7 +19,7 @@ test("omt-code-review applies the shared Git actions rules to each commit and pu
 });
 
 test("omt-swarm checks each merge and links to the shared Git actions rules", () => {
-  const text = section(readSkill("omt-swarm"), "### 6. Merge");
+  const text = section(readSkill("omt-swarm"), "### 7. Merge");
   assert.match(text, /Before each merge, run `omt git check merge --plan <slug> --json`/);
   assert.match(text, /act on its decision by the \[Git actions\]\(\.\.\/omt\/references\/delegation\.md#git-actions\) rules/);
 });

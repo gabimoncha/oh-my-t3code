@@ -77,7 +77,7 @@ The git policy in the config (`workflow.git`) is the owner's standing approval f
 - Leave other changes alone, and name them in the report.
 - Follow the repository's commit conventions in `AGENTS.md` and the recent `git log`.
 - Children never commit, push, or create branches.
-- A PR is a ready PR against the base that the run was given, for example, for a stacked `omt-swarm` track, the previous track's branch. With no given base, the PR goes against the `defaultBranch` field that `omt git check pr --json` prints. When that field is `null`, ask the owner for the base. Open the PR only in the `origin` repo, with `gh pr create --repo <host>/<owner>/<repo>` from the `host`, `owner`, and `repo` fields of the check. A PR to a repo of another owner, such as an upstream repo of a fork, always asks the owner.
+- A PR is a ready PR against the base that the run was given. With no given base, the PR goes against the `defaultBranch` field that `omt git check pr --json` prints. When that field is `null`, ask the owner for the base. Open the PR only in the `origin` repo, with `gh pr create --repo <host>/<owner>/<repo>` from the `host`, `owner`, and `repo` fields of the check. A PR to a repo of another owner, such as an upstream repo of a fork, always asks the owner.
 - When the branch already has an open PR, the push updates it. Do not open a second PR.
 - Link each PR with `link_pull_request` when available.
 - A force push always asks the owner, whatever the policy says. So a rebase of a pushed branch needs the owner's yes before `git push --force-with-lease`.
@@ -226,11 +226,11 @@ When you create a pull request, also after the run ends, watch it at once. Do no
 2. On each wake, read the checks with `gh pr checks <number>`. When a check fails, find the cause in its log, fix it, push the fix by the [Git actions](#git-actions) rules, and keep the watch.
 3. When every check has passed or was skipped, call `unwatch_pull_request` and tell the user the result.
 
-Without the watch tool, run `gh pr checks <number> --watch` instead, and apply steps 2 and 3. `omt-code-review` and `omt-swarm` have their own PR rules; follow those inside those skills.
+Without the watch tool, run `gh pr checks <number> --watch` instead, and apply steps 2 and 3. `omt-code-review` has its own PR rules; follow those inside that skill.
 
 ## Top-level threads
 
 `delegate_task` makes children. Two other tools make ordinary top-level threads; use them only when the user explicitly asks for separate threads. Invoking `omt-swarm` is that request.
 
-- `t3_thread_launch` starts one thread in its own workspace. `workspaceStrategy` is `{type:"worktree", baseRef, branch?, startFromOrigin?}`, `{type:"existing_worktree", worktreePath, branch?}`, or `{type:"root"}`. The task goes in `message`. The caller must run in `full-access` runtime mode and `default` interaction mode. It has no retry key: after a failed or lost response, check `t3_thread_list` before you launch again. Uncommitted edits are not copied into a new worktree.
+- `t3_thread_launch` starts one thread in its own workspace. `workspaceStrategy` is `{type:"worktree", baseRef, branch?, startFromOrigin?}`, `{type:"existing_worktree", worktreePath, branch?}`, or `{type:"root"}`. The task goes in `message`. The caller must run in `full-access` runtime mode and `default` interaction mode. Pass a `clientRequestId`: after a failed or lost response, check `t3_thread_list`, and launch again only with the same `clientRequestId`. Uncommitted edits are not copied into a new worktree.
 - `create_threads` makes up to 20 threads that share your checkout.

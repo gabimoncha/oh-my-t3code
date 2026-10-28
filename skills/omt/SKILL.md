@@ -18,7 +18,7 @@ omt runs workflows in this T3 thread: the main thread explores, plans, and build
 | `omt-design` | The user wants designs, mockups, screens, or a design pass, or a plan needs a design spec before its UI units. |
 | `omt-code-review` | The user wants a review of uncommitted changes, a branch, a commit, or a PR. |
 | `omt-research` | The user wants a cited answer from this repository, docs, or the web, with no code changes. |
-| `omt-swarm` | The user asks for separate threads: independent tracks in their own worktrees, each ending in a PR. |
+| `omt-swarm` | The user asks for separate threads: a plan built as parallel tracks in their own worktrees, then reviewed, merged, tested, and shipped as one PR. |
 | `omt-help` | The user asks for help, what omt can do, what to do next, how to do something, which skill to use, or what a command means, or wants a tour. It only reads, and hands changes to `omt-setup`. |
 | `omt-setup` | The user wants omt set up, configured, or updated: harnesses, the default set, models, roles, profiles, or worktree setup. It asks before each write. |
 

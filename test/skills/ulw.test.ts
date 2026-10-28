@@ -7,7 +7,7 @@ import { SKILLS_DIR, readSkill, section } from "./shared.ts";
 test("each mode-check step calls t3_thread_configuration, and no skill reads modes from orchestrator_capabilities (ulw)", () => {
   const modeSteps: Record<string, string> = {
     "omt-ulw": "### 0. ",
-    "omt-swarm": "### 1. ",
+    "omt-swarm": "### 0. ",
   };
   for (const [name, heading] of Object.entries(modeSteps)) {
     const text = readFileSync(join(SKILLS_DIR, name, "SKILL.md"), "utf8");
