@@ -520,6 +520,8 @@ This section is analysis. It is not a list of facts from the clones.
 | 20 | Checkpoint and rewind | Not in T3. | Does not fit. It edits the harness's own context. |
 | 21 | Extensions API, hooks, TS commands | T3 injects its own pi extension. | Does not fit oh-my-t3code's scope. A pi extension could expose oh-my-t3code tools inside pi threads later. |
 
+Note, 2026-10-28: omt built rows 8 and 9 as the omt-loop skill, and the workflow fold removed it. The main thread now waits for children inside its turn, so no flow repeats a prompt with `schedule_task`. See [the workflow fold design](../design/workflow-fold.md).
+
 ### Distribution note
 
 - Install skills under `~/.agents/skills/<name>/SKILL.md`. pi reads that root (`pi:packages/coding-agent/docs/skills.md:60`). omp reads it through the `agents` provider (`oh-my-pi:docs/skills.md:98-101,122`). Whether Claude Code and Codex in T3 read it is an open question.

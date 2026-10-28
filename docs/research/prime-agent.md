@@ -2,6 +2,8 @@
 
 Snapshot: prime-agent clone at commit `2ed8356` of 2026-10-06 (`git -C prime-agent log --oneline -1`). Research date: 2026-10-07.
 
+> Note, 2026-10-28: the workflow fold changed omt after this research. omt-ulw is now a main-thread build flow. The main thread builds and fixes, one review child and one QA child check, and the main thread waits for children inside its turn. omt-loop, the stall heartbeat, per-unit dispatch, and the task budget (`limits.maxTasksPerRun`) were removed, and omt-review was renamed omt-code-review. Skill step numbers and `omt:` line cites below refer to the skills before that change. See [the workflow fold design](../design/workflow-fold.md).
+
 ## Path conventions
 
 - `pa:` is the root of a clone of https://github.com/PrimeIntellect-ai/prime-agent at commit `2ed8356`.
@@ -344,7 +346,7 @@ prime-agent's main lesson for omt is a split. The judgment (what to learn) is a 
 
 - **What.** Each loop tick records a hash of `git status --porcelain`, `git diff HEAD`, and the untracked files in its ledger note. When the condition still fails and the hash matches the last failing tick, the tick counts as a stall. Two stalls in a row stop the loop with a report. This saves ticks on a run that cannot progress.
 - **Source.** `pa:crates/pa-core/src/autonomous/gates.rs:144-160` and `pa:crates/pa-core/src/autonomous/gates.rs:240` (skip a gate on an unchanged workspace), `pa:crates/pa-core/src/session_engine/goal_driver/progress.rs:11-17` (3 turns without progress end a goal).
-- **Maps to.** The `omt-loop` skill tick prompt, and optionally a CLI helper such as `omt loop fingerprint` that prints the hash.
+- **Maps to.** The `omt-loop` skill tick prompt, and optionally a CLI helper such as `omt loop fingerprint` that prints the hash. (omt-loop was removed on 2026-10-28; see [the workflow fold design](../design/workflow-fold.md).)
 - **Effort.** S.
 - **Blocked by.** Nothing. A CLI helper would start `git`, which the spec avoids only for the path functions (`omt:docs/spec.md:339`). The skill can also compute the hash in shell.
 - **Owner decision.** No.
@@ -353,7 +355,7 @@ prime-agent's main lesson for omt is a split. The judgment (what to learn) is a 
 
 - **What.** Two fixed texts. The audit text goes into the `/goal` objective and the loop tick prompt. It says to check every done condition against the current state with a command, and not to rely on memory of earlier work. The wrap-up text runs at the tick cap. It says to start no new work and to report progress, remaining work, blockers, and one next step.
 - **Source.** `pa:crates/pa-core/src/goals.rs:341-350` (audit), `pa:crates/pa-core/src/goals.rs:352-358` (budget wrap-up), `pa:crates/pa-core/src/autonomous/mod.rs:20` ("prove it with host-observable evidence").
-- **Maps to.** The `omt-loop` skill (objective template and tick prompt) and `skills/omt/references/results.md`.
+- **Maps to.** The `omt-loop` skill (objective template and tick prompt) and `skills/omt/references/results.md`. (omt-loop and its tick prompt were removed on 2026-10-28; see [the workflow fold design](../design/workflow-fold.md).)
 - **Effort.** S.
 - **Blocked by.** Nothing. omt writes these in its own words, as it does for OmO (`omt:docs/design.md:86`), although prime-agent is MIT.
 - **Owner decision.** No.

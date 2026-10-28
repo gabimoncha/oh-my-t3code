@@ -2,6 +2,8 @@
 
 Snapshot: deepseek-harness clone at commit `5badb15` (`git -C deepseek-harness log --oneline -1`), version `0.2.1-alpha.1` (`dsh:package.json:3`). Research date: 2026-10-07.
 
+> Note, 2026-10-28: the workflow fold changed omt after this research. omt-ulw is now a main-thread build flow. The main thread builds and fixes, one review child and one QA child check, and the main thread waits for children inside its turn. omt-loop, the stall heartbeat, per-unit dispatch, and the task budget (`limits.maxTasksPerRun`) were removed, and omt-review was renamed omt-code-review. Skill step numbers and `omt:` line cites below refer to the skills before that change. See [the workflow fold design](../design/workflow-fold.md).
+
 ## Path conventions
 
 - `dsh:` is the root of a clone of https://github.com/deepseek-ai/deepseek-harness at commit `5badb15`.
@@ -378,7 +380,7 @@ This section is analysis. It is not a list of facts from the clone.
 | 4 | Strict result-block validation in the CLI | S | No |
 | 5 | "Verify the world" rules for test, review, and oracle | S | No |
 | 6 | Run postmortem from the ledger | S | No |
-| 7 | Goal-round policy text for `omt-loop` | S | No |
+| 7 | Goal-round policy text for `omt-loop` (removed on 2026-10-28) | S | No |
 | 8 | Fresh-child rounds (Ralph mode) with an independent completion check | M | No |
 | 9 | Feedback capture with fixed categories | S | Yes |
 | 10 | `omt plan check` for scope overlap and dependency order | S | No |
@@ -445,6 +447,7 @@ This section is analysis. It is not a list of facts from the clone.
 - **omt surfaces.** `skills/omt-loop/SKILL.md`. The ledger counts consecutive rounds with the same blocker note.
 - **Effort.** S.
 - **Constraints.** None. Native `/goal` stays T3's, as design.md requires (`omt:docs/design.md:73-75`).
+- **Status, 2026-10-28.** omt-loop and the heartbeat prompt were removed. This idea has no target in current omt. See [the workflow fold design](../design/workflow-fold.md).
 
 ### 8. Fresh-child rounds (Ralph mode) with an independent completion check
 
@@ -453,6 +456,7 @@ This section is analysis. It is not a list of facts from the clone.
 - **omt surfaces.** `omt-loop` gains a fresh-child mode for threads without native `/goal`. The handoff is a file under `.omt/` with a size cap. `omt result check` (idea 4) validates it. The ledger counts rounds against a cap.
 - **Effort.** M.
 - **Constraints.** No new hook or daemon. It uses `schedule_task` and `delegate_task` (T3 session). Children share the checkout, so only one round runs at a time.
+- **Status, 2026-10-28.** The workflow fold rejects rounds that a heartbeat drives: the main thread waits for children inside its turn, and omt-loop was removed. See [the workflow fold design](../design/workflow-fold.md).
 
 ### 9. Feedback capture with fixed categories
 

@@ -4,6 +4,8 @@ This report reads "On the Nature of the Swarm" (Konstantin Dunas, Prime Intellec
 
 Research date: 2026-10-10.
 
+> Note, 2026-10-28: the workflow fold changed omt after this research. omt-ulw is now a main-thread build flow. The main thread builds and fixes, one review child and one QA child check, and the main thread waits for children inside its turn. omt-loop, the stall heartbeat, per-unit dispatch, and the task budget (`limits.maxTasksPerRun`) were removed, and omt-review was renamed omt-code-review. Skill step numbers and `omt:` line cites below refer to the skills before that change. See [the workflow fold design](../design/workflow-fold.md).
+
 ## Path conventions
 
 - `omt:` is the root of this repository, https://github.com/gabimoncha/oh-my-t3code.
@@ -212,7 +214,7 @@ The user gets answers about a finished task in seconds, and the conductor stops 
 After a context reset, the conductor reads one short block and has every rule and open item, instead of two long listings.
 
 - **Mechanism.** A new command `omt plan resume <slug>` prints a fixed block: the objective, each done condition with its state, the owner decisions, the questions already asked, the active tasks with task ids and thread ids, the rejected approaches, and the next action. The plan template gets a `## Rejected` section, so a failed approach exists on disk with its unit and its reason.
-- **Where it goes.** `omt:skills/omt-ulw/SKILL.md:31` changes to "run `omt plan resume <slug>`". The loop and swarm heartbeats use the same command.
+- **Where it goes.** `omt:skills/omt-ulw/SKILL.md:31` changes to "run `omt plan resume <slug>`". The loop and swarm heartbeats use the same command. (omt-loop and the heartbeats were removed on 2026-10-28; see [the workflow fold design](../design/workflow-fold.md).)
 - **Why.** A pinned block of 47 tokens removed the rule violations that compaction caused ([Governance Decay]). Corrections more than doubled right after compaction for one engineer ([LangWatch]). Summaries are weakest at tracking files and artifacts ([Factory compaction]). Long runs keep notes on failed approaches so that no agent repeats them ([Anthropic compiler], [Agensh]).
 - **Fit.** The view is deterministic, so the CLI owns it.
 
@@ -228,6 +230,7 @@ The user gets shorter fix rounds, because the agent that wrote the code fixes it
   - The worker's run failed or was cancelled.
   - The unit was reopened after other units changed its code.
   - The worker already had two follow-ups.
+- **Status, 2026-10-28.** The workflow fold goes further: the main thread builds and fixes in its own context, and the review stays a fresh child on the other family. See [the workflow fold design](../design/workflow-fold.md).
 - **Measure first.** No source compared a kept worker with a fresh one at equal budget. Record the rounds to `APPROVE` and the minutes per fix round for both ways, and keep the old behavior in the `normal` profile until the numbers exist.
 
 ### 4. A standing explorer per plan
