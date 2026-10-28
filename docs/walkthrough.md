@@ -2,6 +2,8 @@
 
 This page shows two runs of omt on this repository. All facts come from three sources: the plan file, the ledger, and `git log`. Times are in UTC.
 
+Both runs are from before default set `2026-12` and the [workflow fold](design/workflow-fold.md). At that time the conductor thread edited no product files: it sent each unit to child tasks for execute, review, verify, and test work, and a task budget capped each run. Today the main thread builds the units itself, one review task and one qa task check the work, and a run has no task budget. The `verify`, `quick`, and `deep` roles that these runs used are retired. The old output below still shows the `max tasks` lines that the CLI printed then.
+
 | Run | Units | Dispatched tasks | Time | Result |
 | --- | --- | --- | --- | --- |
 | [`code-health`](#run-1-code-health) | 4 | 29 | 2 hours 20 minutes on 2026-10-16 | Commit `58a85b0`: 353 fewer lines, no change in behavior |
@@ -161,7 +163,7 @@ Tasks by role: 66 review, 17 execute, 17 writing, 12 test, 8 plan-review, 3 expl
 
 ### The budget grew during the run
 
-The plan began with a budget of 60 tasks. Before the run, the owner raised it to 70 for U10 and plan review round 4. At 22:01 on 2026-10-16 the run stopped at that limit, with U1 to U6 done. The owner raised the limit with `omt plan limit workflow-profiles --tasks 90`. Later fix and review rounds needed more room, so the limit went to 100, 110, 120, and at last 130. The plan header now reads `max-tasks=130`.
+The plan began with a budget of 60 tasks. Before the run, the owner raised it to 70 for U10 and plan review round 4. At 22:01 on 2026-10-16 the run stopped at that limit, with U1 to U6 done. The owner raised the limit with `omt plan limit workflow-profiles --tasks 90`. That flag now fails, because set `2026-12` removed the task budget. Later fix and review rounds needed more room, so the limit went to 100, 110, 120, and at last 130. The plan header now reads `max-tasks=130`.
 
 ```text
 $ omt plan status workflow-profiles
@@ -194,7 +196,7 @@ Four commits on 2026-10-17:
 | `3a44354` | feat: add workflow profiles, omt lock, and the verify, qa, and guardrail roles | 72 |
 | `6ccb731` | feat: add profile switches, verify and qa steps, and shared-build rules to omt-ulw | 6 |
 | `b2092fc` | feat: read workflow profiles and planned tests in omt-plan and omt-design | 3 |
-| `a9ca54a` | feat: add the PR review steps and profile switches to omt-review | 2 |
+| `a9ca54a` | feat: add the PR review steps and profile switches to omt-review (since renamed to omt-code-review) | 2 |
 
 ## What the data does not show
 

@@ -35,13 +35,10 @@ A role, such as `execute` or `review`, maps to an ordered chain of provider, mod
 | `plan` | Turn a goal into a plan file | Claude Opus 5.5, xhigh | GPT-6-Astra, xhigh |
 | `plan-review` | Check a plan for gaps | GPT-6-Astra, high | Claude Opus 5.5, high |
 | `grill` | Test a goal before it has a plan: edge cases, questions, and options | GPT-6-Astra, high | Claude Opus 5.5, high |
-| `execute` | Implement one planned unit | Claude Opus 5.5, medium | GPT-6.1-Sol, xhigh |
-| `quick` | Make a small, mechanical change | GPT-6-Luna, high | Claude Sonnet 5.5, low |
-| `deep` | Solve a hard or cross-cutting problem | Claude Opus 5.5, max | GPT-6-Astra, xhigh |
-| `review` | Review a diff against its brief | GPT-6-Astra, high | Claude Opus 5.5, high |
-| `oracle` | Attack the finished change before it counts as done | GPT-6-Astra, high | Claude Opus 5.5, high |
-| `verify` | Run the artifact, existing checks, and device flows | Claude Haiku 5.5, medium | Claude Sonnet 5.5, low; then GPT-6.1-Sol, low |
-| `qa` | Write only the approved test lines after verification | GPT-6.1-Sol, medium | Claude Sonnet 5.5, medium |
+| `execute` | Implement one planned unit that the main thread hands off as an independent track | Claude Opus 5.5, medium | GPT-6.1-Sol, xhigh |
+| `review` | Review a diff against its brief, fix local findings, and report the rest | GPT-6-Astra, high | Claude Opus 5.5, high |
+| `oracle` | Attack the finished change before it counts as done, fix local findings, and report the rest | GPT-6-Astra, high | Claude Opus 5.5, high |
+| `qa` | Run the check commands and device flows, and return each exit code with its log and screenshots. Edits nothing. | Claude Haiku 5.5, medium | Claude Sonnet 5.5, low; then GPT-6.1-Sol, low |
 | `guardrail` | Propose checks and rule fixes for review findings | Claude Opus 5.5, high | GPT-6-Astra, high |
 | `writing` | Write or edit documentation | Claude Opus 5.5, high | GPT-6-Astra, medium |
 | `design` | Design screens and flows, and write a design spec | Claude Opus 5.5, high | none |
@@ -53,7 +50,9 @@ The fallback runs only when T3 refuses the first choice. `design` and `ui` have 
 
 Claude models run on the `claudeAgent` driver, and GPT models run on the `codex` driver. Each default rung also names the T3 built-in provider instance of its driver. T3 checks a named instance again before it refuses it. A target with only a driver can fail because of an old provider snapshot.
 
-The read-only roles are `explore`, `research`, `plan-review`, `grill`, `review`, `oracle`, and `guardrail`. They run in T3 plan mode. On Claude, Codex, Cursor, and OpenCode, plan mode stops the child from editing files. T3 has no plan mode for Pi, so only its brief stops a Pi child in a read-only role. No default role uses Pi.
+The read-only roles are `explore`, `research`, `plan-review`, `grill`, and `guardrail`. They run in T3 plan mode. On Claude, Codex, Cursor, and OpenCode, plan mode stops the child from editing files. T3 has no plan mode for Pi, so only its brief stops a Pi child in a read-only role. No default role uses Pi.
+
+`review` and `oracle` can edit files. In an `omt-ulw` build, the reviewer fixes each local finding itself: a clear fix inside the changed files that agrees with the plan summary. It reports every other finding. `omt-code-review` still runs its reviewers in plan mode, so they only report. `qa` has edit access only to run commands and write logs. Its brief forbids edits in the repository, and it writes no tests. `qa` puts its Claude rungs first, because a Codex child cannot reach the local device daemon. Only `qa` drives a device, a simulator, a browser, or a computer.
 
 Run `omt roles` to see how each role resolves with your config.
 
@@ -139,8 +138,8 @@ To give a role its own persona, write `.omt/roles/<role>.md`. The file content i
 
 A profile is a named set of workflow switches, limits, and role overrides. omt has three presets:
 
-- `normal` reviews every build round. It verifies each HEAVY unit and runs a final oracle. A LIGHT run uses the verify commands of the conductor.
-- `prototype` reviews the first implementation round and verifies every unit. It skips the oracle and the failure proofs, allows 2 review rounds, and waits for you after each dependency layer.
+- `normal` reviews the build again after each round of fixes, and the reviewer of a HEAVY run is the oracle. The main thread proves that each new test can fail.
+- `prototype` reviews the build once, with one plan reviewer on any family. It skips the oracle and the failure proofs, allows 2 review rounds, and draws 1 design variant per screen.
 - `pr-review` adds CI fixes, verification of changed flows, CRAP reports, test offers, and guardrail proposals to the normal review workflow.
 
 Run `omt profile list` to see the presets and your custom profiles. Run `omt profile show prototype --json` to see the resolved workflow, limits, roles, and models of one profile.
@@ -151,9 +150,7 @@ To use the prototype profile for one build, type this in a T3 thread:
 ulw --profile prototype build a demo of the search screen
 ```
 
-At a check-in, reply with "continue", with new directions, or with an instruction to stop check-ins for this run. "Continue" allows one more layer or unit.
-
-To switch the profile of a running plan, run `omt plan profile <slug> normal`. `omt plan profile <slug> none` removes the plan override. The next wake reads the new profile.
+To switch the profile of a running plan, run `omt plan profile <slug> normal`. `omt plan profile <slug> none` removes the plan override. The change applies to the remaining work of the plan.
 
 omt selects the profile in this order: the `--profile` flag, the plan header, the project config, the user config, and then `normal`. omt merges the config files first. Then the selected profile applies the profiles that it extends.
 
@@ -172,17 +169,17 @@ Add the profile under `profiles` in either config file. The starter configs hold
 
 A profile cannot set `harnesses`, `update`, or `defaults`. These keys apply to the whole config file.
 
-This profile builds like `prototype`, with no check-ins, fast `execute` and `ui` workers, a task limit of 12 instead of 24, and GPT-6.1-Sol without fast mode in the other roles:
+This profile builds like `prototype`, with failure proofs, fast `execute` and `ui` workers, at most 2 children at the same time, and GPT-6.1-Sol without fast mode in the other roles:
 
 ```jsonc
 {
   "profile": "hackathon",
   "profiles": {
     "hackathon": {
-      "description": "Use the prototype workflow with fast workers and no check-ins.",
+      "description": "Use the prototype workflow with fast workers and failure proofs.",
       "extends": "prototype",
-      "workflow": { "build": { "checkpoint": "none" } },
-      "limits": { "maxTasksPerRun": 12 },
+      "workflow": { "build": { "failureProofs": "on" } },
+      "limits": { "maxParallel": 2 },
       "roles": { "execute": { "fast": true }, "ui": { "fast": true } },
       "models": { "gpt-6.1-sol": { "fast": false } }
     }
@@ -190,7 +187,7 @@ This profile builds like `prototype`, with no check-ins, fast `execute` and `ui`
 }
 ```
 
-The role `fast` wins over the model `fast`. So in `execute`, the GPT-6.1-Sol fallback still gets `serviceTier: "priority"`. In `verify`, `qa`, and `research`, which do not set `fast`, GPT-6.1-Sol runs without fast mode. `omt route execute --profile hackathon` prints the targets.
+The role `fast` wins over the model `fast`. So in `execute`, the GPT-6.1-Sol fallback still gets `serviceTier: "priority"`. In `qa` and `research`, which do not set `fast`, GPT-6.1-Sol runs without fast mode. `omt route execute --profile hackathon` prints the targets.
 
 A profile can turn steps on or off and change their settings. It cannot add a step or change the order of the steps. A profile applies after the root keys of the config files, so its `roles`, `limits`, and `models` win over the root values. `omt profile show <name> --json` prints the result.
 
@@ -206,12 +203,13 @@ Set limits at the root of a config file, or in a profile:
 
 | Limit | What it counts | Range | Default |
 | --- | --- | --- | --- |
-| `maxParallel` | Child tasks that run at the same time. | 1 to 32 | 6 |
-| `maxTasksPerRun` | Child tasks in one run. A plan's own budget, set with `omt plan limit <slug> --tasks <n>`, replaces it. | 1 to 500 | 24 |
-| `maxDepth` | Levels of child tasks below the conductor. At the maximum depth, a child does the work itself. | 0 to 3 | 1 |
-| `maxReviewRounds` | Review rounds per unit, per plan review, and per design pass before the conductor stops and asks you. | 1 to 10 | 4 |
+| `maxParallel` | Child tasks that run at the same time. A plan's own limit, set with `omt plan limit <slug> <n>`, can only lower it. | 1 to 32 | 6 |
+| `maxDepth` | Levels of child tasks below the main thread. At the maximum depth, a child does the work itself. | 0 to 3 | 1 |
+| `maxReviewRounds` | Reviews of one build, and fix review rounds of one code review, before the main thread stops and asks you. A plan review has at most 2 rounds. | 1 to 10 | 4 |
 
 Each value must be an integer. `prototype` sets `maxReviewRounds` to 2.
+
+A run has no task budget. The number of child tasks that a run started never stops the next one; only `maxParallel` does. `omt ledger stats` prints `can dispatch: yes` while fewer than `maxParallel` tasks are active. `limits.maxTasksPerRun` was removed in set `2026-12`, and `omt plan limit --tasks` fails with a usage error. A plan header that still has a `max-tasks` key has no effect, and `omt plan status` prints a warning for it.
 
 ## Set fast mode per role
 
@@ -219,7 +217,7 @@ Each value must be an integer. `prototype` sets `maxReviewRounds` to 2.
 {
   "roles": {
     "execute": { "fast": true },
-    "verify": { "fast": false }
+    "qa": { "fast": false }
   }
 }
 ```
@@ -228,7 +226,7 @@ The first value that is set wins: the rung `fast`, the role `fast`, the model `f
 
 ## Pin the default set
 
-Each omt release ships dated default sets. A set holds every built-in role, profile, limit, and model setting. The sets today are `2026-10` and `2026-11`, which adds the `grill` role. A set does not change after its release. New defaults go into a new set with a later name.
+Each omt release ships dated default sets. A set holds every built-in role, profile, limit, and model setting. The sets today are `2026-10`, `2026-11`, which adds the `grill` role, and `2026-12`. Set `2026-12` retires the per-unit build keys, the task budget, and the `verify`, `quick`, and `deep` roles. It gives `review` and `oracle` edit access, and it moves the device chain to `qa` ([Remove the retired keys](#remove-the-retired-keys)). A set does not change after its release. New defaults go into a new set with a later name.
 
 The `"defaults"` key pins one set:
 
@@ -236,11 +234,11 @@ The `"defaults"` key pins one set:
 {
   "$schema": "https://raw.githubusercontent.com/gabimoncha/oh-my-t3code/main/schema/omt.schema.json",
   "version": 1,
-  "defaults": "2026-11"
+  "defaults": "2026-12"
 }
 ```
 
-Each new starter config pins the latest set. Your overrides apply on top of the pinned set, and an omt update does not change them. The project config's pin wins over the user config's. A config without a pin follows the latest set, so its defaults can change when you update omt. For such a config, the `defaults` line of `omt doctor` says `2026-11 (latest, not pinned); run omt defaults use latest to pin`.
+Each new starter config pins the latest set. Your overrides apply on top of the pinned set, and an omt update does not change them. The project config's pin wins over the user config's. A config without a pin follows the latest set, so its defaults can change when you update omt. For such a config, the `defaults` line of `omt doctor` says `2026-12 (latest, not pinned); run omt defaults use latest to pin`.
 
 After an omt update, compare your set with the new one, then move the pin:
 
@@ -293,7 +291,17 @@ A harness is detected when T3 does not disable it in `~/.t3/userdata/settings.js
 
 ## Move a `roles.test` override
 
-The `test` role is now two roles. Move each `roles.test` override to `verify` for checks, or to `qa` for test writing. omt now reads the old key as a custom role and warns. A partial `roles.test` override fails validation, because it has no `description`, `access`, or `chain`.
+The `test` role was renamed to `qa`. Move each `roles.test` override to `qa`. omt now reads the old key as a custom role and warns `role "test" was renamed to "qa"; rename it`. A partial `roles.test` override fails validation, because it has no `description`, `access`, or `chain`.
+
+## Remove the retired keys
+
+Set `2026-12` moves the build into the main thread, so the keys that served per-unit dispatch have no job left. These keys and roles are retired:
+
+- `workflow.build.verify`, `workflow.build.checkpoint`, and `workflow.build.stallMinutes`, in any profile.
+- `limits.maxTasksPerRun`, at the root or in a profile.
+- The roles `verify`, `quick`, and `deep`, at the root or in a profile. `qa` now runs the checks and the device flows that `verify` ran.
+
+A config file that still sets one of them loads. omt ignores the key and prints one warning for each key, such as `profiles.normal.workflow.build.checkpoint is no longer used; remove it`. Delete the key to clear the warning. A config that pins `2026-10` or `2026-11` and does not set these keys loads with no warning.
 
 ## Remove the `visuals` key
 

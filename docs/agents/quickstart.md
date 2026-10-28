@@ -4,7 +4,7 @@ Read this page when your user asks you to evaluate, install, or use oh-my-t3code
 
 ## What omt is
 
-omt is a set of skills and a small CLI for agents that run in [T3 Code](https://t3.codes). A T3 thread that runs an omt skill becomes a conductor: it writes a plan, sends each unit to a role-routed model as a T3 child task, and reviews and verifies the result. The CLI has no runtime dependencies. The CLI sends no telemetry. It contacts the npm registry only when you run `omt update`, or once a day in `omt install` and `omt doctor` after you set `update` in the user config. `omt update` runs the package manager or mise command of the channel that installed omt.
+omt is a set of skills and a small CLI for agents that run in [T3 Code](https://t3.codes). A T3 thread that runs an omt skill becomes the main thread: it reads the code, asks the user its open questions, writes a plan, and builds the change itself. Then one role-routed T3 child task from the other model family reviews the change, and one child task runs every check. The CLI has no runtime dependencies. The CLI sends no telemetry. It contacts the npm registry only when you run `omt update`, or once a day in `omt install` and `omt doctor` after you set `update` in the user config. `omt update` runs the package manager or mise command of the channel that installed omt.
 
 ## 1. Check the fit
 
@@ -142,11 +142,11 @@ Expect these lines, with paths in the user's project:
 
 ```text
 PASS  runtime    <runtime>
-PASS  config     16 roles
-PASS  defaults   2026-11 (pinned, latest)
+PASS  config     13 roles
+PASS  defaults   2026-12 (pinned, latest)
 PASS  harnesses  claudeAgent, codex
-PASS  skills     12 skills installed in <project>/.agents/skills
-PASS  links      12 links in <project>/.claude/skills
+PASS  skills     10 skills installed in <project>/.agents/skills
+PASS  links      10 links in <project>/.claude/skills
 PASS  hooks      Claude UserPromptSubmit hook in <project>/.claude/settings.local.json
 PASS  shim       <project>/.omt/bin/omt
 PASS  exclude    omt block in <project>/.git/info/exclude
@@ -164,7 +164,7 @@ An `INFO  harnesses` line, such as `codex only; design and ui are unavailable`, 
 
 A `WARN  t3` line means doctor found no T3 settings file: `... settings.json does not exist; is T3 Code installed?`. The install itself is fine. Ask the user if T3 Code is installed. If T3 Code keeps its data in another place, set `T3CODE_HOME` to that directory and run doctor again.
 
-A `WARN  skills` line means the installed skills do not match the CLI. Doctor still exits 0, so read the line. Run the install with `--yes` again. If the line says `modified:`, the user edited an installed skill. Ask the user before you add `--force`, which backs up the edited skill and installs over it.
+A `WARN  skills` line means the installed skills do not match the CLI. Doctor still exits 0, so read the line. Run the install with `--yes` again. If the line says `no longer shipped:`, an old omt left a skill that this version removed, such as `omt-loop`, `omt-review`, or `omt-show`; the install with `--yes` removes it. If the line says `modified:`, the user edited an installed skill. Ask the user before you add `--force`, which backs up the edited skill and installs over it.
 
 Check: this command prints the `PASS  skills` line:
 
@@ -196,18 +196,18 @@ Check: the user confirms that the new threads are open. If you run in one of the
 
 Suggest these tasks, in this order. Each runs in a T3 thread of the project.
 
-1. A small change with the ultrawork loop. Pick a real, small task from the project. For example:
+1. A small change with the ultrawork build flow. Pick a real, small task from the project. For example:
 
    ```text
    $omt-ulw add a --version flag to the CLI
    ```
 
-   With the Claude Code hook, `ulw add a --version flag to the CLI` works too. A small task gets a LIGHT run: a short plan, one `execute` child per unit, and the profile's review.
+   With the Claude Code hook, `ulw add a --version flag to the CLI` works too. A small task gets a LIGHT run: a short plan that the main thread builds itself, one review child, and one QA child.
 
 2. A review of the uncommitted changes:
 
    ```text
-   $omt-review the uncommitted changes
+   $omt-code-review the uncommitted changes
    ```
 
 3. A cited answer to a question about the project or a library:
@@ -218,10 +218,9 @@ Suggest these tasks, in this order. Each runs in a T3 thread of the project.
 
 `$omt-ulw` is the T3 composer mention. T3 turns it into each provider's form: `/omt-ulw` for Claude Code and `$omt-ulw` for Codex.
 
-The user starts three skills by name. An agent does not pick them on its own:
+The user starts two skills by name. An agent does not pick them on its own:
 
-- `$omt-loop` keeps a plan going across turns until a condition command reports done. On Claude and Codex threads, the skill asks the user to type `/goal <objective>`.
-- `$omt-swarm` splits work into independent tracks. Each track runs in its own T3 worktree thread and ends in a pull request. The thread must run in `full-access` runtime mode and `default` interaction mode.
+- `$omt-swarm` builds a plan from `omt-plan` as independent tracks. Each track runs in its own T3 worktree thread. Then one review child checks all track diffs, the main thread merges the tracks, one QA child runs the checks, and the run ends in one pull request. The thread must run in `full-access` runtime mode and `default` interaction mode.
 - `$omt` lists the workflows, the CLI commands, and the shared references.
 
 Two more skills help with omt itself. The agent can start both on its own when the user asks for help or for a change:
@@ -229,7 +228,7 @@ Two more skills help with omt itself. The agent can start both on its own when t
 - `$omt-help` answers questions such as "what can omt do", "what do I do next", or "which skill do I use", and gives a tour of at most 5 steps. It only reads.
 - `$omt-setup` sets up, configures, or updates omt: the harnesses, the default set, models, roles, profiles, and the worktree setup. It shows each change first and asks before it writes.
 
-Check: the user knows the three first tasks, how to start the three user-started skills, and that `$omt-help` and `$omt-setup` exist.
+Check: the user knows the three first tasks, how to start the two user-started skills, and that `$omt-help` and `$omt-setup` exist.
 
 ## 7. Show the user how to customize roles and profiles
 
@@ -258,12 +257,11 @@ Check: `.omt/bin/omt config validate` reports no errors after each config change
 
 omt counts child tasks, not tokens. Tell the user:
 
-- A unit costs about 5 child tasks in the `normal` profile, and about 4 in `prototype`: the work, its reviews, and its checks.
-- The default budget is 24 child tasks per run. That fits about 3 to 4 units.
-- The default limit is 6 child tasks at a time.
-- When a run reaches the budget, it stops and says so. Raise the budget of one plan with `.omt/bin/omt plan limit <slug> --tasks <n>`.
+- The main thread builds the units itself. A build run starts one review child and one QA child, plus a few `explore` children for broad reads. In the `normal` profile, the reviewer checks the fixes again after each round, up to 4 reviews. A failed check gets at most 2 QA re-runs.
+- A HEAVY run also starts one `plan-review` child, for at most 2 plan review rounds.
+- A run has no task budget. The default limit is 6 child tasks at a time. Lower it for one plan with `.omt/bin/omt plan limit <slug> <n>`.
 
-Check: the user knows the budget and how to raise it.
+Check: the user knows what a run starts and the limit of child tasks at a time.
 
 ## Update omt
 
@@ -292,7 +290,7 @@ In these steps, `omt` means the command of the install. With a project install, 
    omt update --yes
    ```
 
-   Check: the command exits 0. Show the user each `kept <skill>  (<reason>)` line. These skills stay as they are. `omt install --project --force` replaces a locally modified skill.
+   Check: the command exits 0. Show the user each `kept <skill>  (<reason>)` line, and each skill that the update removed because this version no longer ships it. These skills stay as they are. `omt install --project --force` replaces a locally modified skill.
 
 3. Check the skills. With only a global install, run `omt doctor` instead of `omt doctor --project`:
 
@@ -300,7 +298,7 @@ In these steps, `omt` means the command of the install. With a project install, 
    omt doctor --project | grep -E '^PASS +skills '
    ```
 
-   Check: the command prints `PASS  skills     11 skills installed in <folder>`. If it prints nothing, run the doctor command without the pipe, and do the fix that its `skills` line prints.
+   Check: the command prints `PASS  skills     10 skills installed in <folder>`. If it prints nothing, run the doctor command without the pipe, and do the fix that its `skills` line prints.
 
 4. Compare the default sets. `--yes` and `--skills-only` never move the `defaults` pin. For each config file that pins an older set, the command that synced the skills printed `hint: run omt defaults use latest in <dir> to move the pin in <file>`. That command is `omt update --yes` in step 2, the `--skills-only` command of a dev-dependency hint in step 1, or the `--skills-only` command of a manual update. When it printed no such hint, go to the next step.
 

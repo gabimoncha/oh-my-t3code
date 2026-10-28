@@ -8,7 +8,7 @@ You install omt in two parts. First, install the `omt` CLI from a package regist
 - The project install puts omt into one repository. It does not change `~/.agents/skills`, `~/.claude`, or your `PATH`. Start here.
 - The global install installs the skills for your user, so every project gets them.
 
-Both modes install the same 12 skills, including `omt-help`, which answers questions about omt, and `omt-setup`, which changes the setup for you. After either install, restart your agent sessions in T3 Code. A running session does not load new skills.
+Both modes install the same 10 skills, including `omt-help`, which answers questions about omt, and `omt-setup`, which changes the setup for you. After either install, restart your agent sessions in T3 Code. A running session does not load new skills.
 
 If you are a coding agent, follow the [agent quick start](agents/quickstart.md) instead. It has the same project install as steps with checks.
 
@@ -301,6 +301,8 @@ Restart your agent sessions in T3 Code after the install. A running session does
 
 Each installed skill directory holds a `.omt-managed.json` marker. The install never overwrites a path that it does not manage, unless you pass `--force`. With `--force`, it moves the old path to the backups directory first.
 
+When the bundle no longer ships a skill that an earlier install wrote, such as `omt-loop`, `omt-review`, or `omt-show`, `omt install` removes that skill folder and the links to it. The plan shows `remove <name> (no longer shipped)`. The install removes only a folder that its manifest lists and that has the marker. A folder that omt did not install stays. When you edited the retired skill, the install stops; `--force` backs up the folder and removes it. Until a retired skill is gone, `omt doctor` prints `WARN` on its `skills` line: `no longer shipped: <names> in <agents root>; run omt install`.
+
 ### Remove the global install
 
 ```sh
@@ -333,7 +335,7 @@ omt update
 
 Each command installs the exact version that the registry returned. So the mise channels write an exact pin, such as `github:gabimoncha/oh-my-t3code@0.3.0`, into your global mise config. A later `omt update` moves that pin. An exact version also skips the 24-hour wait of `minimum_release_age`.
 
-The sync keeps a skill that you edited, and prints `kept <skill>  (<reason>)`. `omt install --force` replaces it. A project that runs another omt, such as a dev dependency, gets the command to run in that project. The `defaults` pin of a config moves only when you answer yes to its own question, at a terminal. `--yes` never moves it, and prints the `omt defaults use latest` command instead. When any skill changed, restart your agent sessions in T3 Code.
+The sync keeps a skill that you edited, and prints `kept <skill>  (<reason>)`. `omt install --force` replaces it. The sync removes a managed skill that the new bundle no longer ships, with its links, as `omt install` does. It keeps an edited one with the reason `locally modified; no longer shipped; omt install --force backs it up and removes it`. A project that runs another omt, such as a dev dependency, gets the command to run in that project. The `defaults` pin of a config moves only when you answer yes to its own question, at a terminal. `--yes` never moves it, and prints the `omt defaults use latest` command instead. When any skill changed, restart your agent sessions in T3 Code.
 
 `--project` updates only the current project. `--skills-only` syncs the skills with the CLI that runs now. It sends no request, so it works without the network.
 

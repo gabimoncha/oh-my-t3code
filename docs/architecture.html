@@ -281,9 +281,9 @@ footer.page-footer ul { columns: 2 300px; }
 <!-- 1. What it is -->
 <section id="what" aria-labelledby="what-h">
   <h2 id="what-h">1. What it is and who it is for</h2>
-  <p>The user is a developer who runs Claude Code, Codex, Cursor, Pi, or OpenCode agents from T3 Code. That developer types one sentence, for example <code>ulw: add OAuth to the API</code>. omt turns the sentence into a planned run. Each unit goes to the right model and gets a review from the other model family when that family is available. The run ends with tests that ran. In a HEAVY run with the default profile, a reviewer from the other model family tries to find faults in the result before the run counts as done.</p>
-  <p><code>ulw</code> is the keyword that starts the <code>omt-ulw</code> skill. Terms such as unit, rung, wake, and oracle are defined in the <a href="#glossary">glossary</a>.</p>
-  <p>The maintainer gets a small TypeScript CLI with no runtime dependencies, 11 portable skills, and one config file. omt adds no server, no daemon, and no T3 fork. Every subagent is a T3 child thread, so the T3 UI already shows progress, cancellation, and results.</p>
+  <p>The user is a developer who runs Claude Code, Codex, Cursor, Pi, or OpenCode agents from T3 Code. That developer types one sentence, for example <code>ulw: add OAuth to the API</code>. omt turns the sentence into a planned run. The main thread asks its questions, plans, and builds the change. One child from the other model family reviews the change when that family is available, and one QA child runs every check. The run ends with checks that ran. In a HEAVY run with the default profile, the reviewer is the oracle, which tries to find faults in the whole change before the run counts as done.</p>
+  <p><code>ulw</code> is the keyword that starts the <code>omt-ulw</code> skill. Terms such as unit, rung, main thread, and oracle are defined in the <a href="#glossary">glossary</a>.</p>
+  <p>The maintainer gets a small TypeScript CLI with no runtime dependencies, 10 portable skills, and one config file. omt adds no server, no daemon, and no T3 fork. Every subagent is a T3 child thread, so the T3 UI already shows progress, cancellation, and results.</p>
   <div class="callout">
     <strong>The split in one line.</strong>
     <p>T3 gives the mechanism. It does not give roles, model routing, briefs, review loops, done criteria, or fan-out limits. omt fills these gaps and uses only the <code>t3-code</code> MCP tools that T3 already exposes.</p>
@@ -304,10 +304,10 @@ footer.page-footer ul { columns: 2 300px; }
         <tr><th scope="row">Status and cancel</th><td><code>task_status</code>, <code>task_cancel</code> (recursive).</td><td>The ledger <code>.omt/ledger.jsonl</code> records dispatches and results.</td></tr>
         <tr><th scope="row">Read-only access</th><td><code>interactionMode</code> <code>plan</code>, enforced on Claude, Codex, Cursor, and OpenCode. Pi has no plan-mode handling, and the ACP drivers such as Grok get only a prompt instruction. Children can only narrow modes.</td><td>Read-only roles default to plan mode. The brief keeps the result block in the assistant message.</td></tr>
         <tr><th scope="row">Workspace</th><td>Children share the parent checkout by default. Since T3 Code v0.1.0, <code>delegate_task</code> with <code>isolation: "worktree"</code> runs a child in a separate checkout. <code>t3_thread_launch</code> makes worktree threads.</td><td>Explicit unit scopes. Parallel edits only for scopes that do not overlap. omt does not use <code>isolation: "worktree"</code> yet, so its children share the checkout. <code>omt-swarm</code> for worktree tracks when the user asks.</td></tr>
-        <tr><th scope="row">Limits</th><td>No cap on concurrency or depth was found. Prompts up to 120,000 characters. Up to 20 threads in one batch.</td><td><code>maxParallel</code> 6, <code>maxTasksPerRun</code> 24, <code>maxDepth</code> 1, <code>maxReviewRounds</code> 4. Every brief states the depth.</td></tr>
-        <tr><th scope="row">Review and done</th><td>Nothing.</td><td>Review loops with reviewers from the other model family, a cross-family oracle, tests that ran, and evidence-based done.</td></tr>
-        <tr><th scope="row">Long-run state</th><td>Durable task state. Wakes after the parent turn ends.</td><td>A plan file <code>.omt/plans/&lt;slug&gt;.md</code> with checkbox grammar, plus the ledger. The conductor re-reads both after compaction.</td></tr>
-        <tr><th scope="row">Continuation</th><td>Native <code>/goal</code> (no MCP tool), async wakes, <code>schedule_task</code>, <code>watch_pull_request</code>.</td><td>No re-prompt hooks. <code>omt-loop</code> asks the user to type <code>/goal</code>. An optional Claude <code>UserPromptSubmit</code> hook arms ulw.</td></tr>
+        <tr><th scope="row">Limits</th><td>No cap on concurrency or depth was found. Prompts up to 120,000 characters. Up to 20 threads in one batch.</td><td><code>maxParallel</code> 6, <code>maxDepth</code> 1, <code>maxReviewRounds</code> 4. Every brief states the depth. No task budget.</td></tr>
+        <tr><th scope="row">Review and done</th><td>Nothing.</td><td>One review child from the other model family that fixes local findings, a cross-family oracle, one QA child that edits nothing, and evidence-based done.</td></tr>
+        <tr><th scope="row">Long-run state</th><td>Durable task state. Wakes after the parent turn ends.</td><td>A plan file <code>.omt/plans/&lt;slug&gt;.md</code> with checkbox grammar, plus the ledger. The main thread re-reads both after compaction.</td></tr>
+        <tr><th scope="row">Continuation</th><td>Native <code>/goal</code> (no MCP tool), async wakes, <code>schedule_task</code>, <code>watch_pull_request</code>.</td><td>No re-prompt hooks and no heartbeat. The main thread waits for its children inside its turn with <code>delegate_task</code> in wait mode or <code>t3_thread_wait</code>. An optional Claude <code>UserPromptSubmit</code> hook arms ulw.</td></tr>
         <tr><th scope="row">Extension surface</th><td>No plugin API. Provider-native settings and skills load.</td><td>Skills in <code>~/.agents/skills</code> plus <code>~/.claude/skills</code> symlinks. Manifest, backups, and a consent-first install.</td></tr>
       </tbody>
     </table>
@@ -322,7 +322,7 @@ footer.page-footer ul { columns: 2 300px; }
     <div class="fig-scroll" tabindex="0" role="region" aria-label="Layer diagram of oh-my-t3code">
 <svg class="diagram" role="img" aria-labelledby="fig1-t fig1-d" width="860" height="650" viewBox="0 0 860 650">
   <title id="fig1-t">Layer diagram of oh-my-t3code</title>
-  <desc id="fig1-d">The user types a prompt in a T3 thread. On Claude Code, the optional ulw hook adds a pointer. On every driver, the parent can also load omt-ulw from its skill description or from a $omt-ulw mention. The parent agent holds the skills and calls the omt CLI. The skills call T3 orchestrator v2 MCP tools such as delegate_task, task_status, and t3_thread_configuration. T3 starts child threads routed by role to Claude or Codex models. Explore runs on codex gpt-6-luna, execute on claudeAgent claude-opus-5-5, and oracle on codex gpt-6-astra. T3 wakes the parent with task ids. The CLI reads and writes .omt in the repository and has no path to T3. Children work in the shared checkout.</desc>
+  <desc id="fig1-d">The user types a prompt in a T3 thread. On Claude Code, the optional ulw hook adds a pointer. On every driver, the parent can also load omt-ulw from its skill description or from a $omt-ulw mention. The parent agent holds the skills and calls the omt CLI. The skills call T3 orchestrator v2 MCP tools such as delegate_task, task_status, and t3_thread_wait. T3 starts child threads routed by role to Claude or Codex models. Explore runs on codex gpt-6-luna, oracle on codex gpt-6-astra, and qa on claudeAgent claude-haiku-5-5. The parent waits for each child inside its turn, and T3 returns the result to the waiting call. The CLI reads and writes .omt in the repository and has no path to T3. Children work in the shared checkout.</desc>
   <!-- user -->
   <rect class="box-a" x="310" y="14" width="240" height="50" rx="8"/>
   <text class="b" x="430" y="35" text-anchor="middle">User in a T3 thread</text>
@@ -344,14 +344,14 @@ footer.page-footer ul { columns: 2 300px; }
   <text class="s halo" x="408" y="114">(all drivers)</text>
   <!-- parent -->
   <rect class="box" x="276" y="120" width="568" height="200" rx="10"/>
-  <text class="h halo" x="560" y="142" text-anchor="middle">Parent agent (the conductor): Claude, Codex, or another driver</text>
+  <text class="h halo" x="560" y="142" text-anchor="middle">Parent agent (the main thread): Claude, Codex, or another driver</text>
   <rect class="box-a" x="292" y="156" width="230" height="148" rx="8"/>
   <text class="b" x="407" y="178" text-anchor="middle">Skills (judgment)</text>
   <text class="m" x="407" y="200" text-anchor="middle">omt-ulw  omt-plan  omt-design</text>
-  <text class="m" x="407" y="218" text-anchor="middle">omt-review  omt-research</text>
-  <text class="m" x="407" y="236" text-anchor="middle">omt-grill  omt-swarm  omt-loop</text>
+  <text class="m" x="407" y="218" text-anchor="middle">omt-code-review  omt-research</text>
+  <text class="m" x="407" y="236" text-anchor="middle">omt-grill  omt-swarm</text>
   <text class="m" x="407" y="254" text-anchor="middle">omt-help  omt-setup  omt</text>
-  <text class="s" x="407" y="276" text-anchor="middle">plan, split work, read results,</text>
+  <text class="s" x="407" y="276" text-anchor="middle">plan, build, read results,</text>
   <text class="s" x="407" y="294" text-anchor="middle">choose the next step</text>
   <rect class="box-a" x="598" y="156" width="230" height="148" rx="8"/>
   <text class="b" x="713" y="178" text-anchor="middle">omt CLI (deterministic)</text>
@@ -373,9 +373,9 @@ footer.page-footer ul { columns: 2 300px; }
   <path class="ln" d="M370,304 L370,378" marker-end="url(#ah)"/>
   <text class="m halo" x="378" y="337">delegate_task</text>
   <text class="m halo" x="378" y="353">task_status</text>
-  <text class="m halo" x="378" y="369">t3_thread_configuration</text>
+  <text class="m halo" x="378" y="369">t3_thread_wait</text>
   <path class="ln-d" d="M310,380 L310,306" marker-end="url(#ah)"/>
-  <text class="s halo" x="302" y="346" text-anchor="end">wake (task ids only)</text>
+  <text class="s halo" x="302" y="346" text-anchor="end">result (waited in the turn)</text>
   <!-- .omt -->
   <rect class="box-w" x="598" y="380" width="246" height="120" rx="10"/>
   <text class="b" x="721" y="402" text-anchor="middle">.omt/ in the repository</text>
@@ -394,171 +394,168 @@ footer.page-footer ul { columns: 2 300px; }
   <text class="b" x="94" y="530" text-anchor="middle">explore (plan mode)</text>
   <text class="m" x="94" y="548" text-anchor="middle">codex</text>
   <text class="m" x="94" y="566" text-anchor="middle">gpt-6-luna</text>
-  <rect class="box-c" x="190" y="510" width="164" height="66" rx="8"/>
-  <text class="b" x="272" y="530" text-anchor="middle">execute (default)</text>
-  <text class="m" x="272" y="548" text-anchor="middle">claudeAgent</text>
-  <text class="m" x="272" y="566" text-anchor="middle">claude-opus-5-5</text>
-  <rect class="box-x" x="368" y="510" width="164" height="66" rx="8"/>
-  <text class="b" x="450" y="530" text-anchor="middle">oracle (plan mode)</text>
-  <text class="m" x="450" y="548" text-anchor="middle">codex</text>
-  <text class="m" x="450" y="566" text-anchor="middle">gpt-6-astra</text>
+  <rect class="box-x" x="190" y="510" width="164" height="66" rx="8"/>
+  <text class="b" x="272" y="530" text-anchor="middle">oracle (default)</text>
+  <text class="m" x="272" y="548" text-anchor="middle">codex</text>
+  <text class="m" x="272" y="566" text-anchor="middle">gpt-6-astra</text>
+  <rect class="box-c" x="368" y="510" width="164" height="66" rx="8"/>
+  <text class="b" x="450" y="530" text-anchor="middle">qa (default)</text>
+  <text class="m" x="450" y="548" text-anchor="middle">claudeAgent</text>
+  <text class="m" x="450" y="566" text-anchor="middle">claude-haiku-5-5</text>
   <rect class="box-o" x="12" y="596" width="832" height="40" rx="8"/>
   <text x="428" y="621" text-anchor="middle">Shared checkout. Children work in the parent's project, branch, and worktree</text>
 </svg>
     </div>
-    <figcaption>Figure 1. The layers. Orange boxes run on Claude (<code>claudeAgent</code>). Green boxes run on Codex (<code>codex</code>). The children show rung 1 of each default role. The <code>oracle</code> runs on Codex here because the worker (<code>execute</code>) ran on Claude. The CLI reads and writes <code>.omt/</code> but has no MCP credential, so <code>delegate_task</code> is the final validator of every route. Children load the same skills and Claude hook as the parent. The <code>omt-brief</code> marker keeps the hook silent in a child.</figcaption>
+    <figcaption>Figure 1. The layers. Orange boxes run on Claude (<code>claudeAgent</code>). Green boxes run on Codex (<code>codex</code>). The children show rung 1 of each default role. The <code>oracle</code> runs on Codex here because the main thread, which built the change, runs on Claude. The <code>qa</code> child edits nothing, though its role has edit access to run commands and write logs. The CLI reads and writes <code>.omt/</code> but has no MCP credential, so <code>delegate_task</code> is the final validator of every route. Children load the same skills and Claude hook as the parent. The <code>omt-brief</code> marker keeps the hook silent in a child.</figcaption>
   </figure>
   <ul>
-    <li>The <strong>skills</strong> are Markdown <code>SKILL.md</code> files. They plan, split work, read results, and choose the next step.</li>
+    <li>The <strong>skills</strong> are Markdown <code>SKILL.md</code> files. They plan, build, read results, and choose the next step.</li>
     <li><strong>Three ways to start ulw.</strong> (1) On Claude Code with <code>--hooks</code>, the hook adds a pointer to the prompt. (2) On any driver, the model loads <code>omt-ulw</code> on its own, because the skill description holds the words <code>ulw</code> and <code>ultrawork</code>. (3) The user types a mention, such as <code>/omt-ulw</code> in Claude or <code>$omt-ulw</code> in Codex. The hook is optional. It only makes start (1) more reliable.</li>
     <li>The <strong>CLI</strong> merges config, resolves role chains, maps effort to options, renders briefs, and counts plan items and ledger entries.</li>
     <li>The CLI cannot call T3. Claude and Codex sessions get the MCP server through config, not through environment variables. So routing is unverified by default, and T3 checks the target at dispatch.</li>
-    <li>The skills also work without the CLI. They look for <code>omt</code> on <code>PATH</code>, then <code>.omt/bin/omt</code>, then follow the manual steps in <code>roles.md</code> and <code>brief.md</code>. They never call a runner such as <code>npx</code> themselves. A shim from a one-shot install calls its runner with the pinned version. Without the CLI, the conductor resolves roles with the table in <code>roles.md</code>, writes briefs by the layout in <code>brief.md</code>, edits the plan checkboxes and log by hand, and counts the open task ids in the plan's log in place of <code>omt ledger stats</code>.</li>
+    <li>The skills also work without the CLI. They look for <code>omt</code> on <code>PATH</code>, then <code>.omt/bin/omt</code>, then follow the manual steps in <code>roles.md</code> and <code>brief.md</code>. They never call a runner such as <code>npx</code> themselves. A shim from a one-shot install calls its runner with the pinned version. Without the CLI, the main thread resolves roles with the table in <code>roles.md</code>, writes briefs by the layout in <code>brief.md</code>, edits the plan checkboxes and log by hand, and counts the open task ids in the plan's log in place of <code>omt ledger stats</code>.</li>
   </ul>
 </section>
 
 <!-- 3. Life of a ulw request -->
 <section id="ulw" aria-labelledby="ulw-h">
   <h2 id="ulw-h">3. Life of a ulw request</h2>
-  <p>This is the main flow. The <code>omt-ulw</code> skill makes the parent agent a conductor. The conductor plans, dispatches, reads, and verifies. It edits no product files.</p>
+  <p>This is the main flow. The <code>omt-ulw</code> skill makes the parent agent the main thread. The main thread explores, asks the owner its questions, plans, and builds the change in one context. Children check the work: one review child and one QA child. The main thread waits for each child inside its turn. The <a href="design/workflow-fold.md">workflow fold design</a> gives the reasons.</p>
   <figure>
     <div class="fig-scroll" tabindex="0" role="region" aria-label="Sequence of one ulw request">
-<svg class="diagram" role="img" aria-labelledby="fig2-t fig2-d" width="904" height="960" viewBox="0 0 904 960">
+<svg class="diagram" role="img" aria-labelledby="fig2-t fig2-d" width="904" height="900" viewBox="0 0 904 900">
   <title id="fig2-t">Sequence of one ulw request</title>
-  <desc id="fig2-d">Swimlanes for the user, the hook, the conductor, the omt CLI, T3, and the children. The prompt goes through the hook pointer to the conductor. The conductor prints the banner, calls t3_thread_configuration, frames the goal, runs omt roles, explores, makes the plan, checks omt ledger stats, renders a brief with omt brief, calls delegate_task, records the dispatch with the provider and model of the target, and ends its turn. The child returns a STATUS block. T3 wakes the conductor with task ids. The conductor calls task_status, records the result, checks the claim, dispatches review as build.review says, with a brief built with --against auto, dispatches verify and then qa as build.verify and build.qa say, marks the unit done and records verified after a VERIFIED result, runs fix rounds (ui for a UI unit, else execute or deep) up to maxReviewRounds, runs the final gate and the oracle when build.oracle requires it (also with --against auto), and reports to the user.</desc>
+  <desc id="fig2-d">Swimlanes for the user, the hook, the main thread, the omt CLI, T3, and the children. The prompt goes through the hook pointer to the main thread. The main thread prints the banner, calls t3_thread_configuration, runs omt-research instead when the message is a question, sends broad reads to explore children and waits for them in the turn, frames the goal and reads the profile and roles, asks the user question batches until no question is open, makes the plan with omt plan new --light or omt-plan, and runs the design check. It builds each unit itself, runs the verify command, writes the planned tests, and marks the unit done. It stages its work, builds a review or oracle brief with --against its own family, and calls delegate_task in wait mode. The reviewer fixes local findings and returns a VERDICT block with FIXES. The main thread reads the fix diff and fixes the reported findings. It builds a qa brief and calls delegate_task in wait mode. The QA child edits nothing and returns CHECKS with exit codes and log paths. The main thread fixes failed checks, and QA runs only the failed checks again, at most 2 times. Then the main thread commits, pushes, opens the PR, and reports to the user with evidence.</desc>
   <!-- lane heads -->
   <text class="s" x="16" y="62" text-anchor="middle">step</text>
   <rect class="box-a" x="30" y="10" width="80" height="28" rx="6"/><text class="b" x="70" y="29" text-anchor="middle">User</text>
   <rect class="box-w" x="130" y="10" width="80" height="28" rx="6"/><text class="b" x="170" y="29" text-anchor="middle">Hook</text>
-  <rect class="box-a" x="235" y="10" width="110" height="28" rx="6"/><text class="b" x="290" y="29" text-anchor="middle">Conductor</text>
+  <rect class="box-a" x="235" y="10" width="110" height="28" rx="6"/><text class="b" x="290" y="29" text-anchor="middle">Main thread</text>
   <rect class="box-a" x="505" y="10" width="110" height="28" rx="6"/><text class="b" x="560" y="29" text-anchor="middle">omt CLI</text>
   <rect class="box-t" x="700" y="10" width="80" height="28" rx="6"/><text class="b" x="740" y="29" text-anchor="middle">T3</text>
   <rect class="box-c" x="814" y="10" width="80" height="28" rx="6"/><text class="b" x="854" y="29" text-anchor="middle">Children</text>
-  <line class="life" x1="70" y1="40" x2="70" y2="940"/>
-  <line class="life" x1="170" y1="40" x2="170" y2="940"/>
-  <line class="life" x1="290" y1="40" x2="290" y2="940"/>
-  <line class="life" x1="560" y1="40" x2="560" y2="940"/>
-  <line class="life" x1="740" y1="40" x2="740" y2="940"/>
-  <line class="life" x1="854" y1="40" x2="854" y2="940"/>
-  <!-- r0 -->
+  <line class="life" x1="70" y1="40" x2="70" y2="880"/>
+  <line class="life" x1="170" y1="40" x2="170" y2="880"/>
+  <line class="life" x1="290" y1="40" x2="290" y2="880"/>
+  <line class="life" x1="560" y1="40" x2="560" y2="880"/>
+  <line class="life" x1="740" y1="40" x2="740" y2="880"/>
+  <line class="life" x1="854" y1="40" x2="854" y2="880"/>
+  <!-- prompt and pointer -->
   <path class="ln" d="M70,76 L168,76" marker-end="url(#ah)"/>
   <text class="s halo" x="120" y="70" text-anchor="middle">prompt</text>
-  <!-- r1 -->
   <path class="ln" d="M170,106 L288,106" marker-end="url(#ah)"/>
   <text class="s halo" x="230" y="100" text-anchor="middle">pointer</text>
-  <!-- r2 banner -->
-  <rect class="box-a" x="296" y="125" width="400" height="22" rx="4"/>
-  <text class="m" x="304" y="140">omt ultrawork: plan, delegate, review, test, verify.</text>
-  <!-- r3 step 0 -->
+  <!-- banner -->
+  <rect class="box-a" x="296" y="125" width="430" height="22" rx="4"/>
+  <text class="m" x="304" y="140">omt ultrawork: explore, ask, plan, build, review, test.</text>
+  <!-- step 0 -->
   <text class="b" x="18" y="170" text-anchor="middle">0</text>
   <path class="ln" d="M290,166 L738,166" marker-end="url(#ah)"/>
   <text class="m halo" x="515" y="160" text-anchor="middle">t3_thread_configuration (no threadId)</text>
-  <!-- r4 step 1 -->
+  <!-- step 1 -->
   <text class="b" x="18" y="200" text-anchor="middle">1</text>
-  <rect class="box-a" x="296" y="185" width="330" height="22" rx="4"/>
-  <text x="304" y="200">frame: objective, done conditions, tier, slug</text>
-  <!-- r5 step 2 -->
+  <rect class="box-a" x="296" y="185" width="380" height="22" rx="4"/>
+  <text x="304" y="200">a question, not a goal: run omt-research instead</text>
+  <!-- step 2 -->
   <text class="b" x="18" y="230" text-anchor="middle">2</text>
-  <path class="ln" d="M290,226 L558,226" marker-end="url(#ah)"/>
-  <text class="m halo" x="425" y="220" text-anchor="middle">omt roles</text>
-  <!-- r6 step 3 -->
-  <text class="b" x="18" y="260" text-anchor="middle">3</text>
-  <path class="ln" d="M290,256 L738,256" marker-end="url(#ah)"/>
-  <text class="m halo" x="515" y="250" text-anchor="middle">delegate_task explore E&lt;k&gt; (may skip)</text>
-  <!-- r7 step 4 -->
-  <text class="b" x="18" y="290" text-anchor="middle">4</text>
-  <path class="ln" d="M290,286 L558,286" marker-end="url(#ah)"/>
-  <text class="m halo" x="425" y="280" text-anchor="middle">omt plan new --light | omt-plan</text>
-  <!-- r8 step 5 -->
-  <text class="b" x="18" y="320" text-anchor="middle">5</text>
-  <path class="ln" d="M290,316 L558,316" marker-end="url(#ah)"/>
-  <text class="m halo" x="425" y="310" text-anchor="middle">omt ledger stats --plan &lt;slug&gt;</text>
-  <path class="ln-d" d="M560,346 L292,346" marker-end="url(#ah)"/>
-  <text class="m halo" x="425" y="340" text-anchor="middle">can dispatch: yes</text>
+  <path class="ln" d="M290,226 L738,226" marker-end="url(#ah)"/>
+  <text class="m halo" x="515" y="220" text-anchor="middle">delegate_task explore E&lt;k&gt; (async), t3_thread_wait</text>
+  <path class="ln" d="M740,246 L852,246" marker-end="url(#ah)"/>
+  <text class="s halo" x="797" y="240" text-anchor="middle">broad reads</text>
+  <!-- step 3 -->
+  <text class="b" x="18" y="280" text-anchor="middle">3</text>
+  <rect class="box-a" x="296" y="265" width="200" height="22" rx="4"/>
+  <text x="304" y="280">frame: objective, tier, slug</text>
+  <path class="ln" d="M496,276 L558,276" marker-end="url(#ah)"/>
+  <text class="m halo" x="600" y="270">omt profile show, omt roles</text>
+  <!-- step 4 -->
+  <text class="b" x="18" y="320" text-anchor="middle">4</text>
+  <path class="ln" d="M290,316 L72,316" marker-end="url(#ah)"/>
+  <text class="s halo" x="180" y="310" text-anchor="middle">question batch, end turn</text>
+  <path class="ln-d" d="M70,342 L288,342" marker-end="url(#ah)"/>
+  <text class="s halo" x="180" y="336" text-anchor="middle">answers</text>
+  <!-- step 5 -->
+  <text class="b" x="18" y="380" text-anchor="middle">5</text>
   <path class="ln" d="M290,376 L558,376" marker-end="url(#ah)"/>
-  <text class="m halo" x="425" y="370" text-anchor="middle">omt brief execute ... --json</text>
-  <path class="ln-d" d="M560,406 L292,406" marker-end="url(#ah)"/>
-  <text class="m halo" x="425" y="400" text-anchor="middle">delegateTask, fallbacks</text>
-  <path class="ln" d="M290,436 L738,436" marker-end="url(#ah)"/>
-  <text class="m halo" x="515" y="430" text-anchor="middle">delegate_task (mode async)</text>
-  <path class="ln" d="M740,466 L852,466" marker-end="url(#ah)"/>
-  <text class="s halo" x="797" y="460" text-anchor="middle">child thread</text>
-  <path class="ln" d="M290,496 L558,496" marker-end="url(#ah)"/>
-  <text class="m halo" x="425" y="474" text-anchor="middle">omt ledger add --status dispatched</text>
-  <text class="m halo" x="425" y="490" text-anchor="middle">--provider &lt;p&gt; --model &lt;m&gt;</text>
-  <rect class="box-a" x="296" y="515" width="90" height="22" rx="4"/>
-  <text x="304" y="530">end turn</text>
+  <text class="m halo" x="425" y="370" text-anchor="middle">omt plan new --light | omt-plan</text>
+  <path class="ln-d" d="M70,402 L288,402" marker-end="url(#ah)"/>
+  <text class="s halo" x="180" y="396" text-anchor="middle">HEAVY plan approval</text>
   <!-- step 6 -->
-  <text class="b" x="18" y="560" text-anchor="middle">6</text>
-  <path class="ln" d="M854,556 L742,556" marker-end="url(#ah)"/>
-  <text class="m halo" x="797" y="550" text-anchor="middle">STATUS block</text>
-  <path class="ln-d" d="M740,586 L292,586" marker-end="url(#ah)"/>
-  <text class="s halo" x="515" y="580" text-anchor="middle">wake: task ids only (a new queued turn)</text>
-  <path class="ln" d="M290,616 L738,616" marker-end="url(#ah)"/>
-  <text class="m halo" x="515" y="610" text-anchor="middle">task_status</text>
-  <path class="ln" d="M290,646 L558,646" marker-end="url(#ah)"/>
-  <text class="m halo" x="425" y="640" text-anchor="middle">omt ledger add --status completed</text>
-  <rect class="box-a" x="296" y="665" width="330" height="22" rx="4"/>
-  <text x="304" y="680">claim check: scope diff, one verify command</text>
+  <text class="b" x="18" y="440" text-anchor="middle">6</text>
+  <rect class="box-a" x="296" y="425" width="330" height="22" rx="4"/>
+  <text x="304" y="440">design check: omt-design before ui units</text>
   <!-- step 7 -->
-  <text class="b" x="18" y="710" text-anchor="middle">7</text>
-  <path class="ln" d="M290,706 L738,706" marker-end="url(#ah)"/>
-  <text class="m halo" x="515" y="700" text-anchor="middle">delegate_task review (build.review, --against auto)</text>
+  <text class="b" x="18" y="480" text-anchor="middle">7</text>
+  <rect class="box-a" x="296" y="465" width="400" height="22" rx="4"/>
+  <text x="304" y="480">build each unit: edit, verify command, planned tests</text>
+  <path class="ln" d="M290,506 L558,506" marker-end="url(#ah)"/>
+  <text class="m halo" x="425" y="500" text-anchor="middle">omt plan mark &lt;slug&gt; U&lt;k&gt; done</text>
   <!-- step 8 -->
-  <text class="b" x="18" y="740" text-anchor="middle">8</text>
-  <path class="ln" d="M290,736 L738,736" marker-end="url(#ah)"/>
-  <text class="m halo" x="515" y="730" text-anchor="middle">delegate_task verify, then qa (build.verify, build.qa)</text>
-  <path class="ln" d="M290,766 L558,766" marker-end="url(#ah)"/>
-  <text class="m halo" x="425" y="760" text-anchor="middle">omt plan mark &lt;slug&gt; U1 done</text>
-  <path class="ln" d="M290,796 L558,796" marker-end="url(#ah)"/>
-  <text class="m halo" x="425" y="790" text-anchor="middle">omt ledger add --status verified</text>
+  <text class="b" x="18" y="546" text-anchor="middle">8</text>
+  <path class="ln" d="M290,542 L558,542" marker-end="url(#ah)"/>
+  <text class="m halo" x="425" y="536" text-anchor="middle">omt brief review|oracle --against &lt;family&gt;</text>
+  <path class="ln" d="M290,572 L738,572" marker-end="url(#ah)"/>
+  <text class="m halo" x="515" y="566" text-anchor="middle">delegate_task (mode wait)</text>
+  <path class="ln" d="M740,592 L852,592" marker-end="url(#ah)"/>
+  <text class="s halo" x="797" y="586" text-anchor="middle">fixes local findings</text>
+  <path class="ln-d" d="M854,618 L292,618" marker-end="url(#ah)"/>
+  <text class="m halo" x="575" y="612" text-anchor="middle">VERDICT, FIXES (returns inside the turn)</text>
   <!-- step 9 -->
-  <text class="b" x="18" y="830" text-anchor="middle">9</text>
-  <rect class="box-a" x="296" y="815" width="420" height="22" rx="4"/>
-  <text x="304" y="830">fix rounds: ui, else execute or deep, to maxReviewRounds</text>
+  <text class="b" x="18" y="656" text-anchor="middle">9</text>
+  <rect class="box-a" x="296" y="641" width="400" height="22" rx="4"/>
+  <text x="304" y="656">read the fix diff, fix the reported findings</text>
   <!-- step 10 -->
-  <text class="b" x="18" y="860" text-anchor="middle">10</text>
-  <rect class="box-a" x="296" y="845" width="380" height="22" rx="4"/>
-  <text x="304" y="860">final gate: F1, full test suite, typecheck</text>
-  <path class="ln" d="M290,886 L738,886" marker-end="url(#ah)"/>
-  <text class="m halo" x="515" y="880" text-anchor="middle">delegate_task oracle F2 (build.oracle, --against auto)</text>
+  <text class="b" x="18" y="696" text-anchor="middle">10</text>
+  <path class="ln" d="M290,692 L738,692" marker-end="url(#ah)"/>
+  <text class="m halo" x="515" y="686" text-anchor="middle">omt brief qa, delegate_task qa (mode wait)</text>
+  <path class="ln" d="M740,712 L852,712" marker-end="url(#ah)"/>
+  <text class="s halo" x="797" y="706" text-anchor="middle">edits nothing</text>
+  <path class="ln-d" d="M854,738 L292,738" marker-end="url(#ah)"/>
+  <text class="m halo" x="575" y="732" text-anchor="middle">CHECKS: exit codes, log paths, screenshots</text>
   <!-- step 11 -->
-  <text class="b" x="18" y="920" text-anchor="middle">11</text>
-  <path class="ln" d="M290,916 L72,916" marker-end="url(#ah)"/>
-  <text class="s halo" x="180" y="910" text-anchor="middle">report with evidence</text>
+  <text class="b" x="18" y="776" text-anchor="middle">11</text>
+  <rect class="box-a" x="296" y="761" width="430" height="22" rx="4"/>
+  <text x="304" y="776">fix failed checks; QA re-runs only those, at most 2 times</text>
+  <!-- step 12 -->
+  <text class="b" x="18" y="816" text-anchor="middle">12</text>
+  <rect class="box-a" x="296" y="801" width="250" height="22" rx="4"/>
+  <text x="304" y="816">commit, push, open the PR</text>
+  <path class="ln" d="M290,856 L72,856" marker-end="url(#ah)"/>
+  <text class="s halo" x="180" y="850" text-anchor="middle">report with evidence</text>
 </svg>
     </div>
-    <figcaption>Figure 2. One ulw request, from prompt to report. Each later child (review, verify, qa, fix, oracle) follows the same pattern as the execute child. The workflow switches of the active profile decide which of those children run. The pattern is <code>omt ledger stats</code>, <code>omt brief --json</code>, <code>delegate_task</code>, <code>omt ledger add</code>, end turn, wake, and <code>task_status</code>. The figure draws that pattern once. Each dispatch record carries <code>--provider</code> and <code>--model</code>. The review and oracle briefs use <code>--against auto</code>, which reads those records to find the worker.</figcaption>
+    <figcaption>Figure 2. One ulw request, from prompt to report. Each child dispatch follows the same pattern: <code>omt brief --json</code>, <code>delegate_task</code>, <code>omt ledger add</code> for the dispatch, the wait inside the turn, <code>task_status</code>, and <code>omt ledger add</code> for the result. The figure draws only the arrows that matter for each step. The review brief uses <code>--against</code> with the main thread's own driver from step 0, because the ledger has no work dispatch for the units that the main thread built. The turn ends only at step 4, at the HEAVY plan approval, and at the report.</figcaption>
   </figure>
 
   <h3>The steps of <code>omt-ulw</code></h3>
-  <p>The conductor prints the banner <code>omt ultrawork: plan, delegate, review, test, verify.</code> as its first line. Then it runs these steps in order.</p>
+  <p>The main thread prints the banner <code>omt ultrawork: explore, ask, plan, build, review, test.</code> as its first line. Then it runs these steps in order.</p>
   <ol class="steps">
-    <li><span class="n">0</span><p><strong>Check your mode.</strong> Call <code>t3_thread_configuration</code> with no <code>threadId</code> and read <code>interactionMode</code>. In <code>plan</code> mode, ask the user to switch to default mode, or offer <code>omt-plan</code>. Then run the branch check in <code>delegation.md</code>: it checks whether the current branch is behind the default branch.</p></li>
-    <li><span class="n">1</span><p><strong>Frame.</strong> Write the objective in one sentence, the done conditions, the tier, and the plan slug. Each done condition is a check that can fail.</p></li>
-    <li><span class="n">2</span><p><strong>Route.</strong> Run <code>omt profile show --json</code> (with <code>--plan &lt;slug&gt;</code> when the plan file exists) and keep the effective <code>profile</code>, <code>workflow</code>, <code>limits</code>, <code>roles</code>, and <code>models</code>. Then run <code>omt roles --plan &lt;slug&gt;</code> for the targets. Without the CLI, use the resolve-by-hand table in <code>roles.md</code>.</p></li>
-    <li><span class="n">3</span><p><strong>Explore.</strong> Dispatch 1 to <code>maxParallel</code> read-only <code>explore</code> tasks with units <code>E&lt;k&gt;</code>, one narrow question each. End the turn. Skip this step when the code is already known.</p></li>
-    <li><span class="n">4</span><p><strong>Plan.</strong> Run <code>omt init</code> when <code>.omt/.gitignore</code> is missing. LIGHT runs <code>omt plan new &lt;slug&gt; --light</code>. HEAVY runs the <code>omt-plan</code> skill, which returns here after plan review.</p></li>
-    <li><span class="n">5</span><p><strong>Dispatch.</strong> For each ready unit, run <code>omt ledger stats --plan &lt;slug&gt;</code>, then <code>omt brief &lt;role&gt; ... --json</code>, then <code>delegate_task</code>, then <code>omt ledger add --status dispatched</code>. The record carries <code>--provider</code> and <code>--model</code> from the target of the call that T3 accepted. After a fallback, that is the fallback's target. End the turn.</p></li>
-    <li><span class="n">6</span><p><strong>On wake.</strong> Call <code>task_status</code> for each task id. Record <code>completed</code> with the verdict, or <code>failed</code>. Check each <code>DONE</code> claim. Record <code>rejected</code> when the check disproves it.</p></li>
-    <li><span class="n">7</span><p><strong>Review.</strong> Apply <code>build.review</code>. With <code>every-round</code>, dispatch a fresh <code>review</code> task per round. With <code>first-round</code>, review only the first round and send each fix round to step 8. With <code>off</code>, skip review. Build each review brief with <code>--against auto</code>, so the reviewer comes from the family other than the unit's worker. Pass the unit data in a <code>--context-file</code>, never the rendered execute brief. From round 2, pass earlier findings in <code>--prior-file</code>.</p></li>
-    <li><span class="n">8</span><p><strong>Test.</strong> Apply <code>build.verify</code>. With <code>every-unit</code>, dispatch a <code>verify</code> task for every unit. With <code>heavy</code>, dispatch <code>verify</code> for each HEAVY unit; for a LIGHT unit, the conductor runs the verify commands itself and saves the output. After <code>VERIFIED</code>, apply <code>build.qa</code>. With <code>planned</code>, dispatch a <code>qa</code> task when the plan's <code>## Tests</code> section has lines for the unit. With <code>off</code>, skip <code>qa</code>. When every required task returns <code>VERIFIED</code>, run <code>omt plan mark &lt;slug&gt; &lt;unit&gt; done</code> and record <code>verified</code>.</p></li>
-    <li><span class="n">9</span><p><strong>Fix.</strong> Send the kept findings to a fix task in the next round. A <code>ui</code> unit uses <code>ui</code> in every round, and never falls back to another role or family. For other units, the fix is an <code>execute</code> fix, or a <code>deep</code> fix when a finding needs investigation: its cause is unknown, the previous fix failed for the same reason, or the fix changes the design. When the next round would pass <code>maxReviewRounds</code> (default 4), mark the unit <code>blocked</code> and ask the user.</p></li>
-    <li><span class="n">10</span><p><strong>Final gate.</strong> The conductor runs every final check (<code>F1</code>, the full test suite, the typecheck) and marks <code>D</code> and <code>F</code> items. Then it applies <code>build.oracle</code>. <code>heavy</code> runs the oracle for HEAVY runs only, <code>always</code> runs it for both tiers, and <code>off</code> skips it. When the oracle is required, the conductor dispatches one <code>oracle</code> task with <code>--unit F2</code> and <code>--against auto</code>, so the oracle comes from the family other than the main implementer's. It repeats until it returns <code>APPROVE</code> or <code>maxReviewRounds</code> stops it.</p></li>
-    <li><span class="n">11</span><p><strong>Report.</strong> Tell the user what changed by file, each done condition with its evidence, the verdicts per unit, and the open items. Make one commit for the run, then push and open or update the PR, each as <code>omt git check</code> allows. Report the commit hash and the PR URL.</p></li>
+    <li><span class="n">0</span><p><strong>Check your mode.</strong> Call <code>t3_thread_configuration</code> with no <code>threadId</code> and read <code>interactionMode</code> and <code>modelSelection</code>. Keep the driver as your family for step 8. In <code>plan</code> mode, ask the user to switch to default mode, or offer <code>omt-plan</code>. Then run the branch check in <code>delegation.md</code>: it checks whether the current branch is behind the default branch.</p></li>
+    <li><span class="n">1</span><p><strong>Question or goal.</strong> When the message asks a question and names no change, run <code>omt-research</code> instead and stop.</p></li>
+    <li><span class="n">2</span><p><strong>Explore.</strong> Read the code that the goal touches yourself. Send only broad reads to 1 to <code>maxParallel</code> read-only <code>explore</code> children with units <code>E&lt;k&gt;</code>, in parallel, and wait for them in this turn.</p></li>
+    <li><span class="n">3</span><p><strong>Frame.</strong> Write the objective in one sentence, the done conditions, the tier, and the plan slug. Each done condition is a check that can fail. Run <code>omt profile show --json</code> (with <code>--plan &lt;slug&gt;</code> when the plan file exists) and <code>omt roles --plan &lt;slug&gt;</code>. Without the CLI, use the resolve-by-hand table in <code>roles.md</code>.</p></li>
+    <li><span class="n">4</span><p><strong>Ask.</strong> Ask every open owner question in one batch, each with 2 to 4 options and a recommendation, and end the turn. After the answers, explore again when needed and ask the next batch. Stop when no question is open. A question that the code can answer is not an owner question.</p></li>
+    <li><span class="n">5</span><p><strong>Plan.</strong> Run <code>omt init</code> when <code>.omt/.gitignore</code> is missing. LIGHT runs <code>omt plan new &lt;slug&gt; --light</code>, and the main thread fills it. HEAVY runs the <code>omt-plan</code> skill, which writes the plan, runs the plan review, and returns here. The owner approves a HEAVY plan. A unit that the main thread builds has the role <code>main</code>.</p></li>
+    <li><span class="n">6</span><p><strong>Design check.</strong> When the plan asks for an <code>omt-design</code> step that has not run, run <code>omt-design</code> first. Build no <code>ui</code> unit before its spec is approved.</p></li>
+    <li><span class="n">7</span><p><strong>Build.</strong> Build the units in the order of the <code>ready:</code> line of <code>omt plan status</code>. For each unit, edit the files in its scope, run its verify command, write its tests from <code>## Tests</code> (<code>build.qa: planned</code>), prove that each new test fails without the change (<code>build.failureProofs: on</code>), and mark it done. A large unit with a scope that no other open unit touches may go to an <code>execute</code> child, or a <code>ui</code> child, as an independent track. A <code>ui</code> unit goes to a <code>ui</code> child when the main thread does not run Claude Opus.</p></li>
+    <li><span class="n">8</span><p><strong>Review.</strong> One review child reviews the whole diff. It uses the <code>oracle</code> role with <code>--unit F2</code> when <code>build.oracle</code> requires the oracle for the tier, else the <code>review</code> role with <code>--unit REVIEW</code>. Its context is the objective, the done conditions, the plan <code>## Summary</code>, and the scope paths, never the main thread's history. The main thread stages its work first. The reviewer fixes each local finding itself, reports the rest, and lists its fixes under <code>FIXES</code>.</p></li>
+    <li><span class="n">9</span><p><strong>Read the fix diff and fix.</strong> Read the reviewer's unstaged fix diff before QA starts. Apply the relevance check to the reported findings, and fix each kept finding yourself. With <code>build.review: every-round</code>, run one more review of the fixes, up to <code>maxReviewRounds</code> reviews. <code>BLOCK</code> for a wrong approach marks the unit blocked for a re-plan or an owner question.</p></li>
+    <li><span class="n">10</span><p><strong>QA.</strong> One <code>qa</code> child runs every verify command, the final checks, and the device flows. It edits nothing and writes no tests. It returns each command with its exit code and log path, and screenshot paths for device flows. The main thread reads only the exit codes and the last lines of the failed logs.</p></li>
+    <li><span class="n">11</span><p><strong>Fix failed checks.</strong> Fix each failed check yourself, then dispatch QA for only the failed checks. After 2 re-runs that still fail, stop and ask the owner.</p></li>
+    <li><span class="n">12</span><p><strong>Ship and report.</strong> Make one commit for the run, then push and open or update the PR, each as <code>omt git check</code> allows. Report what changed, each done condition with its command, exit code, and log path, the review and QA verdicts, each QA screenshot, the commit hash, the PR URL, and the open items.</p></li>
   </ol>
 
-  <p>The active profile sets the switches in steps 7 to 10. A plan header can name a profile; otherwise the config's <code>profile</code> applies, and the default is <code>normal</code>. <code>omt ledger stats</code> prints the active name on its <code>profile:</code> line, and <code>omt profile show</code> prints the resolved values. The tier table and the examples on this page use <code>normal</code>.</p>
+  <p>The active profile sets the switches in steps 7 to 9. A plan header can name a profile; otherwise the config's <code>profile</code> applies, and the default is <code>normal</code>. <code>omt ledger stats</code> prints the active name on its <code>profile:</code> line, and <code>omt profile show</code> prints the resolved values. The tier table and the examples on this page use <code>normal</code>.</p>
   <div class="table-wrap" tabindex="0" role="region" aria-label="Build switches by profile">
     <table>
       <caption>Build switches by profile</caption>
       <thead><tr><th scope="col">Switch</th><th scope="col">Step</th><th scope="col"><code>normal</code></th><th scope="col"><code>prototype</code></th><th scope="col"><code>pr-review</code></th></tr></thead>
       <tbody>
-        <tr><th scope="row"><code>build.review</code></th><td>7</td><td><code>every-round</code></td><td><code>first-round</code></td><td><code>every-round</code></td></tr>
-        <tr><th scope="row"><code>build.verify</code></th><td>8</td><td><code>heavy</code></td><td><code>every-unit</code></td><td><code>heavy</code></td></tr>
-        <tr><th scope="row"><code>build.qa</code></th><td>8</td><td><code>planned</code></td><td><code>planned</code></td><td><code>planned</code></td></tr>
-        <tr><th scope="row"><code>build.oracle</code></th><td>10</td><td><code>heavy</code></td><td><code>off</code></td><td><code>heavy</code></td></tr>
-        <tr><th scope="row"><code>maxReviewRounds</code></th><td>9, 10</td><td>4</td><td>2</td><td>4</td></tr>
+        <tr><th scope="row"><code>build.review</code></th><td>8, 9</td><td><code>every-round</code></td><td><code>first-round</code></td><td><code>every-round</code></td></tr>
+        <tr><th scope="row"><code>build.qa</code></th><td>7</td><td><code>planned</code></td><td><code>planned</code></td><td><code>planned</code></td></tr>
+        <tr><th scope="row"><code>build.failureProofs</code></th><td>7</td><td><code>on</code></td><td><code>off</code></td><td><code>on</code></td></tr>
+        <tr><th scope="row"><code>build.oracle</code></th><td>8</td><td><code>heavy</code></td><td><code>off</code></td><td><code>heavy</code></td></tr>
+        <tr><th scope="row"><code>maxReviewRounds</code></th><td>9</td><td>4</td><td>2</td><td>4</td></tr>
       </tbody>
     </table>
   </div>
@@ -569,17 +566,15 @@ footer.page-footer ul { columns: 2 300px; }
       <thead><tr><th scope="col">Aspect</th><th scope="col">LIGHT</th><th scope="col">HEAVY</th></tr></thead>
       <tbody>
         <tr><th scope="row">When</th><td>One or two units, one area of code, no design decision left.</td><td>Anything else.</td></tr>
-        <tr><th scope="row">Plan</th><td><code class="cmd"><span class="nw">omt</span> <span class="nw">plan</span> <span class="nw">new</span> <span class="nw">&lt;slug&gt;</span> <span class="nw">--light</span></code>, filled by the conductor. No <code>F2</code> item.</td><td>The <code>omt-plan</code> skill with <code>plan-review</code> rounds.</td></tr>
-        <tr><th scope="row">Explore (step 3)</th><td>May skip.</td><td>Runs unless the code is already known.</td></tr>
-        <tr><th scope="row">Test (step 8)</th><td>The conductor runs the verify commands itself and saves the output under <code>.omt/evidence/</code>.</td><td>A <code>verify</code> child for every unit.</td></tr>
-        <tr><th scope="row">Oracle (step 10)</th><td>None.</td><td>One <code>oracle</code> task, <code class="cmd"><span class="nw">--unit</span> <span class="nw">F2</span></code>, marked done on <code>APPROVE</code>.</td></tr>
-        <tr><th scope="row">Both tiers</th><td colspan="2">The banner, steps 0 to 2, a plan, one work child per unit and one <code>review</code> child per round in the ledger, the conductor's own verify and final checks, and the report.</td></tr>
+        <tr><th scope="row">Plan</th><td><code class="cmd"><span class="nw">omt</span> <span class="nw">plan</span> <span class="nw">new</span> <span class="nw">&lt;slug&gt;</span> <span class="nw">--light</span></code>, filled by the main thread. No plan review, no owner approval, no <code>F2</code> item.</td><td>The <code>omt-plan</code> skill with 1 <code>plan-review</code> child and at most 2 rounds. The owner approves the plan.</td></tr>
+        <tr><th scope="row">Review (step 8)</th><td>One <code>review</code> child.</td><td>One <code>oracle</code> child, <code class="cmd"><span class="nw">--unit</span> <span class="nw">F2</span></code>, marked done on <code>APPROVE</code>.</td></tr>
+        <tr><th scope="row">Both tiers</th><td colspan="2">The banner, the question batches, a plan, the build in the main thread, one review child per review round, one QA child with at most 2 re-runs, and the report.</td></tr>
       </tbody>
     </table>
   </div>
   <div class="callout warn">
-    <strong>The conductor edits no product files.</strong>
-    <p>Its own writes go only to <code>.omt/</code> (plan, ledger, evidence) and to brief temp files in <code>$TMPDIR</code>. When no child can do an edit (role <code>unavailable</code>, no <code>delegate_task</code>, a stop code, or a limit), the conductor stops and tells the user.</p>
+    <strong>The main thread builds; children review and test.</strong>
+    <p>Review and QA never run at the same time, because the reviewer edits files. A child's claim is not done: the main thread reads the reviewer's fix diff and the QA exit codes. When a role it needs is <code>unavailable</code>, or a stop code or a limit blocks a dispatch, the main thread stops and tells the user.</p>
   </div>
 </section>
 
@@ -587,9 +582,9 @@ footer.page-footer ul { columns: 2 300px; }
 <section id="roles" aria-labelledby="roles-h">
   <h2 id="roles-h">4. Roles and routing</h2>
   <p>Skills and plans name a role, never a model. The config maps each role to an ordered chain of rungs. A rung is a provider or driver, a model, and an effort level. The first rung that T3 can run wins. A chain survives a missing subscription or a disabled provider.</p>
-  <div class="table-wrap" tabindex="0" role="region" aria-label="Default roles (src/config/defaults.ts). Each rung reads provider / model / effort. Every role has runtimeMode inherit. The skill tries rung 1 first. It sends rung 2 only when T3 refuses rung 1. For a cross-family role, --against can put rung 2 first (see below).">
+  <div class="table-wrap" tabindex="0" role="region" aria-label="Default roles of set 2026-12 (src/config/defaultSets.ts). Each rung reads provider / model / effort. Every role has runtimeMode inherit. The skill tries rung 1 first. It sends rung 2 only when T3 refuses rung 1. For a cross-family role, --against can put rung 2 first (see below).">
     <table>
-      <caption>Default roles (<code>src/config/defaults.ts</code>). Each rung reads provider / model / effort. Mode is <code>interactionMode</code>. Every role has <code>runtimeMode</code> <code>inherit</code>. The skill tries rung 1 first. It sends rung 2 only when T3 refuses rung 1. For a cross-family role, <code>--against</code> can put rung 2 first (see below).</caption>
+      <caption>Default roles of set <code>2026-12</code> (<code>src/config/defaultSets.ts</code>). Each rung reads provider / model / effort. Mode is <code>interactionMode</code>. Every role has <code>runtimeMode</code> <code>inherit</code>. The skill tries rung 1 first. It sends rung 2 only when T3 refuses rung 1. For a cross-family role, <code>--against</code> can put rung 2 first (see below).</caption>
       <thead>
         <tr><th scope="col">Role</th><th scope="col">Access</th><th scope="col">Result</th><th scope="col">Mode</th><th scope="col">crossFamily</th><th scope="col">Rung 1 (tried first)</th><th scope="col">Rung 2 (backup)</th></tr>
       </thead>
@@ -598,13 +593,11 @@ footer.page-footer ul { columns: 2 300px; }
         <tr><th scope="row"><code>research</code></th><td class="nw">read-only</td><td>research</td><td>plan</td><td>no</td><td><span class="fam x"><span class="nw">codex</span> / <span class="nw">gpt-6.1-sol</span> / <span class="nw">low</span></span></td><td><span class="fam c"><span class="nw">claudeAgent</span> / <span class="nw">claude-opus-5-5</span> / <span class="nw">low</span></span></td></tr>
         <tr><th scope="row"><code>plan</code></th><td>edit</td><td>plan</td><td>default</td><td>no</td><td><span class="fam c"><span class="nw">claudeAgent</span> / <span class="nw">claude-opus-5-5</span> / <span class="nw">xhigh</span></span></td><td><span class="fam x"><span class="nw">codex</span> / <span class="nw">gpt-6-astra</span> / <span class="nw">xhigh</span></span></td></tr>
         <tr><th scope="row"><code>plan-review</code></th><td class="nw">read-only</td><td>review</td><td>plan</td><td><strong>yes</strong></td><td><span class="fam x"><span class="nw">codex</span> / <span class="nw">gpt-6-astra</span> / <span class="nw">high</span></span></td><td><span class="fam c"><span class="nw">claudeAgent</span> / <span class="nw">claude-opus-5-5</span> / <span class="nw">high</span></span></td></tr>
+        <tr><th scope="row"><code>grill</code></th><td class="nw">read-only</td><td>grill</td><td>plan</td><td><strong>yes</strong></td><td><span class="fam x"><span class="nw">codex</span> / <span class="nw">gpt-6-astra</span> / <span class="nw">high</span></span></td><td><span class="fam c"><span class="nw">claudeAgent</span> / <span class="nw">claude-opus-5-5</span> / <span class="nw">high</span></span></td></tr>
         <tr><th scope="row"><code>execute</code></th><td>edit</td><td>work</td><td>default</td><td>no</td><td><span class="fam c"><span class="nw">claudeAgent</span> / <span class="nw">claude-opus-5-5</span> / <span class="nw">medium</span></span></td><td><span class="fam x"><span class="nw">codex</span> / <span class="nw">gpt-6.1-sol</span> / <span class="nw">xhigh</span></span></td></tr>
-        <tr><th scope="row"><code>quick</code></th><td>edit</td><td>work</td><td>default</td><td>no</td><td><span class="fam x"><span class="nw">codex</span> / <span class="nw">gpt-6-luna</span> / <span class="nw">high</span></span></td><td><span class="fam c"><span class="nw">claudeAgent</span> / <span class="nw">claude-sonnet-5-5</span> / <span class="nw">low</span></span></td></tr>
-        <tr><th scope="row"><code>deep</code></th><td>edit</td><td>work</td><td>default</td><td>no</td><td><span class="fam c"><span class="nw">claudeAgent</span> / <span class="nw">claude-opus-5-5</span> / <span class="nw">max</span></span></td><td><span class="fam x"><span class="nw">codex</span> / <span class="nw">gpt-6-astra</span> / <span class="nw">xhigh</span></span></td></tr>
-        <tr><th scope="row"><code>review</code></th><td class="nw">read-only</td><td>review</td><td>plan</td><td><strong>yes</strong></td><td><span class="fam x"><span class="nw">codex</span> / <span class="nw">gpt-6-astra</span> / <span class="nw">high</span></span></td><td><span class="fam c"><span class="nw">claudeAgent</span> / <span class="nw">claude-opus-5-5</span> / <span class="nw">high</span></span></td></tr>
-        <tr><th scope="row"><code>oracle</code></th><td class="nw">read-only</td><td>review</td><td>plan</td><td><strong>yes</strong></td><td><span class="fam x"><span class="nw">codex</span> / <span class="nw">gpt-6-astra</span> / <span class="nw">high</span></span></td><td><span class="fam c"><span class="nw">claudeAgent</span> / <span class="nw">claude-opus-5-5</span> / <span class="nw">high</span></span></td></tr>
-        <tr><th scope="row"><code>verify</code></th><td>edit</td><td>test</td><td>default</td><td>no</td><td><span class="fam c"><span class="nw">claudeAgent</span> / <span class="nw">claude-haiku-5-5</span> / <span class="nw">medium</span></span></td><td><span class="fam c"><span class="nw">claudeAgent</span> / <span class="nw">claude-sonnet-5-5</span> / <span class="nw">low</span></span>, then <span class="fam x"><span class="nw">codex</span> / <span class="nw">gpt-6.1-sol</span> / <span class="nw">low</span></span></td></tr>
-        <tr><th scope="row"><code>qa</code></th><td>edit</td><td>test</td><td>default</td><td>no</td><td><span class="fam x"><span class="nw">codex</span> / <span class="nw">gpt-6.1-sol</span> / <span class="nw">medium</span></span></td><td><span class="fam c"><span class="nw">claudeAgent</span> / <span class="nw">claude-sonnet-5-5</span> / <span class="nw">medium</span></span></td></tr>
+        <tr><th scope="row"><code>review</code></th><td>edit</td><td>review</td><td>default</td><td><strong>yes</strong></td><td><span class="fam x"><span class="nw">codex</span> / <span class="nw">gpt-6-astra</span> / <span class="nw">high</span></span></td><td><span class="fam c"><span class="nw">claudeAgent</span> / <span class="nw">claude-opus-5-5</span> / <span class="nw">high</span></span></td></tr>
+        <tr><th scope="row"><code>oracle</code></th><td>edit</td><td>review</td><td>default</td><td><strong>yes</strong></td><td><span class="fam x"><span class="nw">codex</span> / <span class="nw">gpt-6-astra</span> / <span class="nw">high</span></span></td><td><span class="fam c"><span class="nw">claudeAgent</span> / <span class="nw">claude-opus-5-5</span> / <span class="nw">high</span></span></td></tr>
+        <tr><th scope="row"><code>qa</code></th><td>edit</td><td>test</td><td>default</td><td>no</td><td><span class="fam c"><span class="nw">claudeAgent</span> / <span class="nw">claude-haiku-5-5</span> / <span class="nw">medium</span></span></td><td><span class="fam c"><span class="nw">claudeAgent</span> / <span class="nw">claude-sonnet-5-5</span> / <span class="nw">low</span></span>, then <span class="fam x"><span class="nw">codex</span> / <span class="nw">gpt-6.1-sol</span> / <span class="nw">low</span></span></td></tr>
         <tr><th scope="row"><code>guardrail</code></th><td class="nw">read-only</td><td>guardrail</td><td>plan</td><td>no</td><td><span class="fam c"><span class="nw">claudeAgent</span> / <span class="nw">claude-opus-5-5</span> / <span class="nw">high</span></span></td><td><span class="fam x"><span class="nw">codex</span> / <span class="nw">gpt-6-astra</span> / <span class="nw">high</span></span></td></tr>
         <tr><th scope="row"><code>writing</code></th><td>edit</td><td>work</td><td>default</td><td>no</td><td><span class="fam c"><span class="nw">claudeAgent</span> / <span class="nw">claude-opus-5-5</span> / <span class="nw">high</span></span></td><td><span class="fam x"><span class="nw">codex</span> / <span class="nw">gpt-6-astra</span> / <span class="nw">medium</span></span></td></tr>
         <tr><th scope="row"><code>design</code></th><td>edit</td><td>work</td><td>default</td><td>no</td><td><span class="fam c"><span class="nw">claudeAgent</span> / <span class="nw">claude-opus-5-5</span> / <span class="nw">high</span></span></td><td>none</td></tr>
@@ -612,17 +605,19 @@ footer.page-footer ul { columns: 2 300px; }
       </tbody>
     </table>
   </div>
+  <p>Set <code>2026-12</code> retired the <code>verify</code>, <code>quick</code>, and <code>deep</code> roles. <code>review</code> and <code>oracle</code> have edit access, so that the <code>omt-ulw</code> reviewer fixes local findings. <code>omt-code-review</code> still runs them in plan mode, report-only. <code>qa</code> puts its Claude rungs first, because a Codex child cannot reach the local device daemon. It has edit access only to run commands and write logs, and its brief forbids edits in the repository.</p>
 
   <h3>Rung 1 and rung 2</h3>
   <p>Rung 1 is the target that the role tries first. Rung 2 is a backup. The skill sends rung 2 only when T3 refuses rung 1 with a typed error, for example <code>provider_unavailable</code> for a disabled provider. Rung 2 is not a second opinion. One task runs on one rung, never on both. For <code>plan-review</code>, <code>review</code>, and <code>oracle</code>, <code>--against</code> can change the order. When the worker ran on Codex, rung 2 (Opus) goes first, and rung 1 (Astra) becomes the backup. The rule does not change. One task runs on the first target, and the backup runs only when T3 refuses that target.</p>
   <p>Every default rung sets <code>provider</code> equal to <code>driver</code> (<code>claudeAgent</code> or <code>codex</code>). These are the ids of the T3 built-in provider instances. So a default target names <code>providerInstanceId</code>, not only <code>driverKind</code>. The reason is observed T3 behavior. T3 checks a named provider instance again before it refuses it. T3 picks a <code>driverKind</code>-only target from a cached provider snapshot, and that snapshot can be stale.</p>
 
   <h3>Cross-family roles and <code>--against</code></h3>
-  <p><code>plan-review</code>, <code>review</code>, and <code>oracle</code> have <code>crossFamily: true</code>. The reviewer of these roles comes from the family other than the worker's. The family is the driver (<code>claudeAgent</code> or <code>codex</code>), not the model.</p>
+  <p><code>plan-review</code>, <code>grill</code>, <code>review</code>, and <code>oracle</code> have <code>crossFamily: true</code>. The reviewer of these roles comes from the family other than the worker's. The family is the driver (<code>claudeAgent</code> or <code>codex</code>), not the model.</p>
   <p><code>omt route</code> and <code>omt brief</code> take <code>--against &lt;provider|driver|auto&gt;</code>. The value names the worker whose change the task reviews. For a cross-family role, the CLI moves the rungs of the other family to the front. Each group keeps its configured order. So when Opus wrote the change, the review runs on <code>codex/gpt-6-astra</code> first. This is already the configured order, so no rung moves. When Luna, Sol, or Astra wrote it, the CLI moves <code>claudeAgent/claude-opus-5-5</code> (configured rung 2) to the front (Figure 3). When the other family cannot run, the same family reviews. With <code>--capabilities</code>, the CLI finds this before dispatch and a note says so. Without it, T3 refuses the other-family target at dispatch, and the skill sends the same-family fallback.</p>
   <ul>
     <li><code>--against auto</code> reads <code>.omt/ledger.jsonl</code> and needs <code>--plan</code>. With <code>--unit</code>, when the unit has a work or plan dispatch with a provider, the worker is the provider of the last one. In all other cases, the worker is the provider of most units in the plan. This includes no <code>--unit</code>, and a unit with no such dispatch, such as the oracle unit F2. A tie goes to the tied provider with the latest dispatch. When the plan has no dispatch with a provider, the configured order applies.</li>
     <li>Without <code>--against</code>, the configured order applies. The cross-family roles then start on Codex, which fits the default worker, <code>execute</code> on Claude.</li>
+    <li><code>omt-ulw</code> builds its review and oracle briefs with <code>--against &lt;driver&gt;</code>, the main thread's own driver from step 0, because the ledger has no work dispatch for the units that the main thread built.</li>
     <li>On a role without <code>crossFamily</code>, <code>--against</code> has no effect, and a note says so.</li>
     <li>The CLI reports its choice as notes. <code>omt route</code> puts them in <code>notes</code>. <code>omt brief --json</code> prints each one to stderr as <code>note: &lt;note&gt;</code>, so the JSON on stdout keeps its shape.</li>
   </ul>
@@ -630,13 +625,13 @@ footer.page-footer ul { columns: 2 300px; }
 <pre><code>{
   "role": "review",
   "status": "resolved",
-  "description": "Review a diff against its brief and report findings by severity. Runs on the family that did not make the change when the worker is known.",
-  "access": "read-only",
+  "description": "Review a diff against its brief, fix local findings in the changed files, and report the rest by severity. Runs on the family that did not make the change.",
+  "access": "edit",
   "result": "review",
   "delegateTask": {
     "target": { "providerInstanceId": "claudeAgent", "model": "claude-opus-5-5", "options": { "effort": "high" } },
     "role": "review",
-    "interactionMode": "plan",
+    "interactionMode": "default",
     "runtimeMode": "inherit"
   },
   "fallbacks": [{ "providerInstanceId": "codex", "model": "gpt-6-astra", "options": { "reasoningEffort": "high" } }],
@@ -834,7 +829,7 @@ footer.page-footer ul { columns: 2 300px; }
       "options": { "reasoningEffort": "high" }
     },
     "role": "review",
-    "interactionMode": "plan",
+    "interactionMode": "default",
     "runtimeMode": "inherit",
     "mode": "async",
     "clientRequestId": "omt:auth:U3:review:r2:a1"
@@ -857,7 +852,7 @@ note: cross-family: worker family claudeAgent; the configured order applies</cod
         <tr><th scope="row"><code>title</code></th><td><code>--title</code>, else <code class="cmd"><span class="nw">&lt;role&gt;[</span> <span class="nw">&lt;unit&gt;][</span> <span class="nw">r&lt;n&gt;]:</span> <span class="nw">&lt;first</span> <span class="nw">task</span> <span class="nw">line&gt;</span></code></td><td>Cut to 72 characters. <code>r&lt;n&gt;</code> appears only after round 1.</td></tr>
         <tr><th scope="row"><code>target</code></th><td>Route resolution, first ok rung after the <code>--against</code> reorder</td><td><code>providerInstanceId</code> (every default rung) or <code>driverKind</code> (a rung with only a driver), <code>model</code>, <code>options</code>.</td></tr>
         <tr><th scope="row"><code>role</code></th><td>The role's <code>t3Role</code></td><td><code>implementation</code>, <code>research</code>, <code>review</code>, <code>design</code>, <code>test</code>, or <code>general</code>.</td></tr>
-        <tr><th scope="row"><code>interactionMode</code></th><td>Role config</td><td><code>plan</code> for read-only defaults, <code>default</code> for edit roles.</td></tr>
+        <tr><th scope="row"><code>interactionMode</code></th><td>Role config</td><td><code>plan</code> for read-only defaults, <code>default</code> for edit roles, <code>review</code> and <code>oracle</code> included. A skill can narrow it to <code>plan</code>, as <code>omt-code-review</code> does for its reviewers.</td></tr>
         <tr><th scope="row"><code>runtimeMode</code></th><td>Role config</td><td><code>inherit</code> in every default role.</td></tr>
         <tr><th scope="row"><code>mode</code></th><td>Constant</td><td>Always <code>"async"</code>.</td></tr>
         <tr><th scope="row"><code>clientRequestId</code></th><td><code>requestId()</code></td><td>Present only when both <code>--plan</code> and <code>--unit</code> are given.</td></tr>
@@ -906,9 +901,9 @@ note: cross-family: worker family claudeAgent; the configured order applies</cod
       <caption>Result contracts by kind</caption>
       <thead><tr><th scope="col">Kind</th><th scope="col">Default roles</th><th scope="col">First label and verdicts</th><th scope="col">Other labels</th></tr></thead>
       <tbody>
-        <tr><th scope="row">work</th><td><code>execute</code>, <code>quick</code>, <code>deep</code>, <code>writing</code>, <code>design</code>, <code>ui</code></td><td><code class="cmd"><span class="nw">STATUS:</span> <span class="nw">DONE</span> <span class="nw">|</span> <span class="nw">BLOCKED</span> <span class="nw">|</span> <span class="nw">ESCALATE</span></code></td><td>SUMMARY, CHANGES, VERIFY, NOTES, EVIDENCE, OPEN</td></tr>
-        <tr><th scope="row">review</th><td><code>review</code>, <code>oracle</code>, <code>plan-review</code></td><td><code class="cmd"><span class="nw">VERDICT:</span> <span class="nw">APPROVE</span> <span class="nw">|</span> <span class="nw">REQUEST_CHANGES</span> <span class="nw">|</span> <span class="nw">BLOCK</span></code></td><td>SUMMARY, FINDINGS (P0 to P3), NOTES</td></tr>
-        <tr><th scope="row">test</th><td><code>verify</code>, <code>qa</code></td><td><code class="cmd"><span class="nw">VERDICT:</span> <span class="nw">VERIFIED</span> <span class="nw">|</span> <span class="nw">NOT</span> <span class="nw">VERIFIED</span> <span class="nw">|</span> <span class="nw">INCONCLUSIVE</span></code></td><td>CHECKS, TESTS, FAILURES, EVIDENCE</td></tr>
+        <tr><th scope="row">work</th><td><code>execute</code>, <code>writing</code>, <code>design</code>, <code>ui</code></td><td><code class="cmd"><span class="nw">STATUS:</span> <span class="nw">DONE</span> <span class="nw">|</span> <span class="nw">BLOCKED</span> <span class="nw">|</span> <span class="nw">ESCALATE</span></code></td><td>SUMMARY, CHANGES, VERIFY, NOTES, EVIDENCE, OPEN</td></tr>
+        <tr><th scope="row">review</th><td><code>review</code>, <code>oracle</code>, <code>plan-review</code></td><td><code class="cmd"><span class="nw">VERDICT:</span> <span class="nw">APPROVE</span> <span class="nw">|</span> <span class="nw">REQUEST_CHANGES</span> <span class="nw">|</span> <span class="nw">BLOCK</span></code></td><td>SUMMARY, FINDINGS (P0 to P3), FIXES, NOTES</td></tr>
+        <tr><th scope="row">test</th><td><code>qa</code></td><td><code class="cmd"><span class="nw">VERDICT:</span> <span class="nw">VERIFIED</span> <span class="nw">|</span> <span class="nw">NOT</span> <span class="nw">VERIFIED</span> <span class="nw">|</span> <span class="nw">INCONCLUSIVE</span></code></td><td>CHECKS (each with its exit code), FAILURES, EVIDENCE</td></tr>
         <tr><th scope="row">research</th><td><code>explore</code>, <code>research</code></td><td><code>ANSWER</code> (one to three sentences)</td><td>FINDINGS (cited), UNKNOWN</td></tr>
         <tr><th scope="row">plan</th><td><code>plan</code></td><td><code class="cmd"><span class="nw">PLAN:</span> <span class="nw">&lt;path&gt;</span></code></td><td>UNITS, DECISIONS NEEDED</td></tr>
         <tr><th scope="row">guardrail</th><td><code>guardrail</code></td><td><code class="cmd"><span class="nw">VERDICT:</span> <span class="nw">PROPOSALS</span> <span class="nw">|</span> <span class="nw">NONE</span></code></td><td>SUMMARY, PROPOSALS, NOTES</td></tr>
@@ -931,11 +926,12 @@ OPEN:
   <h3>How the parent acts on a verdict</h3>
   <ul>
     <li><code>DONE</code> is a claim. The parent checks the scope diff, runs at least one verify command, and reads the evidence file.</li>
-    <li><code>REQUEST_CHANGES</code> sends the P0 to P2 findings to fix tasks.</li>
-    <li><code>BLOCK</code> has two causes. A P0 finding with a clear fix inside the unit's scope goes to a fix task, as for <code>REQUEST_CHANGES</code>. A wrong approach, or a P0 whose fix changes the plan, marks the unit blocked, and the conductor re-plans it or asks the user.</li>
+    <li><code>FIXES</code> is also a claim. The main thread reads the reviewer's fix diff of those paths before QA starts.</li>
+    <li><code>REQUEST_CHANGES</code>: the main thread applies the relevance check and fixes the kept P0 to P2 findings itself.</li>
+    <li><code>BLOCK</code> has two causes. A P0 finding with a clear fix inside the unit's scope is fixed, as for <code>REQUEST_CHANGES</code>. A wrong approach, or a P0 whose fix changes the plan, marks the unit blocked, and the main thread re-plans it or asks the user.</li>
     <li><code>INCONCLUSIVE</code> is not a pass.</li>
     <li><code>BLOCKED</code>: read <code>OPEN</code>, resolve the blocker (a missing file, a scope change, or an owner decision), then dispatch again with the next attempt.</li>
-    <li><code>ESCALATE</code> re-plans, moves the unit to <code>deep</code>, or asks the user.</li>
+    <li><code>ESCALATE</code> re-plans the unit, builds it in the main thread, or asks the user.</li>
   </ul>
   <p>Severity levels. P0 breaks the build, loses data, or opens a security hole. P1 is a wrong result in a normal path. P2 is a wrong result in an edge case, a named missing test, or a requested CRAP finding above 30. P3 is style or clarity.</p>
 </section>
@@ -943,7 +939,7 @@ OPEN:
 <!-- 6. State -->
 <section id="state" aria-labelledby="state-h">
   <h2 id="state-h">6. State in the repository</h2>
-  <p>A long run outlives the agent's context. So the run state lives in files under <code>.omt/</code> in the project root. After compaction or a context reset, the conductor re-reads <code>omt plan status &lt;slug&gt;</code> and <code>omt ledger list --plan &lt;slug&gt;</code> before it acts.</p>
+  <p>A long run outlives the agent's context. So the run state lives in files under <code>.omt/</code> in the project root. After compaction or a context reset, the main thread re-reads <code>omt plan status &lt;slug&gt;</code> and <code>omt ledger list --plan &lt;slug&gt;</code> before it acts.</p>
 
   <h3>Config layers</h3>
   <figure>
@@ -983,6 +979,7 @@ OPEN:
   <ul>
     <li>Each file is JSONC. Comments and trailing commas are allowed. A syntax error becomes one issue, and the loader skips that file. A missing file is not an error.</li>
     <li>Root keys are <code>$schema</code>, <code>version</code> (must be 1), <code>profile</code>, <code>profiles</code>, <code>models</code>, <code>roles</code>, and <code>limits</code>. An unknown key is an error, and the loader drops it. The retired key <code>visuals</code> is a warning, and the loader drops it.</li>
+    <li>Set <code>2026-12</code> retired <code>workflow.build.verify</code>, <code>workflow.build.checkpoint</code>, <code>workflow.build.stallMinutes</code>, <code>limits.maxTasksPerRun</code>, and the roles <code>verify</code>, <code>quick</code>, and <code>deep</code>. A file that sets one still loads. The loader drops the key with the warning <code>&lt;path&gt; is no longer used; remove it</code>.</li>
     <li>An existing role merges field by field. A new <code>chain</code> replaces the old chain as a whole. A new role needs <code>description</code>, <code>access</code>, and <code>chain</code>.</li>
     <li><code>src/config/schema.ts</code> builds the JSON Schema from the constants in <code>validate.ts</code>. <code>bun run schema</code> writes it to <code>schema/omt.schema.json</code>, and a test checks that the committed file matches.</li>
   </ul>
@@ -1086,7 +1083,7 @@ Failed HTTP calls retry with backoff, so a short outage does not fail a sync.
     </div>
     <figcaption>Figure 7. A ledger slot. A dispatched entry that no terminal entry closes counts as <code>active</code>.</figcaption>
   </figure>
-  <p><code>omt ledger stats</code> computes the dispatch gate. <code>canDispatch</code> is <code>active &lt; maxParallel</code> and <code>dispatched &lt; maxTasksPerRun</code>. With <code>--plan</code>, a <code>max-parallel</code> key in the plan header lowers <code>maxParallel</code> to the lower of the two values, and a <code>max-tasks</code> key replaces <code>maxTasksPerRun</code>. <code>omt plan limit &lt;slug&gt; &lt;n&gt; --tasks &lt;n&gt;</code> sets both keys. Skills dispatch only while it prints <code>can dispatch: yes</code>.</p>
+  <p><code>omt ledger stats</code> computes the dispatch gate. <code>canDispatch</code> is <code>active &lt; maxParallel</code>. A run has no task budget, so the number of dispatched entries never stops a dispatch. With <code>--plan</code>, a <code>max-parallel</code> key in the plan header lowers <code>maxParallel</code> to the lower of the two values. <code>omt plan limit &lt;slug&gt; &lt;n&gt;</code> sets that key. A <code>max-tasks</code> header key has no effect, and <code>omt plan limit --tasks</code> fails with a usage error. Skills dispatch only while it prints <code>can dispatch: yes</code>.</p>
 <pre><code>$ omt ledger stats --plan http-retry
 plan: http-retry
 profile: normal
@@ -1094,13 +1091,11 @@ dispatched: 3
 active: 1
 terminal: 2
 max parallel: 6
-max tasks per run: 24
 can dispatch: yes</code></pre>
-  <p>A run is all ledger entries of one plan slug. The skills always pass <code>--plan &lt;slug&gt;</code>, so a new plan starts with a new budget of <code>maxTasksPerRun</code>. Without <code>--plan</code>, the counts cover the whole ledger.</p>
-  <p>When the output shows <code>can dispatch: no</code> and <code>active: 0</code>, no wake will come. The run is stalled, and the conductor tells the user which limit to raise.</p>
+  <p>A run is all ledger entries of one plan slug. The skills always pass <code>--plan &lt;slug&gt;</code>. Without <code>--plan</code>, the counts cover the whole ledger.</p>
 
   <h3>Evidence</h3>
-  <p>Edit children save command output and logs under <code>&lt;root&gt;/.omt/evidence/</code>. The brief says so in its evidence line. A LIGHT conductor that runs the verify commands itself saves the output there too. The report quotes the evidence for each done condition.</p>
+  <p>Edit children save command output and logs under <code>&lt;root&gt;/.omt/evidence/</code>. The brief says so in its evidence line. The main thread saves the output of the verify commands that it runs itself there too, and the QA child saves its logs and screenshots there. The report quotes the evidence for each done condition.</p>
   <div class="callout">
     <strong>Why state lives in the repository.</strong>
     <p>The run outlives the agent's context, and compaction drops detail. Files survive both. <code>omt init</code> writes <code>.omt/.gitignore</code> with <code>ledger.jsonl</code>, <code>evidence/</code>, <code>bin/</code>, <code>install.json</code>, <code>backups/</code>, <code>plans/</code>, <code>locks/</code>, and <code>guardrails.md</code>, so the run data stays out of commits. All worktrees of one repository share the one <code>.omt/</code> in the main checkout, so a thread in one worktree reads the plan that a thread in another worktree wrote.</p>
@@ -1110,65 +1105,75 @@ can dispatch: yes</code></pre>
 <!-- 7. Skills -->
 <section id="skills" aria-labelledby="skills-h">
   <h2 id="skills-h">7. The skills</h2>
-  <p>Eleven <code>SKILL.md</code> files share one reference folder, <code>skills/omt/references/</code>. All T3 rules live in <code>delegation.md</code>. Skill names work as composer mentions. <code>$omt-ulw</code> becomes <code>/omt-ulw</code> in Claude and Cursor and <code>/skill:omt-ulw</code> in Pi. It stays <code>$omt-ulw</code> in Codex. Every skill that calls <code>delegate_task</code> records <code>--provider</code> and <code>--model</code> on each dispatch, so <code>--against auto</code> can find the worker later.</p>
+  <p>Ten <code>SKILL.md</code> files share one reference folder, <code>skills/omt/references/</code>. All T3 rules live in <code>delegation.md</code>. Skill names work as composer mentions. <code>$omt-ulw</code> becomes <code>/omt-ulw</code> in Claude and Cursor and <code>/skill:omt-ulw</code> in Pi. It stays <code>$omt-ulw</code> in Codex. Every skill that calls <code>delegate_task</code> records <code>--provider</code> and <code>--model</code> on each dispatch, so <code>--against auto</code> can find the worker later.</p>
   <div class="cards">
     <article class="card">
       <h3>omt</h3>
       <p class="kind">user-invoked router</p>
       <dl>
         <dt>Trigger</dt><dd>The user picks a workflow.</dd>
-        <dt>Does</dt><dd>Lists the eight workflow skills, <code>omt-help</code> for questions about omt, <code>omt-setup</code> for setup and config changes, and a CLI cheat sheet. Names <code>omt-ulw</code> as the default.</dd>
+        <dt>Does</dt><dd>Lists the seven workflow skills, <code>omt-help</code> for questions about omt, <code>omt-setup</code> for setup and config changes, and a CLI cheat sheet. Names <code>omt-ulw</code> as the default.</dd>
         <dt>Dispatches</dt><dd>No roles.</dd>
-        <dt>Hands off to</dt><dd>Any of the eight workflow skills, <code>omt-help</code>, or <code>omt-setup</code>.</dd>
+        <dt>Hands off to</dt><dd>Any of the seven workflow skills, <code>omt-help</code>, or <code>omt-setup</code>.</dd>
       </dl>
     </article>
     <article class="card">
       <h3>omt-ulw</h3>
-      <p class="kind">model-invoked conductor loop</p>
+      <p class="kind">model-invoked build flow</p>
       <dl>
         <dt>Trigger</dt><dd><code>ulw</code>, <code>ultrawork</code>, or build, fix, or ship with subagents.</dd>
-        <dt>Does</dt><dd>Runs steps 0 to 11 in LIGHT or HEAVY tier. The review briefs (step 7) and the oracle brief (step 10) use <code>--against auto</code>, so the reviewer comes from the family other than the worker's.</dd>
-        <dt>Dispatches</dt><dd><code>explore</code>, <code>execute</code>, <code>review</code>, <code>verify</code>, <code>qa</code>, <code>deep</code> (a fix that needs investigation), <code>ui</code> (UI units), <code>oracle</code> (<code>F2</code>, when <code>build.oracle</code> requires it).</dd>
-        <dt>Hands off to</dt><dd><code>omt-plan</code> for HEAVY plans and in plan mode. <code>omt-design</code> in step 5 when the plan asks for a design step that has not run.</dd>
+        <dt>Does</dt><dd>Runs steps 0 to 12 in LIGHT or HEAVY tier. The main thread explores, asks question batches, plans, builds every unit, writes the planned tests, and fixes. The review brief (step 8) uses <code>--against</code> with the main thread's driver, so the reviewer comes from the other family. Waits for each child inside its turn.</dd>
+        <dt>Dispatches</dt><dd><code>explore</code> for broad reads, one <code>review</code> or <code>oracle</code> child (<code>REVIEW</code> or <code>F2</code>) per review round, one <code>qa</code> child (<code>QA</code>) with at most 2 re-runs, and <code>execute</code> or <code>ui</code> for a large unit that runs as an independent track.</dd>
+        <dt>Hands off to</dt><dd><code>omt-research</code> in step 1 when the message is a question. <code>omt-plan</code> for HEAVY plans and in plan mode. <code>omt-design</code> in step 6 when the plan asks for a design step that has not run.</dd>
       </dl>
     </article>
     <article class="card">
       <h3>omt-plan</h3>
       <p class="kind">model-invoked planner</p>
       <dl>
-        <dt>Trigger</dt><dd>A plan, spec, or design before code. ulw HEAVY step 4.</dd>
-        <dt>Does</dt><dd>Writes a plan file, then applies <code>plan.review</code>. With <code>owner</code>, the owner approves the plan and no <code>plan-review</code> task runs. With <code>two-families</code> or <code>one</code>, it runs up to <code>maxReviewRounds</code> fresh <code>plan-review</code> rounds. With <code>two-families</code>, round 1 has one reviewer from each family (<code>--against codex</code> and <code>--against claudeAgent</code>). With <code>one</code>, round 1 has one reviewer. Round 1 blockers become a frozen list under Log. The plan hash comes from <code>shasum -a 256</code>. Step 0 keeps its own provider instance (<code>modelSelection.instanceId</code>). The single-reviewer briefs pass it to <code>--against</code>. When a <code>plan</code> task wrote the plan, they pass that task's provider.</dd>
-        <dt>Dispatches</dt><dd><code>explore</code>, <code>plan-review</code>, optional <code>plan</code>.</dd>
-        <dt>Hands off to</dt><dd>The reply holds the plan summary in full. On approval by a review round or the owner, back to ulw step 5 with the slug. At the round limit with blockers, it stops and starts no units.</dd>
+        <dt>Trigger</dt><dd>A plan, spec, or design before code. ulw HEAVY step 5.</dd>
+        <dt>Does</dt><dd>Plans only. The main thread explores, asks question batches until no question is open, and writes the plan file itself, with <code>## Summary</code> last. Then it applies <code>plan.review</code>. With <code>owner</code>, the owner approves the plan and no <code>plan-review</code> task runs. With <code>two-families</code>, 1 <code>plan-review</code> child runs with <code>--against</code> the main thread's driver, on the other family. With <code>one</code>, 1 <code>plan-review</code> child runs on any family. Round 1 freezes the blockers. The main thread fixes them, and one re-review checks only those blockers: at most 2 rounds.</dd>
+        <dt>Dispatches</dt><dd><code>explore</code> for broad reads, <code>plan-review</code>.</dd>
+        <dt>Hands off to</dt><dd>The reply holds the plan summary in full. Called by ulw, back to ulw step 5. Called alone, it stops. Blockers still open after round 2 go to the owner.</dd>
+      </dl>
+    </article>
+    <article class="card">
+      <h3>omt-grill</h3>
+      <p class="kind">model-invoked goal test</p>
+      <dl>
+        <dt>Trigger</dt><dd>A vague goal, edge cases, or a stress test before a plan.</dd>
+        <dt>Does</dt><dd>Finds the facts first in the main thread. Gets one second opinion from 1 <code>grill</code> child on the other family, once per grill, with no fallback to the main thread's family. Asks question batches, and checks each answer against the facts. Repeats until no question is open. Writes the grill file at <code>$(omt paths --grills)/&lt;slug&gt;.md</code>, no plan and no code.</dd>
+        <dt>Dispatches</dt><dd><code>explore</code> and <code>research</code> (units <code>GX&lt;k&gt;</code>) for broad checks, and one <code>grill</code>.</dd>
+        <dt>Hands off to</dt><dd>Offers <code>omt-plan</code>, which reads the grill file.</dd>
       </dl>
     </article>
     <article class="card">
       <h3>omt-design</h3>
       <p class="kind">model-invoked design pass</p>
       <dl>
-        <dt>Trigger</dt><dd>Designs, mockups, screens, or a design pass. ulw step 5 when the plan has an <code>omt-design</code> step.</dd>
-        <dt>Does</dt><dd>Needs interaction <code>default</code>. Asks for <code>design.variants</code> variants of each screen in a new Paper file. Shows the screenshots by screen, and the owner picks one variant per screen and steers. Repeats for up to <code>maxReviewRounds</code> rounds. Writes the spec <code>docs/design/&lt;slug&gt;.md</code>. Plan <code>design-&lt;slug&gt;</code> or the caller's plan, units <code>DS&lt;k&gt;</code>. The owner is the only design review.</dd>
-        <dt>Dispatches</dt><dd><code>design</code>, with no fallback to the other family.</dd>
+        <dt>Trigger</dt><dd>Designs, mockups, screens, or a design pass. ulw step 6 when the plan has an <code>omt-design</code> step.</dd>
+        <dt>Does</dt><dd>Needs interaction <code>default</code>. Draws <code>design.variants</code> variants of each screen in a new Paper file: the main thread draws them itself when it runs Claude Opus, and 1 <code>design</code> child on Opus draws them otherwise. Shows the screenshots by screen, and the owner picks one variant per screen and steers until they approve. The main thread writes the spec <code>docs/design/&lt;slug&gt;.md</code>. On request, it builds the screens with ulw steps 7 to 12. The owner is the only design review.</dd>
+        <dt>Dispatches</dt><dd><code>design</code> (units <code>DS&lt;k&gt;</code>) when the main thread is not on Opus, with no fallback to the other family.</dd>
         <dt>Hands off to</dt><dd>The caller with the spec path. UI units cite the spec and use the <code>ui</code> role.</dd>
       </dl>
     </article>
     <article class="card">
-      <h3>omt-review</h3>
-      <p class="kind">model-invoked review fan-out</p>
+      <h3>omt-code-review</h3>
+      <p class="kind">model-invoked code review</p>
       <dl>
-        <dt>Trigger</dt><dd>Review uncommitted changes, a branch, a commit, or a PR.</dd>
-        <dt>Does</dt><dd>Reads the active profile, or the one that <code>--profile</code> names. With <code>review.reviewers: auto</code>, sizes reviewer groups by diff lines (under 200 gives 1, under 1,000 gives 2, under 3,000 gives 3, else 4). A number from 1 to 4 sets the group count. <code>review.families: both</code> puts one reviewer from each family on each group. It never runs more than <code>maxParallel</code> reviewers at once. Groups files by directory. Merges findings. Plan <code>review-&lt;slug&gt;</code>, units <code>G&lt;k&gt;</code>. Round 1 passes no <code>--against</code>, because the author is unknown. When <code>review.oracle</code> is <code>on</code>, the oracle passes <code>--against</code> with the provider that most review tasks ran on. After a fix loop, it reviews each fix under its unit <code>F&lt;k&gt;</code> with <code>--against auto</code>.</dd>
-        <dt>Dispatches</dt><dd><code>review</code>, <code>oracle</code>, and <code>execute</code> for an optional fix loop (units <code>F&lt;k&gt;</code>). For a pull request, its eleven PR steps can also dispatch <code>verify</code> for changed flows, <code>execute</code> for CI fixes, <code>guardrail</code>, and an owner-approved <code>qa</code>, as the <code>review.*</code> switches say. <code>omt-review --profile pr-review &lt;number&gt;</code> turns on every PR step.</dd>
+        <dt>Trigger</dt><dd>Review uncommitted changes, a branch, a commit, or a PR. It replaces <code>omt-review</code>.</dd>
+        <dt>Does</dt><dd>Reads the active profile, or the one that <code>--profile</code> names. Sizes the review by changed lines, without <code>docs/design/</code>. Under 200 lines: 1 reviewer over the whole change, which is the oracle when <code>review.oracle</code> is <code>on</code>. 200 lines or more: 2 groups under 1,000, 3 under 3,000, else 4, each with 1 <code>review</code> child, then 1 <code>oracle</code> over the whole change. A number from 1 to 4 in <code>review.reviewers</code> overrides the size rule. At most 4 reviewers and 1 oracle. Reviewers are report-only: each task runs in plan mode. The main thread waits in its turn, merges the findings, and makes every approved fix itself. Plan <code>review-&lt;slug&gt;</code>, units <code>G&lt;k&gt;</code>, <code>oracle</code>, and <code>FIX</code>.</dd>
+        <dt>Dispatches</dt><dd><code>review</code> and <code>oracle</code>. After fixes, 1 <code>review</code> child over all fixes of the round (<code>FIX</code>). For a pull request, its eleven PR steps can also dispatch <code>qa</code> for changed flows and new tests, and <code>guardrail</code>, as the <code>review.*</code> switches say. <code>omt-code-review --profile pr-review &lt;number&gt;</code> turns on every PR step.</dd>
         <dt>Hands off to</dt><dd>Returns findings to the user.</dd>
       </dl>
     </article>
     <article class="card">
       <h3>omt-research</h3>
-      <p class="kind">model-invoked research fan-out</p>
+      <p class="kind">model-invoked cited answer</p>
       <dl>
-        <dt>Trigger</dt><dd>A question that needs the repo, docs, or the web, answered with citations.</dd>
-        <dt>Does</dt><dd>Splits the question into 2 to 6 sub-questions. Plan <code>research-&lt;slug&gt;</code>, units <code>Q&lt;k&gt;</code>. Writes <code>research-&lt;slug&gt;.md</code> in the evidence directory that <code>omt paths --evidence</code> prints, only on request.</dd>
-        <dt>Dispatches</dt><dd><code>explore</code> for the repo, <code>research</code> for docs and the web.</dd>
+        <dt>Trigger</dt><dd>A question that needs the repo, docs, or the web, answered with citations. ulw step 1 when the message is a question.</dd>
+        <dt>Does</dt><dd>Answers a narrow question in the main thread, with a <code>path:line</code> or a URL for each fact. Splits a broad question into 2 to 4 sub-questions for parallel read-only children, waits for them in the turn, and opens each cited source to check each claim. Plan <code>research-&lt;slug&gt;</code>, units <code>Q&lt;k&gt;</code>. Writes <code>research-&lt;slug&gt;.md</code> in the evidence directory that <code>omt paths --evidence</code> prints, only on request.</dd>
+        <dt>Dispatches</dt><dd>For a broad question only: <code>explore</code> for the repo, <code>research</code> for docs and the web.</dd>
         <dt>Hands off to</dt><dd>Returns a cited answer.</dd>
       </dl>
     </article>
@@ -1176,36 +1181,25 @@ can dispatch: yes</code></pre>
       <h3>omt-swarm</h3>
       <p class="kind">user-invoked worktree tracks</p>
       <dl>
-        <dt>Trigger</dt><dd>The user asks for separate threads or worktree tracks that end in PRs.</dd>
-        <dt>Does</dt><dd>Needs runtime <code>full-access</code> and interaction <code>default</code>. Runs at most <code>maxParallel</code> tracks at once with <code>t3_thread_launch</code> on branch <code>omt/&lt;slug&gt;/&lt;track&gt;</code>. A stacked track starts from the previous track's branch. Each track uses the plan slug <code>&lt;slug&gt;-&lt;track&gt;</code> and sets its own cap with <code>omt plan limit &lt;slug&gt;-&lt;track&gt; &lt;k&gt;</code>, so that the tracks together stay near the caller's <code>maxParallel</code>. All worktrees share the <code>.omt/</code> config, so a track never changes <code>limits</code> in it. Tracks are top-level threads, so they never wake the caller. A <code>schedule_task</code> heartbeat bound to the caller's thread (<code>everyMs: 600000</code>) reads each track, links each PR with <code>link_pull_request</code>, watches it with <code>watch_pull_request</code>, and launches the waiting tracks in later waves. It records each launch with ledger role <code>swarm</code>, and deletes itself when no track waits and every launched track has a PR or a blocker.</dd>
-        <dt>Dispatches</dt><dd>No <code>delegate_task</code> roles. Each track thread runs <code>omt-ulw</code>, then commits, pushes, and opens a PR.</dd>
-        <dt>Hands off to</dt><dd><code>omt-ulw</code> in each track.</dd>
-      </dl>
-    </article>
-    <article class="card">
-      <h3>omt-loop</h3>
-      <p class="kind">user-invoked continuation</p>
-      <dl>
-        <dt>Trigger</dt><dd>Keep work going until a condition holds.</dd>
-        <dt>Does</dt><dd>A condition command exits 0 when done, 1 when work remains, 2 when broken. On Claude or Codex the user types <code>/goal &lt;objective&gt;</code>. Otherwise it uses <code>schedule_task</code>. The cap is 20 ticks by default, recorded with role <code>loop</code>. Each tick runs the condition command, then the next <code>omt-ulw</code> steps for the plan. At exit 0, exit 2, or the cap, it deletes the schedule with <code>delete_scheduled_task</code> (or asks the user to type <code>/goal clear</code>) and reports the ticks used.</dd>
-        <dt>Dispatches</dt><dd>Whatever the <code>omt-ulw</code> steps dispatch.</dd>
-        <dt>Hands off to</dt><dd><code>omt-ulw</code> steps on each tick.</dd>
+        <dt>Trigger</dt><dd>The user asks to build a plan as parallel tracks in separate worktree threads.</dd>
+        <dt>Does</dt><dd>Needs a plan from <code>omt-plan</code>, runtime <code>full-access</code>, interaction <code>default</code>, and a feature branch. Asks no question batches and runs no plan review. The main thread splits the plan units into at most <code>maxParallel</code> tracks with disjoint scopes and does not build. Each track gets a LIGHT plan <code>&lt;slug&gt;-&lt;track&gt;</code> and its own cap with <code>omt plan limit &lt;slug&gt;-&lt;track&gt; &lt;k&gt;</code>, and runs in a top-level thread from <code>t3_thread_launch</code> on branch <code>omt/&lt;slug&gt;/&lt;track&gt;</code>. The main thread waits for the tracks with <code>t3_thread_wait</code>, with no heartbeat. Then 1 <code>review</code> child on the other family reviews every track diff and fixes local findings in the track worktrees. The main thread reads the fix diffs, commits them on the track branches, merges the tracks, and runs 1 <code>qa</code> child on the merged code with at most 2 re-runs. It opens one PR.</dd>
+        <dt>Dispatches</dt><dd><code>review</code> and <code>qa</code>. Each track thread runs ulw steps 7 to 12 with its own review and QA children, and commits with no push and no PR. Each launch is recorded with ledger role <code>swarm</code>.</dd>
+        <dt>Hands off to</dt><dd>Track threads with <code>t3_thread_launch</code>. A merge conflict that needs deep knowledge of one track goes back to it with <code>t3_thread_send</code>.</dd>
       </dl>
     </article>
   </div>
-  <p><code>omt</code>, <code>omt-swarm</code>, and <code>omt-loop</code> set <code>disable-model-invocation: true</code>. They also ship <code>agents/openai.yaml</code> with <code>allow_implicit_invocation: false</code> for Codex.</p>
+  <p><code>omt</code> and <code>omt-swarm</code> set <code>disable-model-invocation: true</code>. They also ship <code>agents/openai.yaml</code> with <code>allow_implicit_invocation: false</code> for Codex. <code>omt-loop</code> and <code>omt-show</code> were removed: a main thread that waits in its turn needs no loop, and the plan summary in the reply replaced the plan page.</p>
   <figure>
     <div class="fig-scroll" tabindex="0" role="region" aria-label="Skill hand-offs">
 <svg class="diagram" role="img" aria-labelledby="fig8-t fig8-d" width="1150" height="470" viewBox="0 0 1150 470">
   <title id="fig8-t">Skill hand-offs</title>
-  <desc id="fig8-d">The omt router points to the eight workflow skills. The ulw hook points to omt-ulw. omt-ulw hands HEAVY planning to omt-plan, which returns to step 5 after approval. omt-ulw runs omt-design at step 5 when the plan has a design step. omt-design dispatches design variants in Paper, the owner picks and approves them, and it writes a design spec for the UI units. omt-grill runs a two-family grill panel and explore tasks before a plan, and writes no plan and no code. omt-loop continues omt-ulw steps on each tick. omt-swarm launches track threads with t3_thread_launch, and each track runs omt-ulw and opens a PR. A heartbeat schedule on the caller's thread reads the tracks, and T3 PR watches wake omt-swarm. omt-research is a read-only fan-out. omt-review fans out read-only reviewers over 1 to 4 file groups, runs an oracle pass when the profile asks for one, and can run an optional execute fix loop.</desc>
+  <desc id="fig8-d">The omt router points to the seven workflow skills. The ulw hook points to omt-ulw. omt-ulw runs omt-research at step 1 when the message is a question. omt-ulw hands HEAVY planning to omt-plan, which returns to step 5 after approval. omt-ulw runs omt-design at step 6 when the plan has a design step. omt-design draws variants in Paper, in the main thread on Opus or in one design child, the owner picks and approves them, and the main thread writes a design spec for the UI units. omt-grill finds facts, gets one grill second opinion, and writes no plan and no code; it offers omt-plan. omt-swarm takes a plan, launches track threads with t3_thread_launch, and waits for them with t3_thread_wait. Each track runs ulw steps 7 to 12 and commits. Then one review child, the merge, and one qa child run, and omt-swarm opens one PR. omt-research answers narrow questions itself and sends broad ones to 2 to 4 read-only children. omt-code-review runs 1 reviewer for a small diff, or 2 to 4 grouped reviewers and 1 oracle for a large diff, all report-only.</desc>
   <rect class="box-w" x="16" y="20" width="210" height="44" rx="8"/>
   <text class="b" x="121" y="39" text-anchor="middle">ulw hook pointer</text>
   <text class="s" x="121" y="56" text-anchor="middle">Claude Code only</text>
   <rect class="box" x="500" y="20" width="140" height="44" rx="8"/>
   <text class="m b" x="570" y="39" text-anchor="middle">omt</text>
   <text class="s" x="570" y="56" text-anchor="middle">router (user)</text>
-  <path class="ln-f" d="M570,64 L78,138"/>
   <path class="ln-f" d="M570,64 L220,138"/>
   <path class="ln-f" d="M570,64 L362,138"/>
   <path class="ln-f" d="M570,64 L504,138"/>
@@ -1215,65 +1209,58 @@ can dispatch: yes</code></pre>
   <path class="ln-f" d="M570,64 L1072,138"/>
   <path class="ln" d="M121,64 L210,138" marker-end="url(#ah)"/>
   <text class="s halo" x="118" y="108" text-anchor="middle">load omt-ulw</text>
-  <rect class="box-a" x="16" y="140" width="124" height="44" rx="8"/><text class="m b" x="78" y="167" text-anchor="middle">omt-loop</text>
   <rect class="box-a" x="158" y="140" width="124" height="44" rx="8"/><text class="m b" x="220" y="167" text-anchor="middle">omt-ulw</text>
   <rect class="box-a" x="300" y="140" width="124" height="44" rx="8"/><text class="m b" x="362" y="167" text-anchor="middle">omt-plan</text>
   <rect class="box-a" x="442" y="140" width="124" height="44" rx="8"/><text class="m b" x="504" y="167" text-anchor="middle">omt-design</text>
-  <rect class="box-a" x="584" y="140" width="124" height="44" rx="8"/><text class="m b" x="646" y="167" text-anchor="middle">omt-review</text>
+  <rect class="box-a" x="584" y="140" width="124" height="44" rx="8"/><text class="m b" x="646" y="167" text-anchor="middle">omt-code-review</text>
   <rect class="box-a" x="726" y="140" width="124" height="44" rx="8"/><text class="m b" x="788" y="167" text-anchor="middle">omt-research</text>
   <rect class="box-a" x="868" y="140" width="124" height="44" rx="8"/><text class="m b" x="930" y="167" text-anchor="middle">omt-grill</text>
   <rect class="box-a" x="1010" y="140" width="124" height="44" rx="8"/><text class="m b" x="1072" y="167" text-anchor="middle">omt-swarm</text>
-  <path class="ln" d="M140,162 L156,162" marker-end="url(#ah)"/>
   <path class="ln" d="M220,184 Q291,250 362,184" marker-start="url(#ah)" marker-end="url(#ah)"/>
-  <text class="s halo" x="291" y="238" text-anchor="middle">step 4 HEAVY: plan</text>
+  <text class="s halo" x="291" y="238" text-anchor="middle">step 5 HEAVY: plan</text>
   <text class="s halo" x="291" y="254" text-anchor="middle">approved: step 5</text>
-  <text class="s" x="16" y="208">ticks run omt-ulw</text>
-  <text class="s" x="16" y="224">/goal or schedule_task</text>
+  <text class="s" x="150" y="208" text-anchor="end">builds in the</text>
+  <text class="s" x="150" y="224" text-anchor="end">main thread;</text>
+  <text class="s" x="150" y="240" text-anchor="end">a question goes</text>
+  <text class="s" x="150" y="256" text-anchor="end">to omt-research</text>
   <text class="s" x="504" y="208" text-anchor="middle">Paper variants</text>
   <text class="s" x="504" y="224" text-anchor="middle">owner picks</text>
   <text class="s" x="504" y="240" text-anchor="middle">spec for ui units</text>
-  <text class="s" x="646" y="208" text-anchor="middle">1 to 4 review groups</text>
-  <text class="s" x="646" y="224" text-anchor="middle">oracle per profile</text>
-  <text class="s" x="646" y="240" text-anchor="middle">fix loop uses execute</text>
-  <text class="s" x="788" y="208" text-anchor="middle">2 to 6 sub-questions</text>
-  <text class="s" x="788" y="224" text-anchor="middle">explore and research</text>
+  <text class="s" x="646" y="208" text-anchor="middle">1 reviewer, or</text>
+  <text class="s" x="646" y="224" text-anchor="middle">2 to 4 groups + oracle</text>
+  <text class="s" x="646" y="240" text-anchor="middle">report-only</text>
+  <text class="s" x="788" y="208" text-anchor="middle">narrow: main thread</text>
+  <text class="s" x="788" y="224" text-anchor="middle">broad: 2 to 4 children</text>
   <text class="s" x="788" y="240" text-anchor="middle">cited answer</text>
-  <text class="s" x="930" y="208" text-anchor="middle">grill panel per round</text>
-  <text class="s" x="930" y="224" text-anchor="middle">one per family</text>
+  <text class="s" x="930" y="208" text-anchor="middle">facts first</text>
+  <text class="s" x="930" y="224" text-anchor="middle">one grill opinion</text>
   <text class="s" x="930" y="240" text-anchor="middle">no plan, no code</text>
-  <rect class="box-t" x="964" y="20" width="170" height="44" rx="8"/>
-  <text class="b" x="1049" y="47" text-anchor="middle">T3 PR watch</text>
-  <path class="ln-d" d="M1104,64 L1104,138" marker-end="url(#ah)"/>
-  <text class="s halo" x="1096" y="106" text-anchor="end">PR wake</text>
   <path class="ln" d="M1110,184 L1110,378" marker-end="url(#ah)"/>
-  <text class="m halo" x="1102" y="350" text-anchor="end">t3_thread_launch</text>
-  <path class="ln" d="M1030,184 L974,260" marker-end="url(#ah)"/>
-  <rect class="box-t" x="784" y="262" width="200" height="60" rx="8"/>
-  <text class="b" x="884" y="282" text-anchor="middle">heartbeat</text>
-  <text class="s" x="884" y="298" text-anchor="middle">schedule_task on this thread</text>
-  <text class="s" x="884" y="314" text-anchor="middle">links and watches each PR</text>
-  <path class="ln" d="M924,322 L984,378" marker-end="url(#ah)"/>
-  <text class="m halo" x="916" y="350" text-anchor="end">t3_thread_read,</text>
-  <text class="m halo" x="916" y="366" text-anchor="end">list_thread_pull_requests</text>
+  <text class="m halo" x="1102" y="300" text-anchor="end">t3_thread_launch</text>
+  <path class="ln-d" d="M1000,378 L1000,186" marker-end="url(#ah)"/>
+  <text class="m halo" x="992" y="300" text-anchor="end">t3_thread_wait</text>
   <rect class="box-c" x="944" y="380" width="190" height="72" rx="8"/>
   <text class="b" x="1039" y="402" text-anchor="middle">track threads</text>
   <text class="s" x="1039" y="420" text-anchor="middle">own worktree each</text>
-  <text class="s" x="1039" y="438" text-anchor="middle">run omt-ulw, open a PR</text>
+  <text class="s" x="1039" y="438" text-anchor="middle">ulw steps 7 to 12, commit</text>
+  <rect class="box-t" x="700" y="380" width="220" height="72" rx="8"/>
+  <text class="b" x="810" y="402" text-anchor="middle">after the tracks</text>
+  <text class="s" x="810" y="420" text-anchor="middle">1 review, merge, 1 qa</text>
+  <text class="s" x="810" y="438" text-anchor="middle">one PR</text>
 </svg>
     </div>
-    <figcaption>Figure 8. Hand-offs between the skills. Dotted lines show what the <code>omt</code> router lists. In plan mode, ulw step 0 also offers <code>omt-plan</code>.</figcaption>
+    <figcaption>Figure 8. Hand-offs between the skills. Dotted lines show what the <code>omt</code> router lists. In plan mode, ulw step 0 also offers <code>omt-plan</code>. <code>omt-help</code> and <code>omt-setup</code> are left out.</figcaption>
   </figure>
   <h3>The waiting model</h3>
-  <p>Every write tool, <code>delegate_task</code> included, needs the caller's active turn. After the turn ends, writes fail with <code>parent_not_active</code>. The wake names only task ids. The normal path has five steps.</p>
+  <p>Every write tool, <code>delegate_task</code> included, needs the caller's active turn. After the turn ends, writes fail with <code>parent_not_active</code>, and a later wake names only task ids. So the main thread waits for its children inside its turn.</p>
   <ol>
-    <li>The conductor dispatches async tasks.</li>
-    <li>It records them in the ledger.</li>
-    <li>It ends its turn.</li>
-    <li>After the turn ends, T3 queues the wake as a new turn. A Claude parent never gets the wake inside a running turn.</li>
-    <li>The conductor calls <code>task_status</code> for each task id.</li>
+    <li>For one child, the main thread calls <code>delegate_task</code> with <code>mode: "wait"</code> and a <code>timeoutMs</code> of at most 3,600,000.</li>
+    <li>For parallel children, it dispatches each with <code>mode: "async"</code>, then calls <code>t3_thread_wait</code> with <code>threadId</code> and <code>runId</code> for each.</li>
+    <li>It records each dispatch in the ledger.</li>
+    <li>It calls <code>task_status</code> for each task and records the result. On <code>waitTimedOut: true</code>, it waits again or reads <code>task_status</code>.</li>
   </ol>
-  <p>Exception. When a goal or a stop hook keeps the turn running, the skill uses <code>mode: "wait"</code> for one task or <code>t3_thread_wait</code> for parallel tasks.</p>
-  <p>When <code>task_status.summary</code> is <code>Child task completed without an assistant result.</code>, the child put its answer somewhere else, often in a proposed plan in plan mode. The conductor reads the child with <code>t3_thread_read</code> (view <code>messages</code>) before it dispatches again. A later wake that names tasks that the conductor already read needs no action.</p>
+  <p>A turn ends only for the owner: a batch of questions, a plan approval, or the report. No skill starts a heartbeat or calls <code>schedule_task</code> to wait. A later wake that names tasks that the main thread already read needs no action.</p>
+  <p>When <code>task_status.summary</code> is <code>Child task completed without an assistant result.</code>, the child put its answer somewhere else, often in a proposed plan in plan mode. The main thread reads the child with <code>t3_thread_read</code> (view <code>messages</code>) before it dispatches again.</p>
 </section>
 
 <!-- 8. Guardrails -->
@@ -1286,18 +1273,18 @@ can dispatch: yes</code></pre>
       <thead><tr><th scope="col">Limit</th><th scope="col">Default</th><th scope="col">Range</th><th scope="col">Checked by</th></tr></thead>
       <tbody>
         <tr><th scope="row"><code>maxParallel</code></th><td>6</td><td>1 to 32</td><td><code class="cmd"><span class="nw">omt</span> <span class="nw">ledger</span> <span class="nw">stats</span></code> (<code>active</code>)</td></tr>
-        <tr><th scope="row"><code>maxTasksPerRun</code></th><td>24</td><td>1 to 500</td><td><code class="cmd"><span class="nw">omt</span> <span class="nw">ledger</span> <span class="nw">stats</span></code> (<code>dispatched</code>)</td></tr>
         <tr><th scope="row"><code>maxDepth</code></th><td>1</td><td>0 to 3</td><td>The delegation line in every brief</td></tr>
-        <tr><th scope="row"><code>maxReviewRounds</code></th><td>4</td><td>1 to 10</td><td>ulw step 9, the oracle, <code>omt-plan</code>, <code>omt-design</code>, and the <code>omt-review</code> fix loop</td></tr>
+        <tr><th scope="row"><code>maxReviewRounds</code></th><td>4</td><td>1 to 10</td><td>ulw step 9 (reviews of one build) and the <code>omt-code-review</code> CI fix rounds. A plan review has at most 2 rounds.</td></tr>
       </tbody>
     </table>
   </div>
   <ul>
+    <li><strong>No task budget.</strong> Set <code>2026-12</code> removed <code>maxTasksPerRun</code>. A config that still sets it loads with the warning <code>limits.maxTasksPerRun is no longer used; remove it</code>.</li>
     <li><strong>Read-only roles run in plan mode.</strong> T3 enforces read-only access for plan-mode children on Claude, Codex, Cursor, and OpenCode. T3 has no plan-mode handling for Pi, and no default rung uses Pi.</li>
-    <li><strong>A plan-mode thread dispatches only read-only roles.</strong> It dispatches only roles such as <code>explore</code>, <code>research</code>, <code>plan-review</code>, <code>review</code>, and <code>oracle</code>, writes no files, and gives the result in its final message. It runs no <code>omt init</code>, <code>plan new</code>, <code>plan mark</code>, or <code>ledger add</code>.</li>
-    <li><strong>Children share the checkout.</strong> T3 Code v0.1.0 can isolate a child in a worktree, but omt does not use that yet. Every unit has an explicit scope. Editing units run in parallel only when their scopes do not overlap. Every brief tells the child never to break and restore files in the shared checkout. The <code>qa</code> role makes a failure proof in a private copy.</li>
-    <li><strong>The conductor edits no product files.</strong> It stops and reports when no child can edit.</li>
-    <li><strong>Reviewers come from the other family.</strong> <code>plan-review</code>, <code>review</code>, and <code>oracle</code> are cross-family relative to the worker. When the other family is not available, the same family reviews.</li>
+    <li><strong>A plan-mode thread dispatches only read-only roles.</strong> It dispatches only read-only roles such as <code>explore</code>, <code>research</code>, and <code>plan-review</code>, and <code>review</code> or <code>oracle</code> tasks with <code>interactionMode: "plan"</code> set, writes no files, and gives the result in its final message. It runs no <code>omt init</code>, <code>plan new</code>, <code>plan mark</code>, or <code>ledger add</code>.</li>
+    <li><strong>Children share the checkout.</strong> T3 Code v0.1.0 can isolate a child in a worktree, but omt does not use that yet. Every unit has an explicit scope. A unit that an <code>execute</code> child builds runs in parallel only when its scope does not overlap other edits. Every brief tells the child never to break and restore files in the shared checkout. The main thread makes each failure proof in a private copy.</li>
+    <li><strong>Review and QA never overlap.</strong> The reviewer edits files, so QA starts only after the main thread read the reviewer's fix diff. QA edits nothing.</li>
+    <li><strong>Reviewers come from the other family.</strong> <code>plan-review</code>, <code>grill</code>, <code>review</code>, and <code>oracle</code> are cross-family relative to the author of the change. When the other family is not available, the same family reviews.</li>
     <li><strong>Modes only narrow.</strong> Runtime rank is <code>approval-required</code> &lt; <code>auto-accept-edits</code> &lt; <code>auto</code> &lt; <code>full-access</code>. Interaction rank is <code>plan</code> &lt; <code>default</code>.</li>
     <li><strong>Skills read modes with <code>t3_thread_configuration</code>.</strong> They must not call <code>orchestrator_capabilities</code> to read modes.</li>
   </ul>
@@ -1334,7 +1321,7 @@ can dispatch: yes</code></pre>
       </tbody>
     </table>
   </div>
-  <p>The pointer goes out as <code>{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"..."}}</code>. It tells the agent to load <code>omt-ulw</code>, start with the banner, step 0, and step 1, run the full loop, make no product edits itself, and report done only with evidence.</p>
+  <p>The pointer goes out as <code>{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"..."}}</code>. It tells the agent to load <code>omt-ulw</code>, start with the banner, step 0, and step 1, explore, ask question batches, plan, and build in its own thread, let one review child and one QA child check the work, and report done only with evidence.</p>
 </section>
 
 <!-- 9. Install -->
@@ -1343,6 +1330,7 @@ can dispatch: yes</code></pre>
   <p><code>omt install</code> builds a plan and writes nothing at that stage. It prints the plan. It stops on conflicts unless <code>--force</code> is given. It stops after the plan with <code>--dry-run</code>. It asks once (<code>Apply this plan? [y/N]</code>) unless <code>--yes</code> is given. Then it does these actions.</p>
   <ul>
     <li>It copies the skills with a <code>.omt-managed.json</code> marker.</li>
+    <li>It removes each retired skill: a skill that the manifest lists and that has the marker, but that the bundle no longer ships, such as <code>omt-loop</code>, <code>omt-review</code>, or <code>omt-show</code>. Links to it go too. An edited retired skill is a conflict, and <code>--force</code> backs it up and removes it. <code>omt update</code> uses the same plan, but keeps an edited retired skill with a reason.</li>
     <li>It creates relative symlinks.</li>
     <li>It writes a starter config.</li>
     <li>It adds the hook when <code>--hooks</code> is given.</li>
@@ -1408,7 +1396,7 @@ can dispatch: yes</code></pre>
       <tbody>
         <tr><th scope="row"><code>runtime</code></th><td>both</td><td>The release binary, Node 22 or later, or Bun 1.4.4 or later</td></tr>
         <tr><th scope="row"><code>config</code></th><td>both</td><td>Config loads with no issues</td></tr>
-        <tr><th scope="row"><code>skills</code></th><td>both</td><td>All skills installed and current, not modified</td></tr>
+        <tr><th scope="row"><code>skills</code></th><td>both</td><td>All skills installed and current, not modified. WARN for a retired skill that is still in place: <code>no longer shipped: &lt;names&gt; in &lt;agents root&gt;; run omt install</code>.</td></tr>
         <tr><th scope="row"><code>links</code></th><td>both</td><td>Every Claude skill link resolves to its managed skill copy</td></tr>
         <tr><th scope="row"><code>hooks</code></th><td>both</td><td>Hook present and its paths exist. INFO when no hook is installed.</td></tr>
         <tr><th scope="row"><code>t3</code></th><td>both</td><td>The T3 settings file exists (read only)</td></tr>
@@ -1444,13 +1432,14 @@ can dispatch: yes</code></pre>
         <tr><th scope="row">Default rungs name the provider instance</th><td>T3 checks a named provider instance again before it refuses it. It takes a <code>driverKind</code>-only target from a cached snapshot that can be stale.</td><td>Observed T3 behavior</td></tr>
         <tr><th scope="row">One effort ladder</th><td>T3 rejects unknown option ids and values. Each driver names effort differently.</td><td>omt</td></tr>
         <tr><th scope="row">CLI for deterministic parts, skills for judgment</th><td>An LLM does merging and counting badly and expensively. The CLI has no T3 credential, so T3 stays the final validator.</td><td>omt</td></tr>
+        <tr><th scope="row">The main thread builds, children check</th><td>Per-unit children cost 4 or more threads per unit and a heartbeat to wake the conductor. A child is kept only for black-box verification, independent parallel work, or a context that one loop cannot hold. See <a href="design/workflow-fold.md">the workflow fold design</a>.</td><td>Anthropic, "when to fold subagents into your main agent loop"</td></tr>
         <tr><th scope="row">Briefs and result contracts</th><td>A child sees no parent conversation. The summary is the last assistant message.</td><td>OmO worker contract</td></tr>
         <tr><th scope="row">Read-only roles in plan mode</th><td>T3 enforces read-only access on most drivers. A live experiment confirmed the Claude behavior.</td><td>OmO read-only specialists</td></tr>
         <tr><th scope="row">Scoped parallelism, worktrees only on request</th><td>Children share the checkout. T3 rules allow new threads only when the user asks.</td><td>T3 shared instructions</td></tr>
-        <tr><th scope="row">Own limits</th><td>T3 has no cap on concurrency or depth.</td><td>OmO spawn budgets</td></tr>
+        <tr><th scope="row">Own limits</th><td>T3 has no cap on concurrency or depth. omt caps parallel tasks, depth, and review rounds. Set <code>2026-12</code> removed the task budget, because a folded run starts only a few children.</td><td>OmO spawn budgets</td></tr>
         <tr><th scope="row">State in the repository</th><td>A long run outlives the context. Files survive compaction.</td><td>OmO plan files</td></tr>
-        <tr><th scope="row">Continuation through T3, one optional hook</th><td>T3 already has <code>/goal</code> and wakes.</td><td>OmO Codex edition pointer hook</td></tr>
-        <tr><th scope="row">Install follows the existing layout</th><td>Claude does not read <code>~/.agents/skills</code>. The user gives consent once and gets a clean uninstall.</td><td>OmO consent-first setup</td></tr>
+        <tr><th scope="row">Waiting in the turn, one optional hook</th><td>The main thread waits for its children inside its turn with <code>delegate_task</code> in wait mode or <code>t3_thread_wait</code>, so no heartbeat and no loop skill are needed.</td><td>OmO Codex edition pointer hook</td></tr>
+        <tr><th scope="row">Install follows the existing layout</th><td>Claude does not read <code>~/.agents/skills</code>. The user gives consent once and gets a clean uninstall. An upgrade removes managed skills that the bundle no longer ships, so agents do not load a stale skill.</td><td>OmO consent-first setup</td></tr>
       </tbody>
     </table>
   </div>
@@ -1487,11 +1476,11 @@ can dispatch: yes</code></pre>
         <tr><th scope="row"><code class="cmd"><span class="nw">omt</span> <span class="nw">roles</span> <span class="nw">[--capabilities</span> <span class="nw">&lt;file&gt;]</span> <span class="nw">[--role</span> <span class="nw">&lt;name&gt;]...</span> <span class="nw">[--plan</span> <span class="nw">&lt;slug&gt;]</span> <span class="nw">[--profile</span> <span class="nw">&lt;name&gt;]</span> <span class="nw">[--json]</span></code></th><td>Resolve every role chain and print a table. The <code>CROSS</code> column says <code>yes</code> for a cross-family role.</td></tr>
         <tr><th scope="row"><code class="cmd"><span class="nw">omt</span> <span class="nw">route</span> <span class="nw">&lt;role&gt;</span> <span class="nw">[--capabilities</span> <span class="nw">&lt;file&gt;]</span> <span class="nw">[--against</span> <span class="nw">&lt;provider|driver|auto&gt;]</span> <span class="nw">[--plan</span> <span class="nw">&lt;slug&gt;]</span> <span class="nw">[--profile</span> <span class="nw">&lt;name&gt;]</span> <span class="nw">[--unit</span> <span class="nw">&lt;id&gt;]</span></code></th><td>Print <code>delegate_task</code> arguments for one role as JSON. <code>--against</code> puts the other family first for a cross-family role. <code>auto</code> needs <code>--plan</code>.</td></tr>
         <tr><th scope="row"><code class="cmd"><span class="nw">omt</span> <span class="nw">brief</span> <span class="nw">&lt;role&gt;</span> <span class="nw">(--task</span> <span class="nw">&lt;text&gt;</span> <span class="nw">|</span> <span class="nw">--task-file</span> <span class="nw">&lt;file&gt;)</span> <span class="nw">[options]</span></code></th><td>Render the brief, or with <code>--json</code> a ready <code>delegate_task</code> payload. With <code>--json</code>, it takes <code>--against</code> like <code>omt route</code>, and the notes go to stderr.</td></tr>
-        <tr><th scope="row"><code class="cmd"><span class="nw">omt</span> <span class="nw">plan</span> <span class="nw">new</span> <span class="nw">&lt;slug&gt;</span> <span class="nw">[--title</span> <span class="nw">&lt;text&gt;]</span> <span class="nw">[--light]</span> <span class="nw">[--max-parallel</span> <span class="nw">&lt;n&gt;]</span> <span class="nw">[--max-tasks</span> <span class="nw">&lt;n&gt;]</span> <span class="nw">[--profile</span> <span class="nw">&lt;name&gt;]</span> <span class="nw">[--force]</span></code></th><td>Write <code>.omt/plans/&lt;slug&gt;.md</code> from the template.</td></tr>
-        <tr><th scope="row"><code class="cmd"><span class="nw">omt</span> <span class="nw">plan</span> <span class="nw">limit</span> <span class="nw">&lt;slug&gt;</span> <span class="nw">[&lt;n|none&gt;]</span> <span class="nw">[--tasks</span> <span class="nw">&lt;n|none&gt;]</span></code></th><td>Set or remove the plan's <code>max-parallel</code> and <code>max-tasks</code> header keys.</td></tr>
+        <tr><th scope="row"><code class="cmd"><span class="nw">omt</span> <span class="nw">plan</span> <span class="nw">new</span> <span class="nw">&lt;slug&gt;</span> <span class="nw">[--title</span> <span class="nw">&lt;text&gt;]</span> <span class="nw">[--light]</span> <span class="nw">[--max-parallel</span> <span class="nw">&lt;n&gt;]</span> <span class="nw">[--profile</span> <span class="nw">&lt;name&gt;]</span> <span class="nw">[--force]</span></code></th><td>Write <code>.omt/plans/&lt;slug&gt;.md</code> from the template.</td></tr>
+        <tr><th scope="row"><code class="cmd"><span class="nw">omt</span> <span class="nw">plan</span> <span class="nw">limit</span> <span class="nw">&lt;slug&gt;</span> <span class="nw">&lt;n|none&gt;</span></code></th><td>Set or remove the plan's <code>max-parallel</code> header key. <code>--tasks</code> and <code>--max-tasks</code> are usage errors, because the task budget was removed.</td></tr>
         <tr><th scope="row"><code class="cmd"><span class="nw">omt</span> <span class="nw">plan</span> <span class="nw">profile</span> <span class="nw">&lt;slug&gt;</span> <span class="nw">&lt;name|none&gt;</span></code></th><td>Set or remove the plan's workflow profile.</td></tr>
         <tr><th scope="row"><code class="cmd"><span class="nw">omt</span> <span class="nw">plan</span> <span class="nw">mark</span> <span class="nw">&lt;slug&gt;</span> <span class="nw">&lt;id&gt;</span> <span class="nw">&lt;done|open|blocked&gt;</span></code></th><td>Set an item checkbox and append a log line.</td></tr>
-        <tr><th scope="row"><code class="cmd"><span class="nw">omt</span> <span class="nw">plan</span> <span class="nw">status</span> <span class="nw">[&lt;slug&gt;]</span> <span class="nw">[--json]</span></code></th><td>Print counts and the next open unit. The default is the newest plan.</td></tr>
+        <tr><th scope="row"><code class="cmd"><span class="nw">omt</span> <span class="nw">plan</span> <span class="nw">status</span> <span class="nw">[&lt;slug&gt;]</span> <span class="nw">[--json]</span></code></th><td>Print counts, the next open unit, the ready units, and a warning for each dependency error or <code>max-tasks</code> header key. The default is the newest plan.</td></tr>
         <tr><th scope="row"><code class="cmd"><span class="nw">omt</span> <span class="nw">plan</span> <span class="nw">list</span> <span class="nw">[--json]</span></code></th><td>Print one line per plan.</td></tr>
         <tr><th scope="row"><code class="cmd"><span class="nw">omt</span> <span class="nw">ledger</span> <span class="nw">add</span> <span class="nw">--role</span> <span class="nw">&lt;role&gt;</span> <span class="nw">--status</span> <span class="nw">&lt;status&gt;</span> <span class="nw">[options]</span></code></th><td>Append one entry to <code>.omt/ledger.jsonl</code>.</td></tr>
         <tr><th scope="row"><code class="cmd"><span class="nw">omt</span> <span class="nw">ledger</span> <span class="nw">list</span> <span class="nw">[--plan</span> <span class="nw">&lt;slug&gt;]</span> <span class="nw">[--json]</span></code></th><td>Print the entries.</td></tr>
@@ -1533,7 +1522,7 @@ can dispatch: yes</code></pre>
         <tr><th scope="row"><code>src/profile/</code>, <code>src/lock/</code></th><td>Profile resolution and the shared build lock.</td></tr>
         <tr><th scope="row"><code>src/commands/</code></th><td>One file per command (15), plus <code>shared.ts</code>.</td></tr>
         <tr><th scope="row"><code>src/util/</code></th><td>args, errors (<code>OmtError</code>), fs (<code>writeFileAtomic</code>), ids, json, output</td></tr>
-        <tr><th scope="row"><code>skills/</code></th><td>The 12 skills and <code>omt/references/</code>.</td></tr>
+        <tr><th scope="row"><code>skills/</code></th><td>The 10 skills and <code>omt/references/</code>.</td></tr>
         <tr><th scope="row"><code>scripts/</code>, <code>schema/</code></th><td><code>build-schema.ts</code> writes <code>schema/omt.schema.json</code> from <code>src/config/schema.ts</code>. Run <code class="cmd"><span class="nw">bun</span> <span class="nw">run</span> <span class="nw">schema</span></code> after you change validation. <code>build.ts</code> writes the bundle and the binary, and <code>release.ts</code> writes the npm packages and the release archives.</td></tr>
         <tr><th scope="row"><code>test/</code></th><td><code>bun:test</code> suites with temp-dir helpers and <code>fakeContext()</code>. Child-process tests point <code>HOME</code> and the <code>OMT_*</code>, <code>XDG_*</code>, <code>CLAUDE_*</code>, and <code>T3CODE_*</code> variables at temp paths.</td></tr>
       </tbody>
@@ -1547,7 +1536,7 @@ can dispatch: yes</code></pre>
   <h2 id="change-h">12. Where to make a change</h2>
   <p><code>docs/spec.md</code> is the contract. Change the spec first, then the code and the tests.</p>
   <ul>
-    <li><strong>A new role.</strong> Add it to a config file. To ship it as a default, add it to <code>src/config/defaults.ts</code> and add a persona in <code>skills/omt/references/roles/&lt;role&gt;.md</code>.</li>
+    <li><strong>A new role.</strong> Add it to a config file. To ship it as a default, add it to a new set in <code>src/config/defaultSets.ts</code> and add a persona in <code>skills/omt/references/roles/&lt;role&gt;.md</code>.</li>
     <li><strong>A new command.</strong> Add a file in <code>src/commands/</code> and register it in <code>src/main.ts</code>.</li>
     <li><strong>A skill change.</strong> Edit <code>skills/&lt;name&gt;/SKILL.md</code>. A test checks that every relative link in a skill resolves.</li>
   </ul>
@@ -1560,15 +1549,15 @@ can dispatch: yes</code></pre>
   <dl class="glossary">
     <dt>T3 orchestrator v2</dt><dd>The app-owned orchestration in T3 Code. Every provider session reaches it through the <code>t3-code</code> MCP server at <code>/mcp</code>.</dd>
     <dt><code>delegate_task</code></dt><dd>The T3 tool that creates a child thread on a chosen provider and model. Its default mode is async.</dd>
-    <dt>wake</dt><dd>The fixed text that T3 queues into the parent when async children finish. It names the task ids, not the results.</dd>
+    <dt>wake</dt><dd>The fixed text that T3 queues into the parent when async children finish after its turn ended. It names the task ids, not the results. omt waits inside the turn, so a wake for tasks it already read needs no action.</dd>
     <dt>interaction mode</dt><dd><code>plan</code> or <code>default</code>. Plan mode makes most drivers read-only. A child can only narrow it.</dd>
     <dt>runtime mode</dt><dd><code>approval-required</code> &lt; <code>auto-accept-edits</code> &lt; <code>auto</code> &lt; <code>full-access</code>. A child can only narrow it.</dd>
-    <dt>conductor</dt><dd>The parent agent that runs <code>omt-ulw</code>. It plans, dispatches, reads results, and verifies. It edits no product files.</dd>
+    <dt>main thread</dt><dd>The parent agent that runs an omt skill. In <code>omt-ulw</code> it explores, asks question batches, plans, builds, and fixes, and one review child and one QA child check the work. Older docs call it the conductor.</dd>
     <dt>role</dt><dd>An omt name for a kind of work, such as <code>execute</code> or <code>review</code>. It maps to a chain of rungs. In T3, the <code>role</code> argument is only a one-line prefix.</dd>
     <dt>rung</dt><dd>One entry in a role chain. It names a provider or driver, a model, an effort, and optional raw options. The skill tries the rungs in order. A later rung is a backup that runs only when T3 refuses the earlier one. It is not a second opinion. For a cross-family role, <code>--against</code> can put a later rung first.</dd>
     <dt>chain</dt><dd>An ordered list of 1 to 10 rungs. The first ok rung wins.</dd>
     <dt>fallbacks</dt><dd>The targets of the later ok rungs, in the order tried. The skill uses them on typed T3 errors.</dd>
-    <dt><code>crossFamily</code></dt><dd>A role flag. For a role with <code>crossFamily: true</code>, <code>--against</code> puts the rungs of the family other than the worker's first. The defaults set it for <code>plan-review</code>, <code>review</code>, and <code>oracle</code>. <code>omt roles</code> shows it in the <code>CROSS</code> column.</dd>
+    <dt><code>crossFamily</code></dt><dd>A role flag. For a role with <code>crossFamily: true</code>, <code>--against</code> puts the rungs of the family other than the worker's first. The defaults set it for <code>plan-review</code>, <code>grill</code>, <code>review</code>, and <code>oracle</code>. <code>omt roles</code> shows it in the <code>CROSS</code> column.</dd>
     <dt><code>--against</code></dt><dd>A flag of <code>omt route</code> and <code>omt brief</code>. Its value is a provider instance id, a driver kind, or <code>auto</code>. It names the worker whose change the task reviews. <code>auto</code> reads the worker from the ledger.</dd>
     <dt>worker family</dt><dd>The driver of the worker, such as <code>claudeAgent</code> or <code>codex</code>. The family is the driver, not the model vendor.</dd>
     <dt>effort ladder</dt><dd><code>off</code> &lt; <code>minimal</code> &lt; <code>low</code> &lt; <code>medium</code> &lt; <code>high</code> &lt; <code>xhigh</code> &lt; <code>max</code>, mapped onto each driver's option.</dd>
@@ -1581,24 +1570,24 @@ can dispatch: yes</code></pre>
     <dt><code>clientRequestId</code></dt><dd>The idempotency key <code>omt:&lt;plan&gt;:&lt;unit&gt;:&lt;role&gt;:r&lt;round&gt;:a&lt;attempt&gt;</code>.</dd>
     <dt>round / attempt</dt><dd>The round increases with each review or fix round. The attempt increases with each retry or fallback rung in a round.</dd>
     <dt>depth / maxDepth</dt><dd>The child's delegation level and the maximum level. At the maximum, the child does the work itself.</dd>
-    <dt>unit</dt><dd>A unit of work. In a plan file, a <code>U&lt;n&gt;</code> item with a role, scope, done condition, verify command, and dependencies. As a <code>--unit</code> value in the ledger and request ids, also <code>E&lt;k&gt;</code> (explore), <code>G&lt;k&gt;</code> (review group), <code>Q&lt;k&gt;</code> (research question), and <code>F&lt;k&gt;</code> (review fix).</dd>
+    <dt>unit</dt><dd>A unit of work. In a plan file, a <code>U&lt;n&gt;</code> item with a role, scope, done condition, verify command, and dependencies. As a <code>--unit</code> value in the ledger and request ids, also <code>E&lt;k&gt;</code> (explore), <code>REVIEW</code> (the ulw review), <code>QA</code> (the ulw QA run), <code>G&lt;k&gt;</code> (code review group), <code>FIX</code> (a review of fixes), <code>Q&lt;k&gt;</code> (research question), and <code>DS&lt;k&gt;</code> (design). A unit that the main thread builds has the role <code>main</code>.</dd>
     <dt>U / D / F items</dt><dd>Plan checkboxes for units, done-when checks, and final checks (<code>F1</code> test suite, <code>F2</code> oracle).</dd>
     <dt>LIGHT / HEAVY</dt><dd>The two ulw tiers. LIGHT is one or two units in one area with no design decision left. HEAVY is everything else.</dd>
     <dt>ledger</dt><dd><code>.omt/ledger.jsonl</code>. It records the delegated tasks, rounds, and verdicts.</dd>
     <dt>ledger slot</dt><dd>A dispatched entry that no terminal entry has closed. It counts as <code>active</code>.</dd>
-    <dt>run</dt><dd>The work of one plan slug. <code>maxTasksPerRun</code> and <code>maxParallel</code> count the ledger entries of that slug.</dd>
-    <dt><code>canDispatch</code></dt><dd><code>active &lt; maxParallel</code> and <code>dispatched &lt; maxTasksPerRun</code>.</dd>
+    <dt>run</dt><dd>The work of one plan slug. <code>maxParallel</code> counts the active ledger entries of that slug. A run has no task budget.</dd>
+    <dt><code>canDispatch</code></dt><dd><code>active &lt; maxParallel</code>.</dd>
     <dt>P0 to P3</dt><dd>Review severity levels, from a broken build or security hole (P0) to style (P3).</dd>
-    <dt>oracle</dt><dd>The read-only role that reviews the finished change from the family other than the main implementer's before a run counts as done, when <code>build.oracle</code> requires it. With <code>normal</code>, that is every HEAVY run.</dd>
-    <dt>frozen blocker list</dt><dd>The round 1 plan-review blockers, written under Log. Later rounds count only those, regressions, or cited risks.</dd>
+    <dt>oracle</dt><dd>The role that reviews the finished change, fixes local findings, and reports the rest, from the family other than the main implementer's before a run counts as done, when <code>build.oracle</code> requires it. With <code>normal</code>, that is every HEAVY run.</dd>
+    <dt>frozen blocker list</dt><dd>The round 1 plan-review blockers, written under Log. The round 2 re-review checks only those blockers and the regressions from their fixes.</dd>
     <dt>shared checkout</dt><dd>A delegated child runs in the parent's project, branch, and worktree. It is not isolated. T3 Code v0.1.0 can isolate a child with <code>isolation: "worktree"</code>, and omt does not use that yet.</dd>
-    <dt>track</dt><dd>An <code>omt-swarm</code> unit that runs as a top-level T3 thread in its own worktree and ends in a PR.</dd>
-    <dt>tick</dt><dd>One <code>omt-loop</code> iteration, recorded in the ledger with role <code>loop</code>.</dd>
+    <dt>track</dt><dd>A group of plan units with a disjoint scope that <code>omt-swarm</code> runs as a top-level T3 thread in its own worktree and branch. It commits, and the main thread merges it.</dd>
     <dt>pointer</dt><dd>The <code>additionalContext</code> text that the ulw hook injects. It tells the agent to load <code>omt-ulw</code> first.</dd>
     <dt>shim</dt><dd><code>&lt;root&gt;/.omt/bin/omt</code>, a <code>sh</code> script that runs the CLI that made the install: the recorded binary, the recorded runtime with the recorded CLI file, or a one-shot runner with the pinned version.</dd>
     <dt>exclude block</dt><dd>A per-root section in the repository's <code>info/exclude</code> that hides a project install from git.</dd>
     <dt>managed directory</dt><dd>A skill directory that holds <code>.omt-managed.json</code> with package, version, skill, and hash.</dd>
     <dt>locally modified</dt><dd>A managed skill whose current hash differs from its marker hash. Install treats it as a conflict.</dd>
+    <dt>retired skill</dt><dd>A managed skill that the manifest lists but the bundle no longer ships, such as <code>omt-loop</code>, <code>omt-review</code>, or <code>omt-show</code>. Install and update remove it.</dd>
     <dt>OmO</dt><dd>oh-my-openagent. Source of categories with fallback chains, ultrawork, plan review rounds, and evidence-based done. Sustainable Use License 1.0.</dd>
     <dt>omp</dt><dd>oh-my-pi. Source of model roles, agent definitions, fan-out with shared context, and the review recipe. MIT.</dd>
   </dl>

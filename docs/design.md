@@ -6,7 +6,7 @@ The [T3 orchestration report](research/t3-orchestrator-v2.md), [OmO report](rese
 
 ## Who this is for
 
-The user is a developer who runs Claude Code, Codex, Cursor, Pi, or OpenCode agents from T3 Code. That developer wants one sentence ("ulw: add OAuth to the API") to turn into a planned run. Each unit goes to a role-routed model and gets the checks that its profile requires. The normal profile reviews each unit and requires a final cross-family oracle for HEAVY work.
+The user is a developer who runs Claude Code, Codex, Cursor, Pi, or OpenCode agents from T3 Code. That developer wants one sentence ("ulw: add OAuth to the API") to turn into a planned run. The main thread plans and builds the work, and role-routed child tasks check it: one review child and one QA child, with the checks that the profile requires. The normal profile makes the reviewer of HEAVY work a cross-family oracle.
 
 The maintainer inherits a small TypeScript CLI with no runtime dependencies, a set of portable skills, and one config file. Every subagent runs as a T3 child thread, so the T3 UI already shows progress, cancellation, and results. oh-my-t3code adds no daemon. Its only server is the local config editor, which runs only while `omt config edit --web` runs.
 
@@ -26,7 +26,7 @@ T3 does not give us roles, model routing, briefs, review loops, or done criteria
 
 ### Roles, not model names
 
-Skills and plans name a role such as `execute`, `review`, or `verify`. One config maps each role to an ordered chain of rungs. A rung is a provider, a model, and an effort level. The first rung that T3 can run wins.
+Skills and plans name a role such as `execute`, `review`, or `qa`. One config maps each role to an ordered chain of rungs. A rung is a provider, a model, and an effort level. The first rung that T3 can run wins.
 
 This comes from omp model roles and OmO categories. It matters more in T3 than in either source, because T3 can reach several providers at once. A role chain such as "Opus 5.5 at medium effort, then GPT-6.1-Sol at xhigh effort" survives a missing subscription or a disabled provider.
 
@@ -38,9 +38,17 @@ The `plan-review`, `review`, and `oracle` roles are cross-family. The skill pass
 
 The ledger records the provider of each dispatch. So `--against auto` finds the worker of a unit, or the main implementer of a plan, without help from the agent.
 
+### The main thread builds, and children check
+
+Before set `2026-12`, the conductor of an `omt-ulw` run edited no product files. Each unit cost at least 4 children (execute, review, verify, and qa), and each fix round cost 2 more. The largest runs started 67 to 90 child threads for one task. The conductor also ended its turn after each dispatch, so a stall heartbeat had to wake it, and `omt-loop` existed only to keep runs moving.
+
+The [workflow fold design](design/workflow-fold.md) follows one rule: keep a child only for black-box verification, for independent parallel work that needs a fresh context, or for a context that one loop cannot hold. So the main thread now explores, asks the owner its questions in batches, plans, and builds in one context. One review child on the other family reviews the whole diff, and one QA child runs every check and device flow. The reviewer fixes local findings itself, because a reviewer that only reports costs one more round for a fix that it could see. The main thread reads the reviewer's fix diff before QA starts, because a child's summary is a claim and the diff is the evidence. QA edits nothing, so its result says only what passed. The main thread waits for each child inside its turn and ends a turn only for the owner, so no heartbeat and no `omt-loop` are needed.
+
+The same rule shapes the other flows. `omt-plan`, `omt-grill`, `omt-research`, and `omt-design` do their work in the main thread and start a child only for a second opinion from the other family, a broad read, or a design that the main thread's model cannot draw. `omt-code-review` gives a small diff 1 reviewer and a large diff 2 to 4 grouped reviewers and 1 oracle, because a review of a few hundred lines fits in one context and more reviewers only repeat findings. `omt-swarm` keeps separate threads, because each track is independent work in its own worktree, but it reviews all track diffs once and runs QA once on the merged code.
+
 ### A grill runs before the plan
 
-A plan reviewer finds a missing edge case as a gap in a written plan. At that point the plan has units, scopes, and a test list, and each fix changes them. So `omt-grill` tests the goal before a plan exists, while a change costs one line in a grill file. Each round runs one Claude and one Codex child that do not see each other. The aim is coverage, not agreement: two families with different blind spots find more edge cases, and a disagreement shows a real choice. The user knows some areas and not others. In an area that the user does not know, the models decide and give the reason, so the user answers only the questions that they can answer well. `omt-plan` reads the grill file, asks no settled question again, and turns the accepted and changed edge cases into test lines.
+A plan reviewer finds a missing edge case as a gap in a written plan. At that point the plan has units, scopes, and a test list, and each fix changes them. So `omt-grill` tests the goal before a plan exists, while a change costs one line in a grill file. The main thread finds the facts in the code first, and one `grill` child from the other family gives a second opinion once per grill. The aim is coverage, not agreement: two families with different blind spots find more edge cases, and a disagreement shows a real choice. The main thread checks each answer against the facts before it asks the next batch. The user knows some areas and not others. In an area that the user does not know, the models decide and give the reason, so the user answers only the questions that they can answer well. `omt-plan` reads the grill file, asks no settled question again, and turns the accepted and changed edge cases into test lines.
 
 ### Designs come from Opus, and the owner steers
 
@@ -82,17 +90,17 @@ omt once drew each final plan as an HTML page with a flowchart of the units. Own
 
 A child sees nothing of the parent conversation. Every task therefore carries a brief with a fixed shape: role persona, task, context, scope, constraints, done condition, verify commands, and the required final message format. OmO's worker contract (task, deliverable, scope, verify, stop condition) is the model for this.
 
-`task_status.summary` is the child's last assistant message. Each role therefore ends with a fixed result block: `STATUS` for workers, `VERDICT` for reviewers, verify, qa, and guardrail tasks, and `ANSWER` for researchers. The parent reads the block and checks the evidence itself. A worker's "done" is a claim until the parent or a `verify` task confirms it.
+`task_status.summary` is the child's last assistant message. Each role therefore ends with a fixed result block: `STATUS` for workers, `VERDICT` for reviewers, qa, and guardrail tasks, and `ANSWER` for researchers. The parent reads the block and checks the evidence itself. A worker's "done" is a claim until the parent or a `qa` task confirms it.
 
 ### Read-only roles run in plan mode
 
-A live experiment showed that a Claude child in T3 `plan` interaction mode runs read-only commands, stays in plan mode, and returns its final message intact. Explore, research, review, oracle, plan-review, and guardrail roles therefore default to `interactionMode: "plan"`. On Claude, Codex, Cursor, and OpenCode, T3 enforces read-only access for those children, and the brief does not have to rely on the child's restraint. T3 has no plan-mode handling for Pi, so a Pi child in a read-only role relies on its brief alone. No default rung uses Pi; a custom chain that adds Pi to a read-only role accepts that risk.
+A live experiment showed that a Claude child in T3 `plan` interaction mode runs read-only commands, stays in plan mode, and returns its final message intact. Explore, research, plan-review, grill, and guardrail roles therefore default to `interactionMode: "plan"`. Set `2026-12` makes `review` and `oracle` edit roles, so that the `omt-ulw` reviewer can fix local findings. `omt-code-review` still sets `interactionMode: "plan"` on each of its review and oracle tasks, so its reviewers only report. On Claude, Codex, Cursor, and OpenCode, T3 enforces read-only access for those children, and the brief does not have to rely on the child's restraint. T3 has no plan-mode handling for Pi, so a Pi child in a read-only role relies on its brief alone. No default rung uses Pi; a custom chain that adds Pi to a read-only role accepts that risk.
 
-Plan mode has one trap. T3 stores a proposed plan as its own item type, and `task_status.summary` reads only assistant messages. A child that answers with a proposed plan (Claude's ExitPlanMode, or Codex plan output) can hide its result block from the summary. Every plan-mode brief therefore tells the child to stay in plan mode and put the block in its final assistant message. When a summary still comes back empty, the conductor reads the child thread, which includes proposed plans.
+Plan mode has one trap. T3 stores a proposed plan as its own item type, and `task_status.summary` reads only assistant messages. A child that answers with a proposed plan (Claude's ExitPlanMode, or Codex plan output) can hide its result block from the summary. Every plan-mode brief therefore tells the child to stay in plan mode and put the block in its final assistant message. When a summary still comes back empty, the main thread reads the child thread, which includes proposed plans.
 
 ### Children share the checkout
 
-Delegated units stay in one checkout so their changes are integrated throughout the run. A worktree per unit would need repeated setup, integration, and checks after merge. Each unit has an explicit file scope. Only disjoint edit scopes run in parallel, up to the default `maxParallel` of 6. Shared build state uses a lock. Independent tracks can use `omt-swarm` when the owner asks for separate worktree threads.
+Children stay in one checkout so their changes are integrated throughout the run. A worktree per unit would need repeated setup, integration, and checks after merge. Each unit has an explicit file scope. A large unit that the main thread hands to an `execute` child runs in parallel only when its scope does not overlap other edits, up to the default `maxParallel` of 6. The reviewer and QA never run at the same time, because the reviewer edits files. Shared build state uses a lock. Independent tracks can use `omt-swarm` when the owner asks for separate worktree threads.
 
 ### Worktrees install their own dependencies
 
@@ -102,7 +110,7 @@ The runner selects a global virtual store with the isolated linker. Each worktre
 
 ### Finished children are settled
 
-T3 keeps a finished child loaded for 30 idle minutes. Codex then keeps the thread for its unload delay, which is 1800 seconds from Codex 0.163.0. Each loaded Codex thread starts its own stdio MCP server processes. In one long run, a single Codex app-server had 1,042 child processes: up to 174 copies of each of its 6 MCP servers. Codex native subagents of an idle parent stay loaded until the app-server stops, because T3's idle release unsubscribes only the parent. A settle releases the child at once and unsubscribes its native subagents too. So the conductor settles each child after it records the result. Owners also set `-c thread_unload_delay_secs=60` in T3's Codex launch arguments, which makes Codex close a settled thread after one minute.
+T3 keeps a finished child loaded for 30 idle minutes. Codex then keeps the thread for its unload delay, which is 1800 seconds from Codex 0.163.0. Each loaded Codex thread starts its own stdio MCP server processes. In one long run, a single Codex app-server had 1,042 child processes: up to 174 copies of each of its 6 MCP servers. Codex native subagents of an idle parent stay loaded until the app-server stops, because T3's idle release unsubscribes only the parent. A settle releases the child at once and unsubscribes its native subagents too. So the main thread settles each child after it records the result. Owners also set `-c thread_unload_delay_secs=60` in T3's Codex launch arguments, which makes Codex close a settled thread after one minute.
 
 ### The config editor shows where each value comes from
 
@@ -116,19 +124,19 @@ The editor is not a daemon. It runs in the foreground of `omt config edit --web`
 
 ### Profiles select the workflow
 
-A role selects a model. A profile selects the plan, build, and review steps. Keeping those choices separate lets a project use the same roles for normal work, prototypes, and PR reviews. Sparse profile overrides inherit `normal`, so a custom workflow states only its differences. A plan header keeps the selected profile across context resets. The conductor reloads it on wake so an owner can switch the remaining work.
+A role selects a model. A profile selects the plan, build, and review steps. Keeping those choices separate lets a project use the same roles for normal work, prototypes, and PR reviews. Sparse profile overrides inherit `normal`, so a custom workflow states only its differences. A plan header keeps the selected profile across context resets. The main thread reloads it after a reset or a switch, so an owner can switch the remaining work.
 
 ### Git actions follow a config policy
 
 Most owners work on branches and worktrees, where a question before each commit, push, and PR only adds a turn. Agent harnesses commit only when the user asks or gives standing approval. So the policy in `workflow.git` is that standing approval: the owner writes it once and can change it per profile. `omt git check` finds the current and default branch in code, so the decision does not depend on a model's reading of git output. A commit or push on the default branch asks first, because a wrong commit there reaches everyone who builds on that branch. A merge asks first, because it puts the change into the base branch, and that decision belongs to the owner. A force push always asks, because it can remove commits from the remote. Only the user's own repos and PRs act with no question, because there the policy states the user's intent. Another person's repo or PR always needs the user's yes, because the policy cannot speak for that person.
 
-### Verification and test writing are separate
+### The main thread writes tests, and qa runs them
 
-`verify` runs the artifact and existing checks. `qa` writes the approved tests after verification passes. The split avoids new tests on every worker attempt and keeps device checks on a role that can reach local tools. Only qa makes required failure proofs. A ui worker requests design screenshots, while unit verification checks behavior without a second design comparison.
+The main thread writes the approved tests while it builds, and it makes the required failure proofs in a private copy of the working tree. `qa` runs the verify commands, the final checks, and the device flows, and it edits nothing. A check that edits nothing cannot hide a failure behind a change, and its result is evidence only of what ran. `qa` puts Claude rungs first, because a Codex child cannot reach the local device daemon, so only `qa` drives a device. QA of a `ui` unit checks behavior, not looks: the owner compares the looks with the design.
 
 ### New tests need a plan line
 
-Each new test maps to an owner-approved `## Tests` line. This makes the test's flow, file, and reason reviewable before qa writes it. The default proposal is one e2e test per main flow. Other layers need a reason and owner approval. An empty list means no new tests, while verification still checks the artifact.
+Each new test maps to an owner-approved `## Tests` line. This makes the test's flow, file, and reason reviewable before the main thread writes it. The default proposal is one e2e test per main flow. Other layers need a reason and owner approval. An empty list means no new tests, while verification still checks the artifact.
 
 ### Build locks follow open files
 
@@ -140,23 +148,25 @@ A lint rule, type rule, test, or CI check can catch a repeated defect without an
 
 ### Limits that T3 does not set
 
-T3 has no cap on concurrent tasks or nesting depth. The config sets four limits: parallel tasks, tasks per run, depth, and review rounds. Every brief states the child's depth. At the maximum depth a child does the work itself.
+T3 has no cap on concurrent tasks or nesting depth. The config sets three limits: parallel tasks, depth, and review rounds. Every brief states the child's depth. At the maximum depth a child does the work itself.
 
-One config limit on tasks does not fit every plan. A dogfood run hit the task limit after 2 of 16 units. So `omt-plan` asks the owner for a task budget per HEAVY plan, with an estimate from the unit count, and stores it in the plan header. When a run stalls, the conductor names the plan budget first, because raising it changes no other plan.
+omt once also capped the tasks of one run. One config cap did not fit every plan: a dogfood run hit it after 2 of 16 units, and a per-plan budget only moved the question to the owner. After the fold, a run starts about two children plus the broad reads, so set `2026-12` removed the task budget. `maxParallel` still stops a fan-out storm.
 
 ### State lives in the repository
 
-A long run outlives the agent's context. The plan (`.omt/plans/<slug>.md`) and the ledger (`.omt/ledger.jsonl`) hold the state: units, scopes, done conditions, task ids, rounds, and verdicts. After compaction the conductor re-reads both files. The plan uses checkbox grammar that people can read and that `omt plan status` can count.
+A long run outlives the agent's context. The plan (`.omt/plans/<slug>.md`) and the ledger (`.omt/ledger.jsonl`) hold the state: units, scopes, done conditions, task ids, rounds, and verdicts. After compaction the main thread re-reads both files. The plan uses checkbox grammar that people can read and that `omt plan status` can count.
 
 Live plans stay out of git. All worktrees share the one `.omt` in the main checkout, and omt reads and edits only that copy. A committed plan gives every worktree branch a tracked copy that goes stale, and that copy makes every omt command warn about shadowed state. So `.omt/.gitignore` holds `plans/`. To keep a finished plan as a record, copy it to a path outside `.omt/`, such as `docs/`, and commit it there.
 
 ### Continuation uses T3, not new hooks
 
-OmO re-prompts the agent with hooks until a plan is done. T3 already ships native `/goal` for Claude and Codex threads, and async children wake the parent when they finish. oh-my-t3code uses those. The only hook it installs is optional: a Claude Code `UserPromptSubmit` hook that arms ultrawork when the prompt contains `ulw` or `ultrawork`. It injects a short pointer to the `omt-ulw` skill, the same approach as OmO's Codex edition.
+OmO re-prompts the agent with hooks until a plan is done. omt needs no re-prompt: the main thread waits for its children inside its turn, with `delegate_task` in wait mode or `t3_thread_wait`, and a turn ends only for the owner. So omt has no heartbeat and no loop skill. T3's native `/goal` stays available for Claude and Codex threads. The only hook it installs is optional: a Claude Code `UserPromptSubmit` hook that arms ultrawork when the prompt contains `ulw` or `ultrawork`. It injects a short pointer to the `omt-ulw` skill, the same approach as OmO's Codex edition.
 
 ### Install follows the user's existing layout
 
 The installer copies each skill to `~/.agents/skills/<name>`. Codex, Cursor, OpenCode, and Pi read that root. It adds a relative symlink in `~/.claude/skills/<name>` for Claude Code, which does not read `~/.agents/skills`. The installer shows the full plan first, asks once, keeps backups, and records a manifest so that `omt uninstall` removes exactly what it added. This mirrors OmO's consent-first setup.
+
+A release can drop or rename a skill, as `omt-loop`, `omt-show`, and `omt-review` were. An old folder would stay in place, and agents would keep loading a stale skill. So `omt install` and `omt update` remove a skill folder and its links when the bundle no longer ships the skill, but only when the manifest lists it and the folder has the omt marker. A folder that omt did not install is the user's, and omt never touches it. An edited retired skill is kept until the user passes `--force`, and `omt doctor` warns about it.
 
 ### Bun builds omt, and users need no clone
 
@@ -189,7 +199,7 @@ omt used to promise that the CLI never uses the network. An update needs the lat
 ## What is out of scope
 
 - A T3 fork or a T3 plugin API. oh-my-t3code uses only the surfaces T3 already exposes.
-- A DAG scheduler, team mailboxes, memory, or computer use. T3 child threads and worktree threads cover the common cases. No scheduler process runs. Instead, `omt plan status` lists the ready units: the open units whose `Depends on` units are done. The conductor dispatches them.
+- A DAG scheduler, team mailboxes, memory, or computer use. T3 child threads and worktree threads cover the common cases. No scheduler process runs. Instead, `omt plan status` lists the ready units: the open units whose `Depends on` units are done. The main thread builds them in that order.
 - Hooks for Codex, Cursor, and OpenCode. Codex hooks need per-hook trust. They are a later step.
 - Copied code or prompt text from OmO. Its license (Sustainable Use License 1.0) does not allow that. oh-my-t3code re-implements ideas in its own words. omp and T3 Code are MIT.
 
