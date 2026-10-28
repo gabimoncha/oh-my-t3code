@@ -1,21 +1,38 @@
 ---
 name: omt-plan
-description: Plan before code in T3 Code. Use when the user asks for a plan, a spec, or a design before implementation, or when omt-ulw needs a reviewed plan for a HEAVY task. Explores read-only, asks only owner decisions, writes an omt plan file, and runs cross-family plan-review rounds with a frozen blocker list.
+description: Plan before code in T3 Code. Use when the user asks for a plan, a spec, or a design before implementation, or when omt-ulw needs a reviewed plan for a HEAVY task. The main thread explores, asks owner question batches, writes an omt plan file with the summary last, and gets one plan-review child from the other model family with a frozen blocker list and at most 2 review rounds.
 ---
 
 # Plan
 
-You write a plan that a worker can execute without making a design decision, and you get it reviewed. You change no code in this skill. The T3 rules are in [delegation.md](../omt/references/delegation.md); T3 tools appear by base name and your harness may prefix them, for example `mcp__t3-code__delegate_task`.
+You write a plan that the main thread can build from without a design decision, and you get it reviewed. You plan only, also when `omt-ulw` calls this skill. You change no code in this skill.
+
+You explore, ask, and write the plan yourself. Children only read broad areas (`explore`) and review the plan (`plan-review`). The T3 rules are in [delegation.md](../omt/references/delegation.md); T3 tools appear by base name and your harness may prefix them, for example `mcp__t3-code__delegate_task`.
+
+## Rules
+
+- You wait for each child inside your turn ([delegation.md](../omt/references/delegation.md#waiting)). For one child, call `delegate_task` with `mode: "wait"`. For parallel children, dispatch each with `mode: "async"`, then call `t3_thread_wait` with `threadId` and `runId` for each.
+- You end your turn only for the owner: a batch of questions, a plan approval, or the hand-off.
+- Record every child dispatch and every result in the ledger ([results.md](../omt/references/results.md#recording)).
+- Read only the part of a child's result that your next action needs.
 
 ## Steps
 
 ### 0. Check your mode
 
-Call `t3_thread_configuration` with no `threadId` and read your `interactionMode` ([delegation.md](../omt/references/delegation.md#your-interaction-mode)). Also keep `modelSelection.instanceId`. It is your provider instance, and step 4 passes it to `--against`. In `plan` mode, dispatch only `explore`, `grill`, and `plan-review`, write no plan file and no ledger entry, put the plan text in the review briefs instead of a path, and deliver the finished plan in your final message. In `plan` mode no grill file exists: take the grill text from the final message of `omt-grill` in this conversation.
+Call `t3_thread_configuration` with no `threadId` and read your `interactionMode` and `modelSelection` ([delegation.md](../omt/references/delegation.md#your-interaction-mode)). Keep the driver of `modelSelection`, such as `claudeAgent` or `codex`, as your family. Step 4 passes it to `--against`.
+
+In `plan` mode:
+
+- Dispatch only `explore`, `research`, `grill`, and `plan-review`. `research` runs only inside `omt-grill`.
+- Write no plan file and no ledger entry.
+- Put the plan text in the review brief instead of a path.
+- Deliver the finished plan in your final message.
+- No grill file exists: take the grill text from the final message of `omt-grill` in this conversation.
 
 Then run the [branch check](../omt/references/delegation.md#branch-check).
 
-Done when: you know your mode and your provider instance.
+Done when: you know your mode and your family.
 
 ### 1. Pick the slug and explore
 
@@ -32,34 +49,36 @@ With a selected profile and no plan file for the `--plan` id:
 - Dispatch only when the ledger's `active` is below the profile's `limits.maxParallel`.
 - Use this check in place of `can dispatch`.
 
-Read the code the goal touches. For a large or unknown area, dispatch parallel read-only `explore` tasks (`--plan <slug> --unit E<k> --round 1 --attempt 1 --title "explore E<k>: <question>"`), one narrow question each, and wait for them in this turn ([delegation.md](../omt/references/delegation.md#waiting)). Then read the results and record them ([results.md](../omt/references/results.md#recording)).
+Read the code that the goal touches yourself. Send only broad reads to 1 to `maxParallel` read-only `explore` children, one narrow question each, in parallel. Use `--plan <slug> --unit E<k> --round 1 --attempt 1 --title "explore E<k>: <question>"`. Dispatch them with `mode: "async"` and wait for them in this turn ([delegation.md](../omt/references/delegation.md#waiting)). Then read the results and record them ([results.md](../omt/references/results.md#recording)).
 
-Done when: you can name each file and function the change touches, with a `path:line` citation.
+Done when: you can name each file and function that the change touches, with a `path:line` citation.
 
-### 2. Decide whether the intent is clear
+### 2. Ask
 
-List the decisions the plan needs. Settle each one from the code, the docs, or the request. What remains is an owner decision: a choice between valid options that changes what the user gets.
+List the decisions that the plan needs. Settle each one from the code, the docs, or the request. A question that the code can answer is not an owner question: read the code instead. What remains is an owner decision: a choice between valid options that changes what the user gets.
 
 A decision in the grill file is settled. Do not ask it again. From the grill, ask only its open questions and its `pending` edge cases, then the new owner decisions. The owner accepts, changes, or drops each `pending` edge case.
 
-When no grill file exists, and the goal has no done condition that can fail or 4 or more owner decisions remain, offer [omt-grill](../omt-grill/SKILL.md) as the first option in the owner message. When the owner picks it, run `omt-grill` with the slug, then come back to this step.
+When no grill file exists, and the goal has no done condition that can fail or 4 or more owner decisions remain, offer [omt-grill](../omt-grill/SKILL.md) as the first option in the batch. When the owner picks it, run `omt-grill` with the slug, then come back to this step.
 
-Ask the user only owner decisions. Before you ask, finish all work that does not depend on the answers: the research and a draft plan. Then ask every owner decision in one message. Give each one 2 to 4 options and your recommendation.
+Before you ask, finish all work that does not depend on the answers: the research and a draft plan. Then ask every open owner decision in one batch. Give each question 2 to 4 options and your recommendation. End the turn and wait for the answers.
 
-Include the proposed `## Tests` lines in that message. Ask the owner to approve the test list with the plan. Give a reason for each proposed line outside `plan.testLayers`.
+Include the proposed `## Tests` lines in the first batch. Ask the owner to approve the test list with the plan. Give a reason for each proposed line outside `plan.testLayers`.
 
-Done when: every decision is settled from evidence or answered by the user.
+After the answers, explore again when an answer opens new code, and ask the next batch. Stop when no question is open.
+
+Done when: every decision is settled from evidence or answered by the owner.
 
 ### 3. Write the plan
 
-`omt plan status <slug>` prints the absolute plan path, also from a worktree. Steps 3 and 4 edit and hash the plan at that path. When the plan exists, edit it. Otherwise run `omt plan new <slug> --title "<title>" --profile <name>`, after `omt init` when `.omt/.gitignore` is missing. Keep an existing plan: pass no `--force`. Fill every section. The persona in [roles/plan.md](../omt/references/roles/plan.md) is the standard. For a large plan, you may dispatch a `plan` task to fill that file. Before you dispatch a `plan` task, create any missing plan file yourself with `omt plan new <slug> --title "<title>" --profile <name>`. In every `plan` task, name the plan path and state that the file already exists. Tell the worker to edit that file and not to run `omt plan new`. Wait for it ([delegation.md](../omt/references/delegation.md#waiting)), then read its result and record it ([results.md](../omt/references/results.md#recording)).
+`omt plan status <slug>` prints the absolute plan path, also from a worktree. Steps 3 and 4 edit and hash the plan at that path. When the plan exists, edit it. Otherwise run `omt plan new <slug> --title "<title>" --profile <name>`, after `omt init` when `.omt/.gitignore` is missing. Keep an existing plan: pass no `--force`. Fill every section yourself. The persona in [roles/plan.md](../omt/references/roles/plan.md) is the standard.
 
-Read the effective profile again with the step 1 command before you fill `## Tests` or build a `plan` task. Read `workflow.plan.testLayers` as `plan.testLayers` and `workflow.build.qa` as `build.qa`. Name the effective `plan.testLayers` and `build.qa` values in every `plan` task.
+Read the effective profile again with the step 1 command before you fill `## Tests`. Read `workflow.plan.testLayers` as `plan.testLayers` and `workflow.build.qa` as `build.qa`.
 
 - `Done when` items are checks that can fail.
 - Fill `## Summary` last, by the summary rule in [roles/plan.md](../omt/references/roles/plan.md), and update it after each review fix. A plan that has no `## Summary` gets one between the header line and `## Objective`.
 - When a unit reads outside data, such as recordings, files, or API responses, its done condition includes a check on an input shaped like real data: one captured from a real source, or with the properties real data has, such as offsets, gaps, and sizes. A seeded or ideal sample alone hides real-data defects.
-- Each unit has a role, a scope, a done condition, a verify command, and its dependencies.
+- Each unit has a role, a scope, a done condition, a verify command, and its dependencies. The role of a unit that the main thread builds is `main`.
 - Units with no dependency between them have disjoint scopes.
 - Paste the output of `omt roles --plan <slug>` under `Roles`.
 - Under `## Research`, write each research question, its answer, and its sources.
@@ -68,7 +87,7 @@ Read the effective profile again with the step 1 command before you fill `## Tes
 - Propose only the layers in `plan.testLayers` without an owner request. Keep a line in another layer only with its reason and the owner's approval.
 - Use one e2e test per main flow. Keep edge cases out of the e2e lines.
 - Map each grill edge case with `State: accepted` or `State: changed`. A changed edge case uses the user's handling and test layer from the grill file. A `dropped` edge case gets no line and no done condition. A `pending` edge case gets no line until the owner answers it.
-- Each mapped grill edge case with `Test: integration` or `Test: unit` becomes a `## Tests` line of that layer, with `Reason: grill edge case GE<k>`. When that layer is outside `plan.testLayers`, put the line in the step 2 message for owner approval, as any other line outside. A grill edge case never becomes an e2e line. A mapped edge case with `Test: none`, and every mapped edge case when `build.qa` is `off`, goes into the done condition of the unit that owns its handling.
+- Each mapped grill edge case with `Test: integration` or `Test: unit` becomes a `## Tests` line of that layer, with `Reason: grill edge case GE<k>`. When that layer is outside `plan.testLayers`, put the line in the step 2 batch for owner approval, as any other line outside. A grill edge case never becomes an e2e line. A mapped edge case with `Test: none`, and every mapped edge case when `build.qa` is `off`, goes into the done condition of the unit that owns its handling.
 - Write each `## Tests` line as `- <layer> <unit>: <flow or case>. File: <path>. Reason: <why>.` An empty `## Tests` section means no new tests.
 - When units build or change UI and no spec for that UI exists under `docs/design/`, plan an `omt-design` step before those units. UI units cite the spec (`docs/design/<slug>.md`) and use the `ui` role.
 - Name each shared resource in the plan, such as a build folder, a generated project, a simulator, or a dev-server port. Write each verify command that uses shared build state as `omt lock run <resource> -- <command>`. Use the same `<resource>` for commands that share that state.
@@ -76,34 +95,33 @@ Read the effective profile again with the step 1 command before you fill `## Tes
 - When a command leaves processes running after it exits, run that command outside `omt lock`. When a unit uses that command, run `omt plan limit <slug> 1` for the whole plan and say why in the plan.
 - Keep units parallel for shared build state alone when a lock tool exists and the command leaves no process running after it exits.
 
-Done when: `omt plan status <slug>` lists every unit, and each unit has all five fields.
+Done when: `omt plan status <slug>` lists every unit, each unit has all five fields, and `## Summary` is the last section that you filled.
 
-### 4. Review rounds
+### 4. Plan review
 
-Run `omt profile show --plan <slug> --json` before each round. Before the plan file exists, use `omt profile show <name> --json` instead. Read `workflow.plan.review` as `plan.review` and `limits.maxReviewRounds` as `maxReviewRounds`.
+Run `omt profile show --plan <slug> --json`. Before the plan file exists, use `omt profile show <name> --json` instead. Read `workflow.plan.review` as `plan.review`.
 
-When `plan.review` is `owner`, ask the owner to approve the plan and its `## Tests` list. Dispatch no `plan-review` task for this value. After the owner approves, go to step 5. In plan mode, write the temp plan file from item 1 before the handoff.
+- `owner`: ask the owner to approve the plan and its `## Tests` list. Dispatch no `plan-review` task for this value. After the owner approves, go to step 5.
+- `two-families`: 1 `plan-review` child on the family other than yours. Build its brief with `--against <your family>` from step 0.
+- `one`: 1 `plan-review` child on any family. Build its brief with no `--against`.
 
-For `two-families` or `one`, run up to `maxReviewRounds` rounds (default 4). Each round dispatches fresh `plan-review` tasks; reuse no reviewer thread.
+Run at most 2 review rounds. Each round dispatches a fresh `plan-review` task; reuse no reviewer thread.
 
-1. Make every plan edit first, `omt plan limit` included. Then compute the hash: `shasum -a 256 <plan path>`, with the path from step 3. In plan mode no file exists: write the exact plan text you put in the brief to `$TMPDIR/omt-<slug>-plan.md` with a quoted heredoc (`<<'EOF'`), then hash it with `shasum -a 256 < "$TMPDIR/omt-<slug>-plan.md"`.
-2. Build each brief with `omt brief plan-review --task-file - --title "plan-review: <title>" --round <n> --attempt 1 --plan <slug> --unit <unit> --against <provider> --json`. The task names the plan path and its SHA-256, and asks the reviewer to confirm the hash before it reads. From round 2, pass `--prior-file` with the blocker list and your response to each blocker.
-   - Name the effective `plan.testLayers` value in every `plan-review` task.
-   - With `plan.review=two-families`, round 1 has two tasks, one per family: `--unit plan.claude --against codex` (an Opus reviewer) and `--unit plan.codex --against claudeAgent` (an Astra reviewer).
-   - With `plan.review=one`, round 1 has one task: `--unit plan --against <the plan author's provider>`.
-   - From round 2, both values use one task: `--unit plan --against <the plan author's provider>`. You wrote the plan, so pass your provider instance from step 0. When a `plan` task wrote the plan, pass that task's provider instead.
-   - With `one`, use a reviewer from the other family in every round. If no reviewer from the other family can run, stop and tell the user.
-3. Before each dispatch, run `omt ledger stats --plan <slug>`. When a plan file exists, dispatch only while it reports `can dispatch: yes`. Otherwise, use the step 1 dispatch check. Record the dispatch with `--task-id`, `--provider`, and `--model`, and wait for it in this turn ([delegation.md](../omt/references/delegation.md#waiting)). Then read the verdict and record it ([results.md](../omt/references/results.md#recording)). With `two-families` in round 1, run `omt ledger stats --plan <slug>` again after you record the first dispatch. Apply the same dispatch check to the second task. When the check passes, dispatch the second task before you wait. When the check fails, wait for the first task to finish. Repeat the check before the second dispatch. Record and wait for both.
-   - Each round-1 task runs only on its own family. Check the provider of the target before the call. When a failure code would move the task to a rung of the other family, do not fall back. Stop and tell the user which reviewer is unavailable.
-4. Round 1: the frozen blocker list is the union of the reviewers' blocking findings, without duplicates. With `two-families`, round 1 approves only when both reviewers approve. With `one`, round 1 approves when its reviewer approves. Write the list under `Log` in the plan.
-5. Round 2 and later: count a finding only when it is on the frozen list, is a regression from your fixes, or cites a requirement, a regression, or a concrete risk. Record anything else as a note.
-6. Fix the plan for each counted finding, then run the next round.
+1. Make every plan edit first, `omt plan limit` included. Then compute the hash: `shasum -a 256 <plan path>`, with the path from step 3. In plan mode no file exists: write the exact plan text that you put in the brief to `$TMPDIR/omt-<slug>-plan.md` with a quoted heredoc (`<<'EOF'`), then hash it with `shasum -a 256 < "$TMPDIR/omt-<slug>-plan.md"`.
+2. Build the brief with `omt brief plan-review --task-file - --title "plan-review: <title>" --round <n> --attempt 1 --plan <slug> --unit plan [--against <your family>] --json`. The task names the plan path and its SHA-256, and asks the reviewer to confirm the hash before it reads. Name the effective `plan.testLayers` value in the task. In round 2, pass `--prior-file` with the frozen blocker list and your response to each blocker.
+3. Before each dispatch, run `omt ledger stats --plan <slug>`. When a plan file exists, dispatch only while it reports `can dispatch: yes`. Otherwise, use the step 1 dispatch check.
+4. With `two-families`, check that the target's provider is in the other family before the call. When a failure code would move the task to a rung of your own family, do not fall back. Stop and tell the user that no reviewer from the other family can run.
+5. Dispatch it with `mode: "wait"`. Record the dispatch with `--task-id`, `--provider`, and `--model`, and wait for it in this turn ([delegation.md](../omt/references/delegation.md#waiting)). Then read the verdict and record it ([results.md](../omt/references/results.md#recording)).
+
+Round 1: `APPROVE` ends the review; notes do not block. Otherwise the reviewer's blocking findings are the frozen blocker list. Write the list under `Log` in the plan. Fix each blocker in the plan yourself, update `## Summary`, and compute the hash again.
+
+Round 2: one re-review checks only the frozen blockers and the regressions from your fixes. Count a finding only when it is on the frozen list or is a regression from your fixes. Record anything else as a note.
+
+After round 2, run no more rounds. When blockers stay open, ask the owner about each one in one batch, with 2 to 4 options and your recommendation. Apply the answers to the plan, and compute the hash again.
 
 After any edit to the plan, header edits included, compute the hash again before the next brief.
 
-`APPROVE` with notes counts as approval. Stop at `maxReviewRounds`: report the blockers still open to the user.
-
-Done when: a round returned `APPROVE`, the owner approved under `plan.review=owner`, or the round count reached `maxReviewRounds` and the open blockers are in your report.
+Done when: a round returned `APPROVE`, the owner approved under `plan.review=owner`, or the owner answered each blocker that stayed open after round 2.
 
 ### 5. Hand off
 
@@ -111,8 +129,8 @@ Before you report, run the settle sweep ([delegation.md](../omt/references/deleg
 
 Show the plan to the owner first, also when `omt-ulw` called this skill. Write the `## Summary` text in full in the reply. The reply also gives the plan path, the review result, and each decision still open.
 
-When `omt-ulw` called this skill and step 4 has approval from the owner or a review round (approval with notes counts), return to its step 5 with the plan slug. There the owner approves the plan, and step 6 runs the design check, so the `omt-design` step runs before any `ui` unit is built. When the rounds ended at `maxReviewRounds` with blockers open, stop and give the user the open blockers; start no units.
+When `omt-ulw` called this skill, return to its step 5 with the plan slug. There the owner approves the plan, and step 6 runs the design check, so the `omt-design` step runs before any `ui` unit is built.
 
-Otherwise stop. Start no units.
+Called alone, stop. Start no units.
 
-Done when: the owner has the summary, on the page or in the reply, and the user, or the `omt-ulw` run, has the plan path and the review result.
+Done when: the owner has the summary in the reply, and the user, or the `omt-ulw` run, has the plan path and the review result.

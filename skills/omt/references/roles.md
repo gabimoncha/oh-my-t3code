@@ -10,7 +10,7 @@ A role names a kind of work. The config maps each role to a chain of rungs (prov
 | `research` | read-only | research | A question that needs docs, the web, or other repositories. |
 | `plan` | edit | plan | Turning a goal into a plan file. Use it when the plan is large enough to hand off. |
 | `plan-review` | read-only | review | Checking a plan for gaps before any unit runs. Cross-family. Pass the plan author's provider with `--against`. |
-| `grill` | read-only | grill | Testing a goal before it has a plan: edge cases, open questions, and options. Cross-family. One child per family, each with the other family in `--against`. |
+| `grill` | read-only | grill | Testing a goal before it has a plan: edge cases, open questions, and options. Cross-family. One child per grill, with the main thread's family in `--against`. |
 | `execute` | edit | work | One large planned unit with a disjoint scope, built as an independent track while the main thread builds the rest. |
 | `review` | read-only | review | One review round of a diff against its brief. Fixes local findings when its access allows edits, and reports the rest. Cross-family. Pass the author's family with `--against`. |
 | `oracle` | read-only | review | The final gate. Attack the finished change from the family other than the main implementer's. Fixes local findings when its access allows edits. Cross-family. |

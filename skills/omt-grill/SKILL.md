@@ -1,23 +1,30 @@
 ---
 name: omt-grill
-description: Grill, stress-test, find the edge cases of, or brainstorm a vague goal before a plan, in T3 Code. Use when the user says grill or stress-test, asks for edge cases or a brainstorm, gives a goal that is too vague to plan, or wants to test an idea before a plan, or when omt-plan offers a grill. Runs rounds of two grill children, one Claude and one Codex, that do not see each other. The models decide the areas that the user does not know, the user answers the rest in one message per round, and the result is a grill file that omt-plan reads.
+description: Grill, stress-test, find the edge cases of, or brainstorm a vague goal before a plan, in T3 Code. Use when the user says grill or stress-test, asks for edge cases or a brainstorm, gives a goal that is too vague to plan, or wants to test an idea before a plan, or when omt-plan offers a grill. The main thread finds the facts, gets one second opinion from a grill child on the other model family, asks question batches, checks each answer against the facts, and writes a grill file that omt-plan reads.
 ---
 
 # Grill
 
-You test a goal before it has a plan. You find its edge cases, its open questions, and the options, and you get answers from the user. You write no plan and change no code in this skill. The T3 rules are in [delegation.md](../omt/references/delegation.md); T3 tools appear by base name and your harness may prefix them, for example `mcp__t3-code__delegate_task`.
+You confront the owner's goal with facts before it has a plan. You find its edge cases, its open questions, and the options, and you get answers from the owner. You write no plan and change no code in this skill. The T3 rules are in [delegation.md](../omt/references/delegation.md); T3 tools appear by base name and your harness may prefix them, for example `mcp__t3-code__delegate_task`.
 
-Each round runs two read-only `grill` children in parallel, one per family. Expected cost: 2 tasks per round, plus the explore tasks.
+You do the grill yourself. Children only read broad areas (`explore`), read docs or the web (`research`), and give one second opinion (`grill`). Expected cost: 1 `grill` task per grill, plus the explore and research tasks.
+
+## Rules
+
+- You wait for each child inside your turn ([delegation.md](../omt/references/delegation.md#waiting)). For one child, call `delegate_task` with `mode: "wait"`. For parallel children, dispatch each with `mode: "async"`, then call `t3_thread_wait` with `threadId` and `runId` for each.
+- You end your turn only for the owner: a batch of questions or the hand-off.
+- Record every child dispatch and every result in the ledger ([results.md](../omt/references/results.md#recording)).
+- A question that the code, the docs, or the web can answer is not an owner question. Find the answer and cite it.
 
 ## Steps
 
 ### 0. Check your mode
 
-Call `t3_thread_configuration` with no `threadId` and read your `interactionMode` ([delegation.md](../omt/references/delegation.md#your-interaction-mode)).
+Call `t3_thread_configuration` with no `threadId` and read your `interactionMode` and `modelSelection` ([delegation.md](../omt/references/delegation.md#your-interaction-mode)). Keep the driver of `modelSelection`, such as `claudeAgent` or `codex`, as your family. Step 3 passes it to `--against`.
 
 In `plan` mode:
 
-- Dispatch only `explore` and `grill` tasks.
+- Dispatch only `explore`, `research`, and `grill` tasks.
 - Build each brief without `--save`.
 - Write no grill file and no ledger entry.
 - Count your active tasks yourself against the profile limits, and keep each task id.
@@ -26,7 +33,7 @@ In `plan` mode:
 
 Then run the [branch check](../omt/references/delegation.md#branch-check).
 
-Done when: you know your mode, and the branch check is done or reported as skipped.
+Done when: you know your mode and your family, and the branch check is done or reported as skipped.
 
 ### 1. Frame
 
@@ -38,7 +45,7 @@ Read the profile:
 
 - When the plan file exists, run `omt profile show --plan <slug> --json`.
 - Before the plan file exists, run `omt profile show <name> --json` for an explicit profile name, or `omt profile show --json` without one.
-- Keep the returned `profile` as `<name>`. Read `limits.maxReviewRounds` as `maxReviewRounds`.
+- Keep the returned `profile` as `<name>`.
 
 Before each dispatch, run `omt ledger stats --plan <slug>`. When the plan file exists, dispatch only while it reports `can dispatch: yes`. With no plan file:
 
@@ -49,108 +56,101 @@ Before each dispatch, run `omt ledger stats --plan <slug>`. When the plan file e
 
 When `$(omt paths --grills)/<slug>.md` exists, read it and its `Log`. Only recorded answers settle an item.
 
-- When the `Log` has a line for round `<n>` of `rounds=<n>` with the answers, the decisions and the accepted, changed, or dropped edge cases are settled. A `pending` edge case is not settled; show it again in the edge-case table of the next round. Apply the stop check of step 5, then continue with round `<n+1>` or step 6.
-- When the file holds round `<n>` without recorded answers, go back to step 4. Send the same three-part message again from the file: the decisions table, the numbered questions with their options and recommendation, and the edge-case table. While no direction is chosen, the direction question is first. Then wait.
+- A `pending` edge case is not settled; show it again in the edge-case table of the next batch.
+- When the `Log` shows a `grill` task, the second opinion ran. Skip step 3.
+- When the file holds a batch without recorded answers, go back to step 5. Send the same batch again from the file, and wait.
 
-Write the goal in at most 5 lines. List the areas that the goal touches. Mark each area `user` when the user knows it and can choose, or `models` when the models decide it. Take the marks from the conversation. When the conversation does not show them, ask the user once, in one message, and end the turn.
+Write the goal in at most 5 lines. List the areas that the goal touches. Mark each area `user` when the owner knows it and can choose, or `models` when you decide it. Take the marks from the conversation. When the conversation does not show them, ask the owner in the first batch.
 
-Find the facts that the panel needs. For each narrow question, dispatch a read-only `explore` task with `omt brief explore --task-file - --title "explore GX<k>: <question>" --plan <slug> --unit GX<k> --round 1 --attempt 1 --save --json`. Record each dispatch ([results.md](../omt/references/results.md#recording)) and wait for the tasks in this turn ([delegation.md](../omt/references/delegation.md#waiting)). Then read each result, record it, and settle the child. The units are `GX<k>`, so the later plan's explore units `E<k>` get their own request ids.
+Done when: the `grill` role resolves, and your reply has the goal and each area with its mark.
 
-Done when: the `grill` role resolves, and your reply has the goal, each area with its mark, and the facts with `path:line` citations.
+### 2. Find the facts
 
-### 2. Run panel round `<n>`
+Read the code that the goal touches yourself. Send only broad reads to read-only `explore` children, and questions about docs or the web to read-only `research` children, one narrow question each, in parallel. Build each brief with `omt brief <explore|research> --task-file - --title "<role> GX<k>: <question>" --plan <slug> --unit GX<k> --round 1 --attempt 1 --save --json`. The units are `GX<k>`, so the later plan's explore units `E<k>` get their own request ids.
 
-Write the task text. It holds the goal, the knowledge map, the facts with their citations, the user's answers verbatim, and the round rule: round 1 asks for 2 to 4 different directions, and later rounds stay inside the chosen direction. From round 2, copy the chosen direction from the `## Directions` section of the grill file into the task text.
+Dispatch them with `mode: "async"`, record each dispatch ([results.md](../omt/references/results.md#recording)), and wait for them in this turn ([delegation.md](../omt/references/delegation.md#waiting)). Then read each result, record it, and settle the child ([delegation.md](../omt/references/delegation.md#releasing-children)). Spot-check one citation per child.
 
-Build two briefs:
+Done when: your reply has the facts that the goal rests on, each with a `path:line` or URL citation.
+
+### 3. Get one second opinion
+
+Dispatch one `grill` child on the family other than yours, once per grill. Never send it a later batch, and never start a second `grill` child.
+
+Write the task text. It holds the goal, the knowledge map, the facts with their citations, and the owner's words verbatim. Build the brief:
 
 ```sh
-omt brief grill --task-file - --title "grill G<n>: <title>" --plan <slug> --unit grill.claude --against codex --round <n> --attempt 1 --save --json
-omt brief grill --task-file - --title "grill G<n>: <title>" --plan <slug> --unit grill.codex --against claudeAgent --round <n> --attempt 1 --save --json
+omt brief grill --task-file - --title "grill: <title>" --plan <slug> --unit grill --against <your family> --round 1 --attempt 1 --save --json
 ```
 
-`grill.claude` runs on Claude and `grill.codex` runs on Codex. From round 2, add `--prior-file` with the merged items, the frozen blocker list, and the user's answers.
+Check that the target's provider is in the other family before the call. When a failure code would move the task to a rung of your own family, do not fall back. Tell the owner that no grill child from the other family can run, and ask whether to go on without the second opinion.
 
-Each round calls `delegate_task` again, with the new `--round` value. Never send a new round to an earlier child with `t3_thread_send`.
+Run the dispatch check of step 1. Dispatch the child with `mode: "async"` and record the dispatch with `--task-id`, `--provider`, and `--model`. While it runs, write your own items from the facts: directions, decisions, questions, and edge cases. Then wait for it in this turn ([delegation.md](../omt/references/delegation.md#waiting)), read its result with `task_status`, record it with its `VERDICT`, and settle the child.
 
-Run the dispatch check of step 1 before each call. Check that the target provider is the family that the unit names. Record each dispatch with `--task-id`, `--provider`, and `--model` ([results.md](../omt/references/results.md#recording)). After you record the first dispatch, run the dispatch check again for the second. When that check fails, wait for the first task, then check again.
+Done when: the `grill` result is recorded, or the owner has the question about a missing second opinion.
 
-Each child runs only on its own family. When a failure code would move a task to a rung of the other family, do not fall back. Tell the user which family cannot run, and ask whether to run the round with one family.
+### 4. Merge
 
-Wait for both tasks in this turn ([delegation.md](../omt/references/delegation.md#waiting)). A grill result goes to step 3 when both panel results of the round have a terminal entry or a recorded failure.
+Merge your items and the `grill` child's items into one list, without duplicates.
 
-Done when: both tasks of round `<n>` have a dispatch entry, or the user has the question about a one-family round.
+Merge the directions. Give each direction its gain and its cost. While no direction is chosen:
 
-### 3. Merge
+- When the area of the direction is `user`, the first question asks for a direction. Its options are the merged directions, each with its gain and cost, and your recommendation. It is always `Blocking: yes`.
+- When the area of the direction is `models`, choose the direction yourself and give the reason. Record it in the `## Directions` section, with the dropped directions and why.
 
-Read both results with `task_status`. Record each result with its `VERDICT` ([results.md](../omt/references/results.md#recording)). Settle each child ([delegation.md](../omt/references/delegation.md#releasing-children)).
+When a fact or an answer shows that the chosen direction fails, reopen the choice. Move the chosen direction to dropped, with the reason. Then apply the rules above for an open direction.
 
-Merge the `DIRECTIONS` of both children into one list, without duplicates. Give each direction its gain and its cost. While no direction is chosen:
+Sort the other items into three groups:
 
-- When the area of the direction is `user`, the first question asks for a direction. Its options are the merged directions, each with its gain and cost, and your recommendation. It is always `Blocking: yes`. It counts as a blocking item until the user chooses a direction.
-- When the area of the direction is `models`, choose the direction yourself and give the reason, as for any decision. Record it in the `## Directions` section, with the dropped directions and why.
-
-When a counted blocker shows that the chosen direction fails, reopen the choice before the next panel round. Move the chosen direction to dropped, with the blocker as its reason. Merge the replacement directions. Then apply the rules above for an open direction: the `user` question or the `models` choice. While the choice is open, the blocking direction question, the same-round resend of step 5, and the stop guard of step 5 apply again.
-
-Remove duplicate items. Sort the rest into three groups:
-
-1. Decisions that the models make, each with its area and reason. Give each one an id `GD<k>`.
-2. Questions that only the user can answer, each with 2 to 4 options and a recommendation. Give each one an id `GQ<k>`.
+1. Decisions that you make, each with its area and reason. Give each one an id `GD<k>`.
+2. Questions that only the owner can answer, each with 2 to 4 options and a recommendation. Give each one an id `GQ<k>`.
 3. Edge cases, each with its trigger, its effect, a proposed handling, and a test layer. Give each one an id `GE<k>`.
 
-When the two children disagree, keep both options. In a `user` area, the disagreement becomes a question. In a `models` area, pick one option yourself and give the reason.
+When you and the child disagree, keep both options. In a `user` area, the disagreement becomes a question. In a `models` area, pick one option yourself and give the reason.
 
-In round 1, freeze the blocker list: the union of the blocking edge cases and the blocking questions, as `B1`, `B2`, and on. From round 2, a blocking item counts only when one of these holds:
+Done when: the directions are merged, and each item is in one of the three groups or is a note.
 
-- It is on the frozen list and still open.
-- It comes from the user's last answers.
-- It names a concrete trigger and effect in a flow of the goal.
+### 5. Ask
 
-Record every other item as a note.
+Update the grill file first. Run `mkdir -p "$(omt paths --grills)"`, then write `$(omt paths --grills)/<slug>.md` in the [grill file](#grill-file) layout, with `status=open` and `rounds=<n>`, where `<n>` counts the batches. Write each decision with its area and reason. Write each new edge case with its handling, its test layer, and `State: pending`. Keep each `pending` edge case from earlier batches. Write each open question with its options and your recommendation. Save the direction question first in `## Open questions`. In `plan` mode, keep the same text in your reply instead.
 
-Done when: the directions are merged, each item is in one of the three groups or is a note, the frozen list exists, and you know how many blocking items this round counts.
+Then send one batch with three parts:
 
-### 4. Ask
-
-Update the grill file first. Run `mkdir -p "$(omt paths --grills)"`, then write `$(omt paths --grills)/<slug>.md` in the [grill file](#grill-file) layout, with `status=open` and `rounds=<n>`. Write each decision with its area and reason. Write each new edge case with its handling, its test layer, and `State: pending`. Keep each `pending` edge case from earlier rounds. Write each open question with its options and your recommendation. Save the direction question first in `## Open questions`. In `plan` mode, keep the same text in your reply instead.
-
-Then send one message with three parts:
-
-1. The decisions table: id, area, decision, and reason. The user may override any decision by its id.
-2. The numbered questions, each with its options and your recommendation. While no direction is chosen, the direction question is first.
-3. The edge-case table: id, trigger and effect, handling, and test layer. It holds the new edge cases and every `pending` edge case from earlier rounds. The user accepts all rows at once, or accepts, changes, or drops a row by its id.
+1. The decisions table: id, area, decision, and reason. The owner may override any decision by its id.
+2. Every open question, numbered, each with its options and your recommendation. While no direction is chosen, the direction question is first.
+3. The edge-case table: id, trigger and effect, handling, and test layer. It holds the new edge cases and every `pending` edge case from earlier batches. The owner accepts all rows at once, or accepts, changes, or drops a row by its id.
 
 End the turn and wait for the answers.
 
-Done when: the grill file holds round `<n>`, and the user has the message.
+Done when: the grill file holds batch `<n>`, and the owner has the batch.
 
-### 5. Check whether to stop
+### 6. Check the answers
 
-Record the answers in the grill file. Write the chosen direction in the `## Directions` section, with the dropped directions and why. An overridden decision gets `By: user`. Set `State: accepted` only when the user accepts that row or accepts all rows. Set `changed` or `dropped` only from the user's answer for that row. A row with no answer stays `pending`. When the user changes an edge case, write the user's handling in its `Handle:` field, and the user's test layer in its `Test:` field when the user changes it. Then set `State: changed`. An answered question becomes a decision. Add a `Log` line with the time, the round, the task ids, the frozen blockers, and the answers.
+Record the answers in the grill file. Write the chosen direction in the `## Directions` section, with the dropped directions and why. An overridden decision gets `By: user`. Set `State: accepted` only when the owner accepts that row or accepts all rows. Set `changed` or `dropped` only from the owner's answer for that row. A row with no answer stays `pending`. When the owner changes an edge case, write the owner's handling in its `Handle:` field, and the owner's test layer in its `Test:` field when the owner changes it. Then set `State: changed`. An answered question becomes a decision. Add a `Log` line with the time, the batch, the task ids, and the answers.
 
-Read the profile again with the step 1 command. Stop when one of these holds:
+Check each answer against the facts. Read the code yourself for a narrow check. Send a broad check to an `explore` child, or a docs or web check to a `research` child, with the next `--round`, as in step 2. When an answer conflicts with a fact, ask about it again in the next batch, with the fact and its citation. When an answer opens new code or a new edge case, add the items as in step 4.
 
-- Round `<n>` added no counted blocking item, and a direction is chosen. While no direction is chosen, this reason does not apply.
-- The round count reached `maxReviewRounds`.
-- The user tells you to stop.
+Stop when one of these holds:
 
-When no direction is chosen and no stop reason applies, do not start round `<n+1>`. Go back to step 4 in round `<n>`. Send the direction question again, with its options and your recommendation, and wait.
+- No question is open, no edge case is `pending`, and a direction is chosen.
+- The owner tells you to stop.
 
-Otherwise go to step 2 with round `<n+1>`.
+Otherwise go back to step 5 with batch `<n+1>`.
 
-Done when: you stopped for one of the three reasons, you sent the direction question again in round `<n>`, or round `<n+1>` started with a chosen direction.
+Done when: you stopped for one of the two reasons, or batch `<n+1>` is with the owner.
 
-### 6. Hand off
+### 7. Hand off
 
 Before you report, run the settle sweep ([delegation.md](../omt/references/delegation.md#releasing-children)), except when `omt-plan` called this skill.
 
-Set `status=done` in the grill file header. When you stopped with no chosen direction, write `No direction chosen.` in the `## Directions` section. The reply names the grill file path, the number of decisions, edge cases, and open questions, and each open question. List each `pending` edge case with the open questions.
+Set `status=done` in the grill file header. When you stopped with no chosen direction, write `No direction chosen.` in the `## Directions` section.
 
-When `omt-plan` called this skill, return to its step 2 with the grill file path. In `plan` mode, return the grill text instead. Otherwise tell the user to say "plan it" to run `omt-plan` with the slug.
+Write the grill summary in the reply: the goal, the chosen direction, the number of decisions and edge cases, each open question, and each `pending` edge case. Name the grill file path. The summary holds no plan and no code.
+
+When `omt-plan` called this skill, return to its step 2 with the grill file path. In `plan` mode, return the grill text instead. Otherwise offer `omt-plan`: tell the owner to say "plan it" to run `omt-plan` with the slug.
 
 Start no plan and no unit.
 
-Done when: the grill file has `status=done`, or in `plan` mode your final message has the grill text, and the user or `omt-plan` has the path or the text.
+Done when: the grill file has `status=done`, or in `plan` mode your final message has the grill text, and the owner or `omt-plan` has the path or the text.
 
 ## Grill file
 
@@ -165,6 +165,9 @@ The grill file is `$(omt paths --grills)/<slug>.md`. All worktrees share it, so 
 
 ## Knowledge map
 - <area>: user | models. Source: conversation | asked.
+
+## Facts
+- <fact>. Source: <path:line or URL>.
 
 ## Directions
 - <chosen direction>. Dropped: <direction> because <reason>.
@@ -181,5 +184,5 @@ The grill file is `$(omt paths --grills)/<slug>.md`. All worktrees share it, so 
 - GQ<k>. <question>. Options: <a>; <b>. Recommend: <option>, because <reason>. Blocking: yes | no.
 
 ## Log
-- <timestamp> round <n>: <task ids>; frozen blockers <B list>; user answers.
+- <timestamp> batch <n>: <task ids>; owner answers.
 ```

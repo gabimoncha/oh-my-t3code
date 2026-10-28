@@ -406,10 +406,10 @@ test("the main thread and delegating children settle each finished child", () =>
   const brief = readFileSync(join(REFS, "brief.md"), "utf8");
   assert.match(brief, /- Children, below maximum depth: ``Children: after you read a child's result, settle the child with the T3 `t3_thread_organize` tool/);
   const sweep = /Before you report, run the settle sweep \(\[delegation\.md\]\(\.\.\/omt\/references\/delegation\.md#releasing-children\)\)\./;
-  for (const [name, heading] of [["omt-ulw", "### 12. Ship and report"], ["omt-review", "### 6. Write and report"], ["omt-review", "### PR 10. Report"], ["omt-research", "### 4. Synthesize"], ["omt-plan", "### 5. Hand off"], ["omt-design", "### 6. Hand off"]] as const) {
+  for (const [name, heading] of [["omt-ulw", "### 12. Ship and report"], ["omt-review", "### 6. Write and report"], ["omt-review", "### PR 10. Report"], ["omt-research", "### 5. Synthesize"], ["omt-plan", "### 5. Hand off"], ["omt-design", "### 6. Hand off"]] as const) {
     assert.match(section(readSkill(name), heading), sweep, `${name} ${heading}`);
   }
   const plan = readSkill("omt-plan");
-  assert.match(plan, /one narrow question each, and wait for them in this turn \(\[delegation\.md\]\(\.\.\/omt\/references\/delegation\.md#waiting\)\)\. Then read the results and record them \(\[results\.md\]\(\.\.\/omt\/references\/results\.md#recording\)\)\./);
-  assert.match(plan, /Tell the worker to edit that file and not to run `omt plan new`\. Wait for it \(\[delegation\.md\]\(\.\.\/omt\/references\/delegation\.md#waiting\)\), then read its result and record it/);
+  assert.match(plan, /Dispatch them with `mode: "async"` and wait for them in this turn \(\[delegation\.md\]\(\.\.\/omt\/references\/delegation\.md#waiting\)\)\. Then read the results and record them \(\[results\.md\]\(\.\.\/omt\/references\/results\.md#recording\)\)\./);
+  assert.doesNotMatch(plan, /dispatch a `plan` task/);
 });
