@@ -53,12 +53,9 @@ When neither `omt` nor `.omt/bin/omt` is found (see [The CLI](delegation.md#the-
 | `plan-review` | codex / gpt-6-astra / high | claudeAgent / claude-opus-5-5 / high | none |
 | `grill` | codex / gpt-6-astra / high | claudeAgent / claude-opus-5-5 / high | none |
 | `execute` | claudeAgent / claude-opus-5-5 / medium | codex / gpt-6.1-sol / xhigh | none |
-| `quick` | codex / gpt-6-luna / high | claudeAgent / claude-sonnet-5-5 / low | none |
-| `deep` | claudeAgent / claude-opus-5-5 / max | codex / gpt-6-astra / xhigh | none |
 | `review` | codex / gpt-6-astra / high | claudeAgent / claude-opus-5-5 / high | none |
 | `oracle` | codex / gpt-6-astra / high | claudeAgent / claude-opus-5-5 / high | none |
-| `verify` | claudeAgent / claude-haiku-5-5 / medium | claudeAgent / claude-sonnet-5-5 / low | codex / gpt-6.1-sol / low |
-| `qa` | codex / gpt-6.1-sol / medium | claudeAgent / claude-sonnet-5-5 / medium | none |
+| `qa` | claudeAgent / claude-haiku-5-5 / medium | claudeAgent / claude-sonnet-5-5 / low | codex / gpt-6.1-sol / low |
 | `guardrail` | claudeAgent / claude-opus-5-5 / high | codex / gpt-6-astra / high | none |
 | `writing` | claudeAgent / claude-opus-5-5 / high | codex / gpt-6-astra / medium | none |
 | `design` | claudeAgent / claude-opus-5-5 / high | none | none |

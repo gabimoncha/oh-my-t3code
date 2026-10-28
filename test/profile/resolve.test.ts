@@ -18,8 +18,8 @@ function configured(layer: ConfigLayer): OmtConfig {
 
 test("profiles apply root first after the config, with roles, limits, workflow, and models merged", () => {
   const config = configured({
-    roles: { execute: { fast: false }, quick: null },
-    limits: { maxParallel: 2, maxTasksPerRun: 7 },
+    roles: { execute: { fast: false }, writing: null },
+    limits: { maxParallel: 2, maxReviewRounds: 7 },
     models: { "gpt-6.1-sol": { fast: false }, custom: { fast: true } },
     profiles: {
       normal: { roles: { execute: { description: "Normal worker." } }, workflow: { plan: { testLayers: ["e2e", "unit"] } } },
@@ -36,9 +36,9 @@ test("profiles apply root first after the config, with roles, limits, workflow, 
       custom: {
         description: "Custom.",
         extends: "parent",
-        limits: { maxTasksPerRun: 40 },
+        limits: { maxDepth: 2 },
         roles: { execute: { chain: [{ driver: "codex", model: "chosen" }] }, explore: null },
-        workflow: { build: { checkpoint: "none" }, plan: { testLayers: ["unit"] } },
+        workflow: { build: { oracle: "always" }, plan: { testLayers: ["unit"] } },
         models: { "gpt-6.1-sol": {}, custom: { fast: false } },
       },
     },
@@ -47,15 +47,15 @@ test("profiles apply root first after the config, with roles, limits, workflow, 
   const result = resolveProfile(config, "custom");
   assert.equal(result.name, "custom");
   assert.equal(result.source, "argument");
-  assert.deepEqual(result.limits, { maxParallel: 8, maxTasksPerRun: 40, maxDepth: 1, maxReviewRounds: 2 });
+  assert.deepEqual(result.limits, { maxParallel: 8, maxDepth: 2, maxReviewRounds: 2 });
   assert.equal(result.roles.execute?.description, "Normal worker.");
   assert.equal(result.roles.execute?.fast, true);
   assert.deepEqual(result.roles.execute?.chain, [{ driver: "codex", model: "chosen" }]);
-  assert.equal(result.roles.quick, undefined);
+  assert.equal(result.roles.writing, undefined);
   assert.equal(result.roles.explore, undefined);
   assert.equal(result.roles.extra?.result, "work");
   assert.equal(result.workflow.build.review, "first-round");
-  assert.equal(result.workflow.build.checkpoint, "none");
+  assert.equal(result.workflow.build.oracle, "always");
   assert.equal(result.workflow.build.qa, "planned");
   assert.equal(result.workflow.plan.review, "one");
   assert.deepEqual(result.workflow.plan.testLayers, ["unit"]);
@@ -68,13 +68,13 @@ test("profiles apply root first after the config, with roles, limits, workflow, 
 });
 
 test("custom profiles without extends inherit normal, and preset workflows are complete", () => {
-  const config = configured({ profiles: { custom: { description: "Custom.", workflow: { build: { checkpoint: "unit" } } } } });
+  const config = configured({ profiles: { custom: { description: "Custom.", workflow: { build: { oracle: "always" } } } } });
   const normal = resolveProfile(config, "normal");
   const custom = resolveProfile(config, "custom");
-  assert.deepEqual(custom.workflow, { ...normal.workflow, build: { ...normal.workflow.build, checkpoint: "unit" } });
+  assert.deepEqual(custom.workflow, { ...normal.workflow, build: { ...normal.workflow.build, oracle: "always" } });
   const prototype = resolveProfile(config, "prototype");
   assert.equal(prototype.workflow.design.variants, 1);
-  assert.equal(prototype.workflow.build.verify, "every-unit");
+  assert.equal(prototype.workflow.build.failureProofs, "off");
   assert.equal(prototype.workflow.build.oracle, "off");
   const review = resolveProfile(config, "pr-review");
   assert.deepEqual(review.workflow.review, {

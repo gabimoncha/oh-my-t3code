@@ -167,9 +167,8 @@ test("brief --max-depth overrides the config max depth, and a deeper --depth is 
   assert.equal(tooDeep.code, 2);
   assert.match(tooDeep.ctx.err(), /^hint: .*--max-depth/m);
 
-  const deviceChild = await project.runOk(["brief", "verify", "--task", "x", "--depth", "2"]);
-  assert.match(deviceChild.ctx.out(), /depth=2\/2/);
-  assert.equal((await project.run(["brief", "verify", "--task", "x", "--depth", "3"])).code, 2);
+  const qaTooDeep = await project.run(["brief", "qa", "--task", "x", "--depth", "2"]);
+  assert.equal(qaTooDeep.code, 2);
 
   for (const bad of ["4", "-1", "x"]) {
     assert.equal((await project.run(["brief", "execute", "--task", "x", "--max-depth", bad])).code, 2, bad);

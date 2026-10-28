@@ -60,7 +60,8 @@ test("end to end: install, use every command in a project, then uninstall", () =
   const profile = JSON.parse(ok(["profile", "show", "--plan", "demo", "--json"]));
   assert.equal(profile.profile, "normal");
   assert.equal(profile.source, "default");
-  assert.equal(profile.workflow.build.verify, "heavy");
+  assert.equal(profile.workflow.build.review, "every-round");
+  assert.equal(Object.hasOwn(profile.workflow.build, "verify"), false);
 
   const brief = JSON.parse(ok(["brief", "execute", "--task", "x", "--plan", "demo", "--unit", "U1", "--json"])) as BriefJsonOutput;
   assert.equal(brief.delegateTask.clientRequestId, "omt:demo:U1:execute:r1:a1");

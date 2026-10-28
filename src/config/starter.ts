@@ -12,13 +12,13 @@ export const USER_STARTER_CONFIG = `// oh-my-t3code user config. It applies to e
   // The pinned default set. After an omt update, run \`omt defaults diff\` to see what a newer set changes.
   "defaults": "${LATEST_DEFAULT_SET}",
   // "profile": "prototype",
-  // Example: a profile that builds like prototype, with no checkpoints and fast implementation.
+  // Example: a profile that builds like prototype, with failure proofs and fast implementation.
   // Run \`omt profile show <name>\` to see the workflow, roles, and limits that a profile resolves to.
   // "profiles": {
   //   "fast-proto": {
-  //     "description": "Prototype with no checkpoints and fast execute.",
+  //     "description": "Prototype with failure proofs and fast execute.",
   //     "extends": "prototype",
-  //     "workflow": { "build": { "checkpoint": "none" } },
+  //     "workflow": { "build": { "failureProofs": "on" } },
   //     "roles": { "execute": { "fast": true } },
   //   },
   // },
@@ -48,13 +48,13 @@ export const PROJECT_STARTER_CONFIG = `// oh-my-t3code project config. It overri
   // The pinned default set. After an omt update, run \`omt defaults diff\` to see what a newer set changes.
   "defaults": "${LATEST_DEFAULT_SET}",
   // "profile": "prototype",
-  // Example: a profile that builds like prototype, with no checkpoints and fast implementation.
+  // Example: a profile that builds like prototype, with failure proofs and fast implementation.
   // Run \`omt profile show <name>\` to see the workflow, roles, and limits that a profile resolves to.
   // "profiles": {
   //   "fast-proto": {
-  //     "description": "Prototype with no checkpoints and fast execute.",
+  //     "description": "Prototype with failure proofs and fast execute.",
   //     "extends": "prototype",
-  //     "workflow": { "build": { "checkpoint": "none" } },
+  //     "workflow": { "build": { "failureProofs": "on" } },
   //     "roles": { "execute": { "fast": true } },
   //   },
   // },

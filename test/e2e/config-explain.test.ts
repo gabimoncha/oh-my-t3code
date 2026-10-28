@@ -15,7 +15,7 @@ test("config explain reports default, user, project, and profile sources in text
     version: 1,
     defaults: "2026-10",
     profile: "fast-proto",
-    limits: { maxTasksPerRun: 17 },
+    limits: { maxReviewRounds: 7 },
     profiles: {
       "fast-proto": {
         description: "Fast prototype",
@@ -39,7 +39,7 @@ test("config explain reports default, user, project, and profile sources in text
   const effectiveLines = lines.slice(lines.indexOf("effective:") + 1);
   for (const line of [
     "limits.maxDepth  1  defaults 2026-10",
-    "limits.maxTasksPerRun  17  user",
+    "limits.maxReviewRounds  7  user",
     "limits.maxParallel  4  project",
   ]) {
     assert.ok(rootLines.includes(line), `root output must include ${line}`);
@@ -57,7 +57,7 @@ test("config explain reports default, user, project, and profile sources in text
   assert.deepEqual(report.profile, { name: "fast-proto", source: "argument" });
   for (const [entries, path, value, source] of [
     [report.root, ["limits", "maxDepth"], 1, { kind: "defaults", set: "2026-10" }],
-    [report.root, ["limits", "maxTasksPerRun"], 17, { kind: "user", path: userPath }],
+    [report.root, ["limits", "maxReviewRounds"], 7, { kind: "user", path: userPath }],
     [report.root, ["limits", "maxParallel"], 4, { kind: "project", path: projectPath }],
     [report.effective, ["limits", "maxParallel"], 2, {
       kind: "profile",

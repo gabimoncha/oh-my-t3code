@@ -55,7 +55,7 @@ test("ledgerStats counts dispatched, active, and terminal entries, optionally pe
     entry({ plan: "b", taskId: "t5" }),
     entry({ plan: "b", taskId: "t5", status: "failed" }),
   ];
-  const limits = { maxParallel: 4, maxTasksPerRun: 24 };
+  const limits = { maxParallel: 4 };
   const extra = { limits, canDispatch: true };
   assert.deepEqual(ledgerStats(entries, limits), { dispatched: 5, active: 1, terminal: 4, ...extra });
   assert.deepEqual(ledgerStats(entries, limits, "a"), { plan: "a", dispatched: 3, active: 0, terminal: 3, ...extra });
@@ -63,11 +63,12 @@ test("ledgerStats counts dispatched, active, and terminal entries, optionally pe
   assert.deepEqual(ledgerStats([], limits, "c"), { plan: "c", dispatched: 0, active: 0, terminal: 0, ...extra });
 });
 
-test("ledgerStats sets canDispatch from both limits", () => {
+test("ledgerStats sets canDispatch from max parallel only, however many tasks the run dispatched", () => {
   const entries = [entry({ taskId: "t1" }), entry({ taskId: "t2" }), entry({ taskId: "t1", status: "completed" })];
-  assert.equal(ledgerStats(entries, { maxParallel: 2, maxTasksPerRun: 3 }).canDispatch, true);
-  assert.equal(ledgerStats(entries, { maxParallel: 1, maxTasksPerRun: 3 }).canDispatch, false);
-  assert.equal(ledgerStats(entries, { maxParallel: 2, maxTasksPerRun: 2 }).canDispatch, false);
+  assert.equal(ledgerStats(entries, { maxParallel: 2 }).canDispatch, true);
+  assert.equal(ledgerStats(entries, { maxParallel: 1 }).canDispatch, false);
+  const many = Array.from({ length: 600 }, (_, i) => [entry({ taskId: `d${i}` }), entry({ taskId: `d${i}`, status: "completed" })]).flat();
+  assert.equal(ledgerStats(many, { maxParallel: 1 }).canDispatch, true);
 });
 
 test("requestId builds the canonical id with defaults, sanitizing, and per-part caps", () => {
@@ -175,7 +176,7 @@ test("ledger stats prints LedgerStats as text and JSON", async () => {
   assert.equal(await run(ctx), 0);
   assert.equal(
     ctx.out(),
-    "profile: normal\ndispatched: 2\nactive: 1\nterminal: 1\nmax parallel: 6\nmax tasks per run: 24\ncan dispatch: yes\n",
+    "profile: normal\ndispatched: 2\nactive: 1\nterminal: 1\nmax parallel: 6\ncan dispatch: yes\n",
   );
 
   const json = ctx.at(["stats", "--plan", "auth", "--json"]);
@@ -185,7 +186,7 @@ test("ledger stats prints LedgerStats as text and JSON", async () => {
     dispatched: 2,
     active: 1,
     terminal: 1,
-    limits: { maxParallel: 6, maxTasksPerRun: 24 },
+    limits: { maxParallel: 6 },
     canDispatch: true,
   });
 });
@@ -225,7 +226,7 @@ test("ledger stats --plan uses the lower of the plan and config max parallel", a
     dispatched: 0,
     active: 0,
     terminal: 0,
-    limits: { maxParallel: 4, maxTasksPerRun: 24 },
+    limits: { maxParallel: 4 },
     canDispatch: true,
   });
 });
@@ -243,23 +244,29 @@ test("ledger stats --plan ignores a max-parallel key quoted in the plan body", a
   assert.match(ctx.out(), /^max parallel: 4$/m);
 });
 
-test("ledger stats --plan uses the plan max-tasks also when it is above the config value", async () => {
+test("ledger stats ignores a retired maxTasksPerRun limit and a plan max-tasks key", async () => {
   const ctx = projectContext(["stats", "--plan", "auth"]);
   writeFile(join(ctx.cwd, ".omt", "config.jsonc"), '{ "version": 1, "limits": { "maxTasksPerRun": 1 } }\n');
   writeFile(
     join(ctx.cwd, ".omt", "plans", "auth.md"),
-    "# Auth\n\n<!-- omt-plan v1 slug=auth created=2026-01-01T00:00:00.000Z max-tasks=80 -->\n",
+    "# Auth\n\n<!-- omt-plan v1 slug=auth created=2026-01-01T00:00:00.000Z max-tasks=1 -->\n",
   );
-  await appendLedger(join(ctx.cwd, ".omt", "ledger.jsonl"), entry({ plan: "auth", taskId: "t1" }));
+  const path = join(ctx.cwd, ".omt", "ledger.jsonl");
+  for (const taskId of ["t1", "t2", "t3"]) {
+    await appendLedger(path, entry({ plan: "auth", taskId }));
+    await appendLedger(path, entry({ plan: "auth", taskId, status: "completed" }));
+  }
   assert.equal(await run(ctx), 0);
-  assert.match(ctx.out(), /^max tasks per run: 80 \(plan 80, config 1\)$/m);
+  assert.doesNotMatch(ctx.out(), /max tasks/);
   assert.match(ctx.out(), /^can dispatch: yes$/m);
+  assert.match(ctx.err(), /limits\.maxTasksPerRun is no longer used; remove it/);
 
   const json = ctx.at(["stats", "--plan", "auth", "--json"]);
   assert.equal(await run(json), 0);
   const parsed = JSON.parse(json.out());
-  assert.equal(parsed.limits.maxTasksPerRun, 80);
-  assert.equal(parsed.planMaxTasks, 80);
+  assert.deepEqual(parsed.limits, { maxParallel: 6 });
+  assert.equal(Object.hasOwn(parsed, "planMaxTasks"), false);
+  assert.equal(parsed.canDispatch, true);
 });
 
 test("ledger add accepts any role name, such as swarm and loop", async () => {
@@ -286,7 +293,7 @@ test("ledger request-id prints the id and requires plan, unit, and role", async 
 });
 
 test("a terminal entry without a task id closes the dispatched entry with the same plan, unit, role, round, and attempt", () => {
-  const limits = { maxParallel: 4, maxTasksPerRun: 24 };
+  const limits = { maxParallel: 4 };
   const active = (entries: LedgerEntry[]) => ledgerStats(entries, limits).active;
   const d = entry({ plan: "p", unit: "U1", role: "execute", taskId: "t1" });
   assert.equal(active([d, entry({ plan: "p", unit: "U1", role: "execute", status: "completed" })]), 0);
@@ -299,7 +306,7 @@ test("a terminal entry without a task id closes the dispatched entry with the sa
 });
 
 test("a terminal entry with neither a task id nor a unit closes nothing", () => {
-  const limits = { maxParallel: 4, maxTasksPerRun: 24 };
+  const limits = { maxParallel: 4 };
   const active = (entries: LedgerEntry[]) => ledgerStats(entries, limits).active;
   const d = entry({ plan: "p", role: "execute", taskId: "t1" });
   assert.equal(active([d, entry({ plan: "p", role: "execute", status: "completed" })]), 1);
@@ -316,7 +323,7 @@ test("ledger add without --task-id or --unit warns that it closed nothing", asyn
 });
 
 test("interrupted, verified, and rejected are terminal and close by task id", () => {
-  const limits = { maxParallel: 4, maxTasksPerRun: 24 };
+  const limits = { maxParallel: 4 };
   for (const status of ["interrupted", "verified", "rejected", "cancelled"] as const) {
     const stats = ledgerStats([entry({ taskId: "t1" }), entry({ taskId: "t1", status })], limits);
     assert.equal(stats.active, 0, status);
@@ -404,10 +411,10 @@ test("indexed ledger statistics preserve task and fallback identity matching", (
     entry({ status: "verified" }),
   ];
   const expected = dispatched.filter((d) => !terminal.some((t) => closes(t, d))).length;
-  assert.equal(ledgerStats([...terminal, ...dispatched], { maxParallel: 4, maxTasksPerRun: 24 }).active, expected);
+  assert.equal(ledgerStats([...terminal, ...dispatched], { maxParallel: 4 }).active, expected);
   const many = Array.from({ length: 30_000 }, (_, i) => entry({ taskId: `d${i}` }));
   const closed = Array.from({ length: 30_000 }, (_, i) => entry({ taskId: `t${i}`, status: "completed" }));
-  assert.equal(ledgerStats([...many, ...closed], { maxParallel: 4, maxTasksPerRun: 24 }).active, many.length);
+  assert.equal(ledgerStats([...many, ...closed], { maxParallel: 4 }).active, many.length);
 });
 
 test("ledger reads reject malformed optional identities", async () => {

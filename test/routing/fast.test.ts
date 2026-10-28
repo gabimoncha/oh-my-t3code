@@ -109,5 +109,5 @@ test("resolveAll applies the default Sol fast setting to the chosen target and f
   const report = resolveAll(DEFAULT_CONFIG, liveCaps());
   assert.equal(report.roles.research?.delegateTask?.target.options?.serviceTier, "priority");
   assert.equal(report.roles.execute?.fallbacks[0]?.options?.serviceTier, "priority");
-  assert.equal(report.roles.qa?.delegateTask?.target.options?.serviceTier, "priority");
+  assert.equal(report.roles.qa?.fallbacks.at(-1)?.options?.serviceTier, "priority");
 });

@@ -37,19 +37,16 @@ const EXPECTED: Record<string, [access: string, result: string, t3Role: string, 
   "plan-review": ["read-only", "review", "review", "plan", true, ["codex/gpt-6-astra/high", "claudeAgent/claude-opus-5-5/high"]],
   grill: ["read-only", "grill", "review", "plan", true, ["codex/gpt-6-astra/high", "claudeAgent/claude-opus-5-5/high"]],
   execute: ["edit", "work", "implementation", "default", false, ["claudeAgent/claude-opus-5-5/medium", "codex/gpt-6.1-sol/xhigh"]],
-  quick: ["edit", "work", "implementation", "default", false, ["codex/gpt-6-luna/high", "claudeAgent/claude-sonnet-5-5/low"]],
-  deep: ["edit", "work", "implementation", "default", false, ["claudeAgent/claude-opus-5-5/max", "codex/gpt-6-astra/xhigh"]],
   review: ["read-only", "review", "review", "plan", true, ["codex/gpt-6-astra/high", "claudeAgent/claude-opus-5-5/high"]],
   oracle: ["read-only", "review", "review", "plan", true, ["codex/gpt-6-astra/high", "claudeAgent/claude-opus-5-5/high"]],
-  verify: ["edit", "test", "test", "default", false, ["claudeAgent/claude-haiku-5-5/medium", "claudeAgent/claude-sonnet-5-5/low", "codex/gpt-6.1-sol/low"]],
-  qa: ["edit", "test", "test", "default", false, ["codex/gpt-6.1-sol/medium", "claudeAgent/claude-sonnet-5-5/medium"]],
+  qa: ["edit", "test", "test", "default", false, ["claudeAgent/claude-haiku-5-5/medium", "claudeAgent/claude-sonnet-5-5/low", "codex/gpt-6.1-sol/low"]],
   guardrail: ["read-only", "guardrail", "review", "plan", false, ["claudeAgent/claude-opus-5-5/high", "codex/gpt-6-astra/high"]],
   writing: ["edit", "work", "implementation", "default", false, ["claudeAgent/claude-opus-5-5/high", "codex/gpt-6-astra/medium"]],
   design: ["edit", "work", "design", "default", false, ["claudeAgent/claude-opus-5-5/high"]],
   ui: ["edit", "work", "implementation", "default", false, ["claudeAgent/claude-opus-5-5/medium"]],
 };
 
-test("the defaults hold the 16 roles with the planned values", () => {
+test("the defaults hold the 13 roles with the planned values", () => {
   assert.deepEqual(Object.keys(DEFAULT_CONFIG.roles).sort(), Object.keys(EXPECTED).sort());
   for (const [name, [access, result, t3Role, mode]] of Object.entries(EXPECTED)) {
     const role = DEFAULT_CONFIG.roles[name];
@@ -114,8 +111,38 @@ test("the design and ui roles run only on Opus, with no fallback", () => {
 });
 
 test("the default limits match the plan", () => {
-  assert.deepEqual(DEFAULT_CONFIG.limits, { maxParallel: 6, maxTasksPerRun: 24, maxDepth: 1, maxReviewRounds: 4 });
+  assert.deepEqual(DEFAULT_CONFIG.limits, { maxParallel: 6, maxDepth: 1, maxReviewRounds: 4 });
   assert.equal(DEFAULT_CONFIG.version, 1);
+});
+
+test("set 2026-12 drops the retired build keys, the task budget, and the verify, quick, and deep roles", () => {
+  assert.equal(LATEST_DEFAULT_SET, "2026-12");
+  for (const name of ["verify", "quick", "deep"]) assert.equal(Object.hasOwn(DEFAULT_CONFIG.roles, name), false, name);
+  for (const [name, profile] of Object.entries(DEFAULT_CONFIG.profiles)) {
+    const build = profile.workflow?.build ?? {};
+    for (const key of ["verify", "checkpoint", "stallMinutes"]) assert.equal(Object.hasOwn(build, key), false, `${name} ${key}`);
+  }
+  assert.deepEqual(DEFAULT_CONFIG.profiles.normal?.workflow?.build, { review: "every-round", qa: "planned", failureProofs: "on", oracle: "heavy" });
+  assert.match(DEFAULT_CONFIG.roles.qa?.description ?? "", /device flows/);
+  assert.match(DEFAULT_CONFIG.roles.qa?.description ?? "", /Edits nothing/);
+});
+
+test("the older sets 2026-10 and 2026-11 still load, without the retired keys and roles, and with no warning", async () => {
+  const ctx = fakeContext({ root: tempDir("omt-old-sets-") });
+  const configPath = join(ctx.cwd, ".omt", "config.jsonc");
+  for (const set of ["2026-10", "2026-11"]) {
+    writeFile(configPath, JSON.stringify({ defaults: set }));
+    const loaded = await loadConfig(ctx);
+    assert.deepEqual(loaded.issues, [], set);
+    assert.equal(loaded.config.defaults, set);
+    assert.deepEqual(loaded.config.limits, { maxParallel: 6, maxDepth: 1, maxReviewRounds: 4 }, set);
+    for (const name of ["verify", "quick", "deep"]) assert.equal(Object.hasOwn(loaded.config.roles, name), false, `${set} ${name}`);
+    assert.ok(loaded.config.roles.qa, set);
+    for (const profile of Object.values(loaded.config.profiles)) {
+      const build = profile.workflow?.build ?? {};
+      for (const key of ["verify", "checkpoint", "stallMinutes"]) assert.equal(Object.hasOwn(build, key), false, `${set} ${key}`);
+    }
+  }
 });
 
 // A minimal JSONC reader for this test only; src/config/jsonc.ts is the real one.

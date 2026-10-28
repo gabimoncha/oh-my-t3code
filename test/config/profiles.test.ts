@@ -34,10 +34,7 @@ test("the presets store a full normal workflow and sparse prototype and PR overr
   assert.deepEqual(normal.workflow, {
     plan: { review: "two-families", testLayers: ["e2e"] },
     design: { variants: 3 },
-    build: {
-      review: "every-round", verify: "heavy", qa: "planned", failureProofs: "on", oracle: "heavy",
-      checkpoint: "none", stallMinutes: 30,
-    },
+    build: { review: "every-round", qa: "planned", failureProofs: "on", oracle: "heavy" },
     review: {
       reviewers: "auto", families: "one", oracle: "on", fixLoop: "offer", ci: "check", verify: "off",
       tests: "off", guardrails: "off", crap: "off",
@@ -49,7 +46,7 @@ test("the presets store a full normal workflow and sparse prototype and PR overr
   assert.deepEqual(prototype.workflow, {
     plan: { review: "one" },
     design: { variants: 1 },
-    build: { review: "first-round", verify: "every-unit", failureProofs: "off", oracle: "off", checkpoint: "layer" },
+    build: { review: "first-round", failureProofs: "off", oracle: "off" },
     review: { reviewers: 1, oracle: "off", ci: "off" },
   });
   assert.equal(prReview.extends, "normal");
@@ -71,7 +68,7 @@ test("profile fields merge per name, workflow group, limit, role, and model", ()
     profiles: {
       demo: {
         description: "Demo.", extends: "prototype",
-        workflow: { build: { qa: "off", checkpoint: "unit" }, plan: { testLayers: ["unit", "integration"] } },
+        workflow: { build: { qa: "off", oracle: "always" }, plan: { testLayers: ["unit", "integration"] } },
         limits: { maxParallel: 10, maxDepth: 2 },
         roles: { execute: { fast: true, description: "Build." }, oracle: null },
         models: { "gpt-6.1-sol": { fast: false } },
@@ -82,7 +79,7 @@ test("profile fields merge per name, workflow group, limit, role, and model", ()
   const second = merge({
     profiles: {
       demo: {
-        workflow: { build: { checkpoint: "none" }, plan: { testLayers: ["e2e"] } },
+        workflow: { build: { oracle: "off" }, plan: { testLayers: ["e2e"] } },
         limits: { maxParallel: 3 },
         roles: { execute: { fast: false }, qa: { fast: true } },
         models: { "gpt-6.1-sol": {}, other: { fast: true } },
@@ -94,7 +91,7 @@ test("profile fields merge per name, workflow group, limit, role, and model", ()
   assert.equal(second.config.profile, "demo");
   assert.deepEqual(second.config.profiles.demo, {
     description: "Demo.", extends: "prototype",
-    workflow: { build: { qa: "off", checkpoint: "none" }, plan: { testLayers: ["e2e"] } },
+    workflow: { build: { qa: "off", oracle: "off" }, plan: { testLayers: ["e2e"] } },
     limits: { maxParallel: 3, maxDepth: 2 },
     roles: { execute: { fast: false, description: "Build." }, oracle: null, qa: { fast: true } },
     models: { "gpt-6.1-sol": { fast: false }, other: { fast: true } },
@@ -221,12 +218,12 @@ test("every workflow enum and numeric boundary is accepted and invalid values ar
 
 test("unknown workflow groups and fields are errors and only invalid fields are dropped", () => {
   const checked = validateLayer({ profiles: { normal: { workflow: {
-    unknown: {}, build: { unknown: true, qa: "off", verify: "never" }, review: false,
+    unknown: {}, build: { unknown: true, qa: "off", oracle: "never" }, review: false,
   } } } }, "src");
   assert.deepEqual(checked.layer.profiles?.normal?.workflow, { build: { qa: "off" } });
   assert.deepEqual(checked.issues.map((issue) => issue.path), [
     "profiles.normal.workflow.unknown", "profiles.normal.workflow.build.unknown",
-    "profiles.normal.workflow.build.verify", "profiles.normal.workflow.review",
+    "profiles.normal.workflow.build.oracle", "profiles.normal.workflow.review",
   ]);
 });
 
@@ -274,11 +271,11 @@ test("invalid fast values and model fields have exact nested issue paths", () =>
   assert.deepEqual(checked.issues.map((issue) => issue.path), ["models.", `models.${"m".repeat(201)}`, "models.m", "models.n.extra"]);
 });
 
-test("roles.test emits the split warning and still follows normal custom role rules", () => {
+test("roles.test emits the rename warning and still follows normal custom role rules", () => {
   const fields = { test: { description: "Legacy.", access: "edit", chain: [{ driver: "codex", model: "m" }] } };
   const checked = merge({ roles: fields, profiles: { normal: { roles: fields } } });
   assert.deepEqual(checked.issues, ["roles.test", "profiles.normal.roles.test"].map((path) => ({
-    source: "src", path, severity: "warning", message: 'role "test" was split into "verify" and "qa"; rename it',
+    source: "src", path, severity: "warning", message: 'role "test" was renamed to "qa"; rename it',
   })));
   assert.equal(checked.config.roles.test?.description, "Legacy.");
   const incomplete = merge({ roles: { test: { fast: true } } });
@@ -369,12 +366,13 @@ test("config show prints the planned defaults and the roles.test warning", async
   const defaults = await runOk(["config", "show", "--defaults"], options);
   const printed = JSON.parse(defaults.ctx.out()) as OmtConfig;
   assert.equal(printed.limits.maxParallel, 6);
-  assert.ok(printed.roles.verify && printed.roles.qa && printed.roles.guardrail);
+  assert.ok(printed.roles.qa && printed.roles.guardrail);
+  assert.equal(Object.hasOwn(printed.roles, "verify"), false);
   assert.equal(Object.hasOwn(printed.roles, "test"), false);
   assert.deepEqual(printed.models["gpt-6.1-sol"], { fast: true });
   write(projectPath, { roles: { test: { description: "Legacy.", access: "edit", chain: [{ driver: "codex", model: "m" }] } } });
   const shown = await runOk(["config", "show"], options);
-  assert.equal(shown.ctx.err(), `warning ${projectPath} roles.test: role "test" was split into "verify" and "qa"; rename it\n`);
+  assert.equal(shown.ctx.err(), `warning ${projectPath} roles.test: role "test" was renamed to "qa"; rename it\n`);
 });
 
 test("long profile chains produce bounded diagnostics", () => {

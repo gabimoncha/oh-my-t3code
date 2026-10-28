@@ -443,7 +443,8 @@ test("briefs pin the CLI, test policy, saved files, and device exception", () =>
     assert.match(source, /When `omt lock run` exits 75, report the command, the lock name, and its message\./);
     assert.match(source, /Leave the lock to the conductor\./);
     assert.match(source, /For both reports: in `work` results, keep the `STATUS` that your own work earns and put the report under `OPEN`\./);
-    assert.match(source, /For `test` results, including `verify` and `qa`, return `VERDICT: INCONCLUSIVE` and put the report under `FAILURES`\./);
+    const testRoles = source === text ? "`verify` and `qa`" : "`qa`";
+    assert.ok(source.includes(`For \`test\` results, including ${testRoles}, return \`VERDICT: INCONCLUSIVE\` and put the report under \`FAILURES\`.`));
     assert.match(source, /For other results, put the report under `NOTES`, or before the result block when it has no `NOTES`\./);
   }
   assert.match(text, /Workers write no new test file or case\./);

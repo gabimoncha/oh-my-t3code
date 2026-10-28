@@ -138,7 +138,6 @@ export interface RoleConfig {
 
 export interface Limits {
   maxParallel: number;
-  maxTasksPerRun: number;
   maxDepth: number;
   maxReviewRounds: number;
 }
@@ -153,12 +152,9 @@ export interface Workflow {
   };
   build: {
     review: "every-round" | "first-round" | "off";
-    verify: "heavy" | "every-unit";
     qa: "planned" | "off";
     failureProofs: "on" | "off";
     oracle: "heavy" | "always" | "off";
-    checkpoint: "none" | "layer" | "unit";
-    stallMinutes: number;
   };
   review: {
     reviewers: "auto" | number;
@@ -384,10 +380,9 @@ export interface LedgerStats {
   dispatched: number; // entries with status "dispatched"
   active: number; // dispatched entries that no terminal entry closes (section 5.6)
   terminal: number; // entries with a terminal status
-  limits: { maxParallel: number; maxTasksPerRun: number }; // from the effective config; with a plan limit, maxParallel is the lower of the two, and a plan max-tasks replaces maxTasksPerRun (section 5.6)
+  limits: { maxParallel: number }; // from the effective config; with a plan limit, maxParallel is the lower of the two (section 5.6)
   planMaxParallel?: number; // the plan header max-parallel; set only when the plan has one
-  planMaxTasks?: number; // the plan header max-tasks; set only when the plan has one
-  canDispatch: boolean; // active < maxParallel && dispatched < maxTasksPerRun
+  canDispatch: boolean; // active < maxParallel; a run has no task budget
 }
 
 export type T3DriverStatus = "enabled" | "disabled" | "unknown";
@@ -517,7 +512,7 @@ Argument parsing uses `node:util` `parseArgs` with `strict: true` and `allowPosi
 | `roles` | `omt roles [--capabilities <file>] [--role <name>]... [--plan <slug>] [--profile <name>] [--json]` |
 | `route` | `omt route <role> [--capabilities <file>] [--against <provider\|driver\|auto>] [--plan <slug>] [--profile <name>] [--unit <id>]` |
 | `brief` | `omt brief <role> (--task <text> \| --task-file <file>) [options]` |
-| `plan` | `omt plan new <slug> [--title <text>] [--light] [--max-parallel <n>] [--max-tasks <n>] [--profile <name>] [--force]`, `omt plan profile <slug> <name\|none>`, `omt plan mark <slug> <id> <done\|open\|blocked>`, `omt plan limit <slug> [<n\|none>] [--tasks <n\|none>]`, `omt plan status [<slug>] [--json]`, `omt plan list [--json]` |
+| `plan` | `omt plan new <slug> [--title <text>] [--light] [--max-parallel <n>] [--profile <name>] [--force]`, `omt plan profile <slug> <name\|none>`, `omt plan mark <slug> <id> <done\|open\|blocked>`, `omt plan limit <slug> <n\|none>`, `omt plan status [<slug>] [--json]`, `omt plan list [--json]` |
 | `ledger` | `omt ledger add [options]`, `omt ledger list [--plan <slug>] [--json]`, `omt ledger stats [--plan <slug>] [--json]`, `omt ledger request-id --plan <slug> --unit <id> --role <role> [--round <n>] [--attempt <n>]` |
 | `profile` | `omt profile list [--json]`, `omt profile show [<name>] [--plan <slug>] [--profile <name>] [--json]` |
 | `lock` | `omt lock run <name> [--wait <seconds>] -- <command> [args...]`, `omt lock list` |
@@ -751,7 +746,7 @@ Options:
 | `--json` | print a ready `delegate_task` payload instead of the brief text |
 | `--save` | save the full brief to evidence; with `--json`, return a short task that names the saved file |
 
-`--attempt <n>` (default 1) is the attempt number for the request id (section 10). `--round`, `--depth`, and `--attempt` are positive integers. `--task` and `--task-file` exclude each other, and so do `--context` and `--context-file`. Only one flag can read stdin. An empty task is a usage error. An unknown role exits 1. The brief's `maxDepth` is `--max-depth` when given, else `limits.maxDepth` from the effective config. A `--depth` greater than that max is a usage error (exit 2) with a hint that names `--max-depth`. One exception: role `verify` may be one level deeper, because a worker at max depth still hands device checks to a `verify` child; that brief then uses its own depth as its max. `--plan` must match the plan slug regex (section 5.5) and `--unit` must match `^[A-Za-z0-9._-]{1,64}$`; a mismatch is a usage error. When the rendered brief is longer than 120,000 characters, the command prints nothing to stdout and exits 1 with a hint to shorten `--context` or `--prior-file`.
+`--attempt <n>` (default 1) is the attempt number for the request id (section 10). `--round`, `--depth`, and `--attempt` are positive integers. `--task` and `--task-file` exclude each other, and so do `--context` and `--context-file`. Only one flag can read stdin. An empty task is a usage error. An unknown role exits 1. The brief's `maxDepth` is `--max-depth` when given, else `limits.maxDepth` from the effective config. A `--depth` greater than that max is a usage error (exit 2) with a hint that names `--max-depth`. The retired roles `verify`, `quick`, and `deep` are not in set 2026-12 or in the older sets after resolve (section 6.4), so `omt brief verify` exits 1 like any unknown role. `--plan` must match the plan slug regex (section 5.5) and `--unit` must match `^[A-Za-z0-9._-]{1,64}$`; a mismatch is a usage error. When the rendered brief is longer than 120,000 characters, the command prints nothing to stdout and exits 1 with a hint to shorten `--context` or `--prior-file`.
 
 Without `--json`, the command prints the rendered brief (section 9). With `--json`, it prints a `BriefJsonOutput` (section 3). The `delegateTask` object is exactly the argument object for the `delegate_task` tool:
 
@@ -794,30 +789,31 @@ Only `<taskId>` remains a placeholder. The CLI fills and quotes all other values
 
 ### 5.5 `omt plan`
 
-- `new <slug>` writes `.omt/plans/<slug>.md` from the template in section 12. A slug matches `^[a-z0-9][a-z0-9-]{0,63}$`. An existing file is an error unless `--force` is given. `--light` leaves the `F2` oracle line out. `--max-parallel <n>` writes the `max-parallel=<n>` header key (section 12.2). An integer outside 1 to 32 is a usage error (exit 2). `--max-tasks <n>` writes the `max-tasks=<n>` header key, after `max-parallel` when both are given. An integer outside 1 to 500 is a usage error (exit 2). `--profile <name>` validates the selected profile and adds `profile=<name>` after the limit keys. Without that flag, `new` validates the config profile but writes no profile key. It prints the path.
+- `new <slug>` writes `.omt/plans/<slug>.md` from the template in section 12. A slug matches `^[a-z0-9][a-z0-9-]{0,63}$`. An existing file is an error unless `--force` is given. `--light` leaves the `F2` oracle line out. `--max-parallel <n>` writes the `max-parallel=<n>` header key (section 12.2). An integer outside 1 to 32 is a usage error (exit 2). `--profile <name>` validates the selected profile and adds `profile=<name>` after the limit keys. Without that flag, `new` validates the config profile but writes no profile key. It prints the path.
 - `profile <slug> <name|none>` changes only the plan header. A name sets `profile=<name>` and prints `set profile=<name> for <slug>`. `none` removes the override and prints `removed the profile of <slug>`. It validates the resulting selection, keeps other header keys, and writes atomically. A missing plan or header exits 1. An unknown profile exits 2 and lists known profiles. The `--profile` flag applies only to `new`; other plan subcommands reject it with exit 2.
 - Each plan mutation resolves the destination, including dangling links and existing parent links, and refuses a destination outside the project root. Links to files inside the project remain supported.
 - `mark <slug> <id> <done|open|blocked>` sets the checkbox of the column-zero item line for `<id>` (such as `U3`, `D1`, or `F2`) to `x`, a space, or `~`. It appends `- <ISO timestamp> <id> -> <state>` to the end of the file (the `## Log` section is last), writes atomically, prints `marked <id> <state>`, and exits 0. A missing plan or id exits 1. A bad state exits 2.
-- `limit <slug> [<n|none>] [--tasks <n|none>]` changes the header comment of an existing plan. The positional value sets the `max-parallel` key to `<n>`, or removes it with `none`. `--tasks <n>` sets the `max-tasks` key, and `--tasks none` removes it. One call can give both. With neither, it exits 2. It changes only the header comment (section 12.2), not a later omt-plan comment in the body, keeps the other keys, and writes atomically. It prints one line per changed key: `set <key>=<n> for <slug>` or `removed the <key> limit of <slug>`. A missing plan exits 1. A positional value that is not `none` or an integer from 1 to 32 exits 2. A `--tasks` value that is not `none` or an integer from 1 to 500 exits 2.
-- `status [<slug>]` parses one plan and prints its counts, the next open unit, and the ready units (section 12.2). The first line has the absolute path of the plan file, so a skill can hash and edit the shared plan from any worktree. The next line is `profile: <effective name>`. When the plan has `maxParallel`, it prints `max parallel: <n>` after the `final` line. When the plan has `maxTasks`, it prints `max tasks: <n>` after that. The line after `next:` is `ready: <id>, <id>` with the ids of the `ready` units in file order, or `ready: none`. Then it prints one `warning: <text>` line for each dependency warning (section 12.2). Without a slug it uses the most recently modified plan. `--json` prints the parsed `PlanStatus` with an added `path` and the effective `profile` name.
+- `limit <slug> <n|none>` changes the header comment of an existing plan. The value sets the `max-parallel` key to `<n>`, or removes it with `none`. Without a value, it exits 2. It changes only the header comment (section 12.2), not a later omt-plan comment in the body, keeps the other keys, and writes atomically. It prints `set max-parallel=<n> for <slug>` or `removed the max-parallel limit of <slug>`. A missing plan exits 1. A value that is not `none` or an integer from 1 to 32 exits 2.
+- The task budget was removed. `--tasks` (with any subcommand, `limit` included) and `--max-tasks` (with `new`) are usage errors (exit 2). The message says `--tasks is no longer supported: the task budget was removed` (or `--max-tasks`). The command changes no file.
+- `status [<slug>]` parses one plan and prints its counts, the next open unit, and the ready units (section 12.2). The first line has the absolute path of the plan file, so a skill can hash and edit the shared plan from any worktree. The next line is `profile: <effective name>`. When the plan has `maxParallel`, it prints `max parallel: <n>` after the `final` line. The line after `next:` is `ready: <id>, <id>` with the ids of the `ready` units in file order, or `ready: none`. Then it prints one `warning: <text>` line for each header warning, then one for each dependency warning (section 12.2). A header with a `max-tasks` key gives the header warning `the max-tasks header key is no longer used; remove it`. The key has no effect. `--json` adds the same texts in a `warnings` array. Without a slug it uses the most recently modified plan. `--json` prints the parsed `PlanStatus` with an added `path` and the effective `profile` name.
 - `list` prints one line per plan: slug, unit counts, and the next open unit. `--json` prints an array of `PlanStatus` items, each with an added `path`, so each item also has `ready`. Unlike `status`, `list` keeps the stored optional profile name without resolving it.
 - `list` and `status` skip a `*.md` entry whose `stat` fails with ENOENT, such as a dangling symlink.
 
 ### 5.6 `omt ledger`
 
-- `add` appends one `LedgerEntry` (section 3) as one JSON line to `.omt/ledger.jsonl`, with one `appendFile` call. Required flags: `--role` and `--status`. `--role` accepts any name, not only config roles, because the skills record `swarm` and `loop`. Optional flags: `--plan`, `--unit`, `--round`, `--attempt`, `--task-id`, `--client-request-id`, `--provider`, `--model`, `--verdict`, `--note`. `--round` and `--attempt` are positive integers. `--status dispatched` needs `--task-id` or `--unit`, else exit 2. A `dispatched` entry without `--task-id` is still appended, and the command prints `warning: this dispatched entry has no --task-id; the stall check and result matching need it` to stderr. It prints the entry as JSON. A terminal entry that closes no dispatched entry is still appended; the command then prints `omt: no dispatched entry matches; nothing was closed` to stderr and exits 0.
+- `add` appends one `LedgerEntry` (section 3) as one JSON line to `.omt/ledger.jsonl`, with one `appendFile` call. Required flags: `--role` and `--status`. `--role` accepts any name, not only config roles, because the skills record `swarm` and `loop`. Optional flags: `--plan`, `--unit`, `--round`, `--attempt`, `--task-id`, `--client-request-id`, `--provider`, `--model`, `--verdict`, `--note`. `--round` and `--attempt` are positive integers. `--status dispatched` needs `--task-id` or `--unit`, else exit 2. A `dispatched` entry without `--task-id` is still appended, and the command prints `warning: this dispatched entry has no --task-id; result matching needs it` to stderr. It prints the entry as JSON. A terminal entry that closes no dispatched entry is still appended; the command then prints `omt: no dispatched entry matches; nothing was closed` to stderr and exits 0.
 - In every subcommand, `--plan` must match the plan slug regex (section 5.5) and `--unit` must match `^[A-Za-z0-9._-]{1,64}$`; a mismatch is a usage error.
 - Terminal statuses are `completed`, `failed`, `cancelled`, `interrupted`, `verified`, and `rejected`. A terminal entry T closes a dispatched entry D when T has a `taskId` equal to D's, or when T has no `taskId`, both T and D have a `unit`, and T and D have the same `plan`, `unit`, `role`, `round` (default 1), and `attempt` (default 1). A terminal entry with neither `taskId` nor `unit` closes nothing. `active` counts dispatched entries that no terminal entry closes, in any order. Statistics index terminal task IDs and fallback identities once. Optional identity and display text fields must be strings, except `provider`, which routing checks with its existing warning. Round and attempt values must be positive safe integers.
 - Table output caps each displayed cell at 120 characters with a final ellipsis and stops at 1,000,000 characters plus a truncation notice. `--json` keeps full values.
 - `list` prints a table with the columns `TIME` (HH:MM:SS of `ts`, in UTC), `PLAN`, `UNIT`, `ROLE`, `ROUND`, `STATUS`, `VERDICT`, `TASK` (the last 12 characters of `taskId`). It filters by `--plan` when given. `--json` prints an array of entries. A malformed line is skipped with a warning on stderr.
-- `stats` loads the config, applies the plan header's profile or the config profile, and prints a `LedgerStats` (section 3). Text mode prints one line per field: `plan` (with `--plan`), `profile` (the effective name), `dispatched`, `active`, `terminal`, `max parallel`, `max tasks per run`, and `can dispatch: yes` or `can dispatch: no`. `--json` prints the object. The command has no `--profile` flag. Its JSON has no `profile` field. Before a plan file exists, a skill with a selected run profile compares these counts with `omt profile show <name> --json` limits (section 15.2).
+- `stats` loads the config, applies the plan header's profile or the config profile, and prints a `LedgerStats` (section 3). Text mode prints one line per field: `plan` (with `--plan`), `profile` (the effective name), `dispatched`, `active`, `terminal`, `max parallel`, and `can dispatch: yes` or `can dispatch: no`. `canDispatch` is `active < maxParallel`. A run has no task budget, so the number of dispatched entries never stops a dispatch. `--json` prints the object. The command has no `--profile` flag. Its JSON has no `profile` field. Before a plan file exists, a skill with a selected run profile compares these counts with `omt profile show <name> --json` limits (section 15.2).
 - With `--plan <slug>`, when `.omt/plans/<slug>.md` exists and its header has `max-parallel` (section 12.2), the effective `maxParallel` is the lower of the profile-applied config value and the plan value. `limits.maxParallel` holds the effective value, `planMaxParallel` holds the plan value, and `canDispatch` uses the effective value. Text mode then prints `max parallel: <effective> (plan <n>, config <m>)`. Without a plan file, the config selects the profile. Without a plan limit, the profile-applied config limits apply.
-- With `--plan <slug>`, when the plan header has `max-tasks` (section 12.2), the plan value replaces the config value of `maxTasksPerRun`, also when it is higher. `dispatched` counts every dispatched entry of the plan, planning tasks included, so a global cap stops a large plan early; the owner sets `max-tasks` for the size of this plan. This differs from `max-parallel`, where the lower value wins. `limits.maxTasksPerRun` holds the effective value, `planMaxTasks` holds the plan value, and `canDispatch` uses the effective value. Text mode then prints `max tasks per run: <effective> (plan <n>, config <m>)`. Without the key, the output does not change.
+- A plan header `max-tasks` key and a config `limits.maxTasksPerRun` have no effect on `stats`. The config key gives the retired-key warning on stderr (section 6.2).
 - `request-id` prints the canonical `clientRequestId` (section 10).
 
 ### 5.7 `omt hook user-prompt-submit`
 
-See section 13.
+See section 13. The help text says that the command prints additional context that loads the omt-ulw skill when the prompt asks for ultrawork.
 
 ### 5.8 `omt paths`
 
@@ -1235,13 +1231,14 @@ A missing file is not an error. Each file is JSONC (section 7). Profile selectio
   - `effort`: a value from the effort ladder.
   - `fast`: a boolean.
   - `options`: an object whose values are strings or booleans.
-- Allowed limit keys and integer ranges: `maxParallel` 1 to 32, `maxTasksPerRun` 1 to 500, `maxDepth` 0 to 3, `maxReviewRounds` 1 to 10. An invalid limit is dropped with an error.
+- Allowed limit keys and integer ranges: `maxParallel` 1 to 32, `maxDepth` 0 to 3, `maxReviewRounds` 1 to 10. An invalid limit is dropped with an error.
+- Retired keys and roles. Set 2026-12 retired these keys: `workflow.build.verify`, `workflow.build.checkpoint`, and `workflow.build.stallMinutes` in any profile, `limits.maxTasksPerRun` at root or in a profile, and the roles `verify`, `quick`, and `deep` at root or in a profile. A layer that sets one still loads. Validation drops the key, whatever its value, and adds one warning for each key: `<path> is no longer used; remove it`, for example `profiles.normal.workflow.build.checkpoint is no longer used; remove it`. A retired key or role therefore has no effect on the effective config. `RETIRED_BUILD_KEYS`, `RETIRED_LIMIT_KEYS`, and `RETIRED_ROLES` in `src/config/defaultSets.ts` hold the lists.
 - `profile` and each profile name match the role-name pattern. A profile value is `null` or an object. Allowed fields are `description`, `extends`, `workflow`, `limits`, `roles`, and `models`. `visuals` is an unknown profile field, so it is an error.
 - Profile `description` is a non-empty string of at most 300 Unicode code points. An invalid description drops the whole profile override. Other invalid profile fields are dropped individually. `extends` matches the profile-name pattern.
 - Profile `roles` and `limits` use the root validation rules. Each workflow group and key follows section 6.7. An unknown group, key, or value is an error. Valid fields remain. `plan.testLayers` can be empty and can contain only `e2e`, `integration`, and `unit`.
 - A model id is a non-empty string of at most 200 Unicode code points. Each `models.<id>` value is an object with only an optional boolean `fast`. Invalid model fields are dropped individually.
 - Role descriptions and rung model ids use the same code-point limits as profile descriptions and model ids.
-- A `roles.test` key, at root or inside a profile, warns: `role "test" was split into "verify" and "qa"; rename it`. It remains a custom role with no special behavior. A partial legacy override can fail the new-role requirements in section 6.3.
+- A `roles.test` key, at root or inside a profile, warns: `role "test" was renamed to "qa"; rename it`. It remains a custom role with no special behavior. A partial legacy override can fail the new-role requirements in section 6.3.
 
 ### 6.3 Merging
 
@@ -1278,8 +1275,11 @@ A JSONC syntax error in a file becomes one error issue, and that file is skipped
 
 `src/config/defaultSets.ts` exports the dated default sets:
 
-- `DEFAULT_SETS: Readonly<Record<string, OmtConfig>>`. Each set is a whole `OmtConfig`, and its `defaults` field holds its own name. The sets are `"2026-10"` and `"2026-11"`. `"2026-11"` has the values of this section, and `"2026-10"` has the same values without the `grill` role and without the `workflow.git` group (section 6.7). A set never changes after a release; a change to the defaults goes into a new set with a later name.
-- `LATEST_DEFAULT_SET = "2026-11"` and `DEFAULT_SET_NAME_RE = /^\d{4}-\d{2}(-[a-z0-9]+)?$/`.
+- `DEFAULT_SETS: Readonly<Record<string, OmtConfig>>`. Each set is a whole `OmtConfig`, and its `defaults` field holds its own name. The sets are `"2026-10"`, `"2026-11"`, and `"2026-12"`. `"2026-12"` has the values of this section. A set never changes after a release; a change to the defaults goes into a new set with a later name.
+- In `"2026-12"`, the `prototype` profile description is `Build a prototype with fewer reviews and no failure proofs.`
+- `"2026-11"` is `"2026-12"` with the retired keys and roles of section 6.2, and with these differences: `qa` has the description `Write the tests that the plan lists for the unit, e2e first, and make them pass.` and the chain codex/gpt-6.1-sol medium, claudeAgent/claude-sonnet-5-5 medium; and the `prototype` description is `Build a prototype with fewer reviews and a check-in after each layer.` `"2026-10"` is `"2026-11"` without the `grill` role and without the `workflow.git` group (section 6.7).
+- The source keeps sets 2026-10 and 2026-11 unchanged, retired keys included. `DEFAULT_SETS` and `defaultSet(name)` hold each older set with the retired keys and roles removed. So a config pinned to an older set still loads, without a warning, because the user did not write those keys. Only a key that a config file sets gives the retired-key warning (section 6.2). `omt defaults diff` compares these resolved sets, so it does not list the retired keys.
+- `LATEST_DEFAULT_SET = "2026-12"` and `DEFAULT_SET_NAME_RE = /^\d{4}-\d{2}(-[a-z0-9]+)?$/`.
 - `isDefaultSet(name)`, `defaultSetNames()`, and `defaultSet(name)`, which returns the named set, or the latest set for a name that omt does not ship.
 - `diffDefaultSets(from: OmtConfig, to: OmtConfig, overrides: { source: string; layer: ConfigLayer }[]): DefaultsChange[]`.
 
@@ -1301,16 +1301,15 @@ For a role without `crossFamily`, rung 2 runs only when T3 refuses rung 1. For a
 | `plan-review` | read-only | review | review | plan | true | codex/gpt-6-astra high, claudeAgent/claude-opus-5-5 high |
 | `grill` | read-only | grill | review | plan | true | codex/gpt-6-astra high, claudeAgent/claude-opus-5-5 high |
 | `execute` | edit | work | implementation | default | false | claudeAgent/claude-opus-5-5 medium, codex/gpt-6.1-sol xhigh |
-| `quick` | edit | work | implementation | default | false | codex/gpt-6-luna high, claudeAgent/claude-sonnet-5-5 low |
-| `deep` | edit | work | implementation | default | false | claudeAgent/claude-opus-5-5 max, codex/gpt-6-astra xhigh |
 | `review` | read-only | review | review | plan | true | codex/gpt-6-astra high, claudeAgent/claude-opus-5-5 high |
 | `oracle` | read-only | review | review | plan | true | codex/gpt-6-astra high, claudeAgent/claude-opus-5-5 high |
-| `verify` | edit | test | test | default | false | claudeAgent/claude-haiku-5-5 medium, claudeAgent/claude-sonnet-5-5 low, codex/gpt-6.1-sol low |
-| `qa` | edit | test | test | default | false | codex/gpt-6.1-sol medium, claudeAgent/claude-sonnet-5-5 medium |
+| `qa` | edit | test | test | default | false | claudeAgent/claude-haiku-5-5 medium, claudeAgent/claude-sonnet-5-5 low, codex/gpt-6.1-sol low |
 | `guardrail` | read-only | guardrail | review | plan | false | claudeAgent/claude-opus-5-5 high, codex/gpt-6-astra high |
 | `writing` | edit | work | implementation | default | false | claudeAgent/claude-opus-5-5 high, codex/gpt-6-astra medium |
 | `design` | edit | work | design | default | false | claudeAgent/claude-opus-5-5 high |
 | `ui` | edit | work | implementation | default | false | claudeAgent/claude-opus-5-5 medium |
+
+`qa` puts its Claude rungs first, because a Codex child cannot reach the local device daemon. It has `edit` access only so that it can run commands and write logs; its brief forbids edits in the repository (section 9.2).
 
 Every default role has `runtimeMode: "inherit"` and an explicit `crossFamily`. Without `--against`, the cross-family roles start on codex, which fits the default worker (`execute` on claudeAgent).
 
@@ -1322,30 +1321,27 @@ Role descriptions (shown to agents in `omt roles` and in skills):
 - `plan-review`: Check a plan for gaps, ambiguity, and steps that cannot be verified.
 - `grill`: Test a goal before it has a plan: find its edge cases, open questions, and options.
 - `execute`: Implement one planned unit inside its scope and run its verify commands.
-- `quick`: Make a small, mechanical change, such as a rename, a typo, or a one-file edit.
-- `deep`: Solve a hard or cross-cutting problem that needs investigation before the change.
 - `review`: Review a diff against its brief and report findings by severity. Runs on the family that did not make the change when the worker is known.
 - `oracle`: Attack the finished change from the family other than the main implementer's before it counts as done.
-- `verify`: Drive the Simulator, a device, a browser, or a computer, and run the unit's checks; return a verdict with logs and screenshots.
-- `qa`: Write the tests that the plan lists for the unit, e2e first, and make them pass.
+- `qa`: Run the given check commands and device flows, and return each exit code with its log and screenshots. Edits nothing.
 - `guardrail`: Turn review findings into deterministic checks and rule fixes, so that the next change cannot repeat them.
 - `writing`: Write or edit documentation and other prose.
 - `design`: Design screens and flows in Paper, and write a design spec that UI units cite.
 - `ui`: Implement one UI unit from its design spec, inside its scope.
 
-Default limits: `maxParallel` 6, `maxTasksPerRun` 24, `maxDepth` 1, `maxReviewRounds` 4.
+Default limits: `maxParallel` 6, `maxDepth` 1, `maxReviewRounds` 4.
 
 Default profile: `normal`. Default models: `{ "gpt-6.1-sol": { "fast": true } }`. No default role or rung sets `fast`.
 
 ### 6.5 Starter files
 
-`src/config/starter.ts` exports two strings. `omt config init` and `omt install` write the user starter. `omt init` writes the project starter. Both are sparse. They hold `$schema`, `version`, `"defaults": "<LATEST_DEFAULT_SET>"` after `"version": 1` with a comment that names `omt defaults diff`, empty `roles` and `limits` objects, and comments with one example override, a commented `"profile": "prototype"` line, and a pointer to `omt config show --defaults`. After the `"profile"` line, each starter has a commented `"profiles"` example: a profile `fast-proto` with `description`, `"extends": "prototype"`, `"workflow": { "build": { "checkpoint": "none" } }`, and `"roles": { "execute": { "fast": true } }`, and a comment that points to `omt profile show <name>`. The `$schema` URL is `https://raw.githubusercontent.com/gabimoncha/oh-my-t3code/main/schema/omt.schema.json`.
+`src/config/starter.ts` exports two strings. `omt config init` and `omt install` write the user starter. `omt init` writes the project starter. Both are sparse. They hold `$schema`, `version`, `"defaults": "<LATEST_DEFAULT_SET>"` after `"version": 1` with a comment that names `omt defaults diff`, empty `roles` and `limits` objects, and comments with one example override, a commented `"profile": "prototype"` line, and a pointer to `omt config show --defaults`. After the `"profile"` line, each starter has a commented `"profiles"` example: a profile `fast-proto` with `description`, `"extends": "prototype"`, `"workflow": { "build": { "failureProofs": "on" } }`, and `"roles": { "execute": { "fast": true } }`, and a comment that points to `omt profile show <name>`. The `$schema` URL is `https://raw.githubusercontent.com/gabimoncha/oh-my-t3code/main/schema/omt.schema.json`.
 
 Only the user starter has a commented `// "update": "check",` line after the `limits` object, with the comment `// Check for a new omt once a day in omt install and omt doctor (asks the npm registry).`
 
 ### 6.6 JSON Schema
 
-`src/config/schema.ts` exports the JSON Schema (draft 2020-12) for a config file as a plain object. `scripts/build-schema.ts` writes it to `schema/omt.schema.json` with 2-space indentation and a final newline. A test fails when the committed file differs from the generated output. Another test checks that the schema allows exactly the keys that `validateLayer` allows. Role and rung definitions include boolean `fast`. The role definition also includes boolean `crossFamily`. The schema defines `profile`, `profiles`, `models`, and all workflow groups. Preset profile values cannot be null. New-profile descriptions and inheritance chains need the runtime merge checks. `visuals` stays only as `{ "deprecated": true, "description": "No longer used. omt ignores this key." }`, so an editor marks an old key instead of rejecting it; `validateLayer` drops it with a warning (section 6.2). `defaults` has an `enum` of the names in `DEFAULT_SETS`.
+`src/config/schema.ts` exports the JSON Schema (draft 2020-12) for a config file as a plain object. `scripts/build-schema.ts` writes it to `schema/omt.schema.json` with 2-space indentation and a final newline. A test fails when the committed file differs from the generated output. Another test checks that the schema allows exactly the keys that `validateLayer` allows. Role and rung definitions include boolean `fast`. The role definition also includes boolean `crossFamily`. The schema defines `profile`, `profiles`, `models`, and all workflow groups. Preset profile values cannot be null. New-profile descriptions and inheritance chains need the runtime merge checks. `visuals`, the retired limit `maxTasksPerRun`, and the retired build keys `verify`, `checkpoint`, and `stallMinutes` stay only as `{ "deprecated": true, "description": "No longer used. omt ignores this key." }`, so an editor marks an old key instead of rejecting it; `validateLayer` drops each with a warning (section 6.2). A retired role name needs no entry, because `roles` accepts any role name. `defaults` has an `enum` of the names in `DEFAULT_SETS`.
 
 `update` has an `enum` of `off`, `check`, and `apply`.
 
@@ -1371,12 +1367,9 @@ The following keys are under `profiles.<name>.workflow`. The table shows the res
 | `plan.testLayers` | array of `e2e`, `integration`, `unit` | `["e2e"]` | `["e2e"]` | `["e2e"]` |
 | `design.variants` | integer 1 to 5 | 3 | 1 | 3 |
 | `build.review` | `every-round`, `first-round`, `off` | `every-round` | `first-round` | `every-round` |
-| `build.verify` | `heavy`, `every-unit` | `heavy` | `every-unit` | `heavy` |
 | `build.qa` | `planned`, `off` | `planned` | `planned` | `planned` |
 | `build.failureProofs` | `on`, `off` | `on` | `off` | `on` |
 | `build.oracle` | `heavy`, `always`, `off` | `heavy` | `off` | `heavy` |
-| `build.checkpoint` | `none`, `layer`, `unit` | `none` | `layer` | `none` |
-| `build.stallMinutes` | integer 10 to 120 | 30 | 30 | 30 |
 | `review.reviewers` | `auto` or integer 1 to 4 | `auto` | 1 | `auto` |
 | `review.families` | `one`, `both` | `one` | `one` | `one` |
 | `review.oracle` | `on`, `off` | `on` | `off` | `on` |
@@ -1391,6 +1384,8 @@ The following keys are under `profiles.<name>.workflow`. The table shows the res
 | `git.defaultBranch` | `ask`, `auto` | `ask` | `ask` | `ask` |
 | `git.merge` | `ask`, `auto` | `ask` | `ask` | `ask` |
 | `git.owners` | array of GitHub owners that match `^[A-Za-z0-9][A-Za-z0-9-]{0,38}$` | `[]` | `[]` | `[]` |
+
+The build keys `verify`, `checkpoint`, and `stallMinutes` are retired (section 6.2). A run has no per-unit verify cadence, no owner check-in per layer or unit, and no stall heartbeat: the main thread builds, then one review child and one QA child check the work.
 
 Set `2026-10` has no `git` group, so with that set each `git` key that the config does not set is absent, and `omt git check` gives `ask` for it (section 5.15). `git.owners` lists the owners, such as the user's orgs, whose repos count as the user's own; the user's login always counts. `prototype` also sets `limits.maxReviewRounds` to 2. `normal` and `pr-review` set no limits, roles, or models.
 
@@ -1586,13 +1581,13 @@ The result contract for a role comes from `<packageRoot>/skills/omt/references/r
 - <plan-mode line, only for roles whose interactionMode is plan>
 - <children line, only when the child may start children>
 - CLI: Run omt as <command>.
-- Tests: <role policy; qa ends with failureProofs: on or failureProofs: off>
+- Tests: <role policy>
 - You do not see the parent conversation. This brief is your full context. If you need something that is missing, say so in your final message.
 - Other agents may edit other files in this repository at the same time. Leave changes outside your scope alone. Do not commit, push, or create branches.
 - Processes: do not run `pkill`, `killall`, or another kill by name, because it can stop your own run. Stop only a process that you started, by its PID. Give each command that can run long a time limit, for example `timeout 900 <command>`. Close each device or browser session that you or your script opens on every exit path, for example `trap '<close command>' EXIT`.
-- Shared files: never break and restore files in the shared checkout, for example to prove that a test can fail. The qa role makes that proof in a private copy.
+- Shared files: never break and restore files in the shared checkout, for example to prove that a test can fail. The main thread makes that proof in a private copy.
 - Shared builds: <lock and retry rule>
-- <device line, for every role except `verify`>
+- <device line, for every role except `qa`>
 
 # Done when
 
@@ -1618,11 +1613,11 @@ Access lines:
 - `read-only`: `Access: read-only. Change no files. Run only commands that leave the repository unchanged.`
 - `edit` with a scope: `Access: edit. Change only the files in Scope. If the task needs a change outside Scope, stop and report it under OPEN.`
 - `edit` without a scope: `Access: edit. Change only what the task needs.`
+- role `qa`, which has `edit` access only to run commands and write logs: `Access: edit no files in the repository. Write only command output, logs, and screenshots under the Evidence directory.`
 
 Delegation lines:
 
-- When `depth >= maxDepth`, for role `verify` and for roles whose `interactionMode` is `plan`: `Delegation: you are at depth <d> of <max>. Do all work yourself. Start no subagents and no delegated tasks.`
-- When `depth >= maxDepth`, for every other role: `Delegation: you are at depth <d> of <max>. Do all work yourself. Start no subagents and no delegated tasks, except `verify` tasks for device checks (see Devices).` With a plan or an explicit profile, append `For device checks, pass <selection> to omt brief.` The device line (section 15.2) gives the command for those `verify` children.
+- When `depth >= maxDepth`, for every role: `Delegation: you are at depth <d> of <max>. Do all work yourself. Start no subagents and no delegated tasks.` No role has an exception for device checks.
 - Otherwise, with a plan or an explicit profile: `Delegation: you are at depth <d> of <max>. You may delegate with the T3 delegate_task tool. For each child, pass <selection> --depth <d+1>[ --max-depth <max>] to omt brief.` Here `<selection>` contains `--plan <slug>` when set and `--profile <name>` when explicit. Keep both flags when both were given. Include `--max-depth <max>` only when the max differs from `limits.maxDepth` in the effective config.
 - Otherwise, without a plan or an explicit profile, when `<max>` equals `limits.maxDepth` from the effective config: `Delegation: you are at depth <d> of <max>. You may delegate with the T3 delegate_task tool. Give each child depth <d+1> in its brief.`
 - Otherwise, without a plan or an explicit profile (`--max-depth` changed the max): `Delegation: you are at depth <d> of <max>. You may delegate with the T3 delegate_task tool. Give each child depth <d+1>, and pass --max-depth <max> to omt brief.`
@@ -1637,17 +1632,21 @@ Plan-mode line, added after the delegation line when the role's `interactionMode
 
 T3 stores a proposed plan as its own item type, and `task_status.summary` reads only assistant messages. Without this line, a plan-mode child can return its result where the parent's summary does not show it.
 
-Children line, added after the evidence and plan-mode lines, before the CLI line, unless `depth >= maxDepth` and the role is `verify` or its `interactionMode` is `plan`:
+Children line, added after the evidence and plan-mode lines, before the CLI line, only when `depth < maxDepth`:
 
 - ``Children: after you read a child's result, settle the child with the T3 `t3_thread_organize` tool, with `action: "settle"` and the child's `childThreadId`, never the `taskId`. Skip a child that still runs or waits for an answer. Settle nothing when `git rev-parse --git-dir --git-common-dir` prints two different paths, because then you work in a git worktree. A settle error is not a failure of your task.``
 
 Every brief has these constraint lines:
 
 - `CLI:` names `<project root>/.omt/bin/omt` when that path exists, else `omt`. The saved dispatch command uses the same shell-quoted command.
-- `Tests:` for `execute`, `quick`, `deep`, `ui`, and `writing` forbids new test files, new test cases, and failure proofs. It permits an existing-test update only when the change breaks that test, with a note under `NOTES`.
-- `Tests:` for `qa` permits only the task's test lines, top-down. It ends with `failureProofs: on` or `failureProofs: off` from the selected profile's `build.failureProofs`.
+- `Tests:` for `execute`, `ui`, and `writing` forbids new test files, new test cases, and failure proofs. It permits an existing-test update only when the change breaks that test, with a note under `NOTES`.
+- `Tests:` for `qa` is `Tests: write no tests and no failure proofs. Run the commands in Verify and the task's device flows, and report each command with its exit code and log path.` The main thread writes the planned tests and, with `build.failureProofs: on`, the failure proofs.
 - `Tests:` for `review` and `oracle` makes a missing test a finding only when the plan or task names that test. Other roles get `Tests: write no tests.`
-- `Shared builds:` requires the exact lock-wrapped command from the task. Retry a failed build or test only when the file is outside your scope and outside the task's named code under test. The file is the one where the error occurs, such as a file with a compile or load error, also when a test in your scope loads it. Wait 60 seconds and run the command once more. When it fails there again, report the command, the outside-scope file, and the message as another unit's state. For a failure in your scope or the named code under test, follow your result block. For `test` results, return `VERDICT: NOT VERIFIED` for that failure. When `omt lock run` exits 75, report the command, the lock name, and its message. Leave the lock to the conductor. For both reports: in `work` results, keep the `STATUS` that your own work earns and put the report under `OPEN`. For `test` results, including `verify` and `qa`, return `VERDICT: INCONCLUSIVE` and put the report under `FAILURES`. For other results, put the report under `NOTES`, or before the result block when it has no `NOTES`.
+- `Shared builds:` requires the exact lock-wrapped command from the task. Retry a failed build or test only when the file is outside your scope and outside the task's named code under test. The file is the one where the error occurs, such as a file with a compile or load error, also when a test in your scope loads it. Wait 60 seconds and run the command once more. When it fails there again, report the command, the outside-scope file, and the message as another unit's state. For a failure in your scope or the named code under test, follow your result block. For `test` results, return `VERDICT: NOT VERIFIED` for that failure. When `omt lock run` exits 75, report the command, the lock name, and its message. Leave the lock to the conductor. For both reports: in `work` results, keep the `STATUS` that your own work earns and put the report under `OPEN`. For `test` results, including `qa`, return `VERDICT: INCONCLUSIVE` and put the report under `FAILURES`. For other results, put the report under `NOTES`, or before the result block when it has no `NOTES`.
+
+Device line, the last constraint line, for every role except `qa`:
+
+- ``Devices: do not drive a device, Simulator UI, browser, or computer yourself (`agent-device`, `agent-browser`, computer use, UI flows); only the qa role does that. List each device check with its steps and expected result under `OPEN` or `NOTES`, or before your result block when it has neither; the main thread sends it to the qa task.``
 
 ## 10. Request ids
 
@@ -1771,7 +1770,7 @@ Severity meanings for review findings: P0 breaks the build, loses data, or opens
 
 ## Summary
 
-<at most 15 lines for the owner: what changes for them, the work and its task budget, the main risk, the open decisions, and what is not in this plan>
+<at most 15 lines for the owner: what changes for them, the work, the main risk, the open decisions, and what is not in this plan>
 
 ## Objective
 
@@ -1814,13 +1813,13 @@ An empty section means no new tests.
 - <ISO timestamp> plan created
 ```
 
-`--light` leaves out the `F2` line. The `## Summary`, `## Research`, and `## Tests` sections are in both forms. `--max-parallel <n>` adds ` max-parallel=<n>` before the `-->` of the header comment. `--max-tasks <n>` adds ` max-tasks=<n>` after it. `--profile <name>` adds ` profile=<name>` after the limit keys. `omt plan mark` appends its log lines after the last line.
+`--light` leaves out the `F2` line. The `## Summary`, `## Research`, and `## Tests` sections are in both forms. `--max-parallel <n>` adds ` max-parallel=<n>` before the `-->` of the header comment. `--profile <name>` adds ` profile=<name>` after the limit keys. `omt plan mark` appends its log lines after the last line.
 
 ### 12.2 Grammar and status
 
 Checkbox lines start at column zero and match `^- \[( |x|X|~)\] (U|D|F)(\d+)\. (.*)$`. A space means open, `x` or `X` means done, and `~` means blocked.
 
-The header comment is the first line of the file that is only an `<!-- omt-plan v1 ... -->` comment; the template writes it as line 3. The parser reads `slug`, `profile`, `max-parallel`, and `max-tasks` only from this header, so an example header that the body quotes later does not change them. The header comment `<!-- omt-plan v1 slug=<slug> created=<ISO timestamp> -->` can have an optional `max-parallel=<n>` key. `<n>` is an integer from 1 to 32, the same range as `limits.maxParallel`. It can also have an optional `max-tasks=<n>` key, the task budget of the plan. This `<n>` is an integer from 1 to 500, the same range as `limits.maxTasksPerRun`. The parser ignores a missing or invalid numeric limit. It returns the `profile` text without validation. Commands resolve that name against config. The parser does not read the `## Research` or `## Tests` section.
+The header comment is the first line of the file that is only an `<!-- omt-plan v1 ... -->` comment; the template writes it as line 3. The parser reads `slug`, `profile`, and `max-parallel` only from this header, so an example header that the body quotes later does not change them. The header comment `<!-- omt-plan v1 slug=<slug> created=<ISO timestamp> -->` can have an optional `max-parallel=<n>` key. `<n>` is an integer from 1 to 32, the same range as `limits.maxParallel`. The parser ignores a missing or invalid numeric limit. A `max-tasks` key, the task budget of older releases, has no effect. `headerWarnings(markdown)` returns `the max-tasks header key is no longer used; remove it` for a header that has it, and an empty array otherwise. The parser returns the `profile` text without validation. Commands resolve that name against config. The parser does not read the `## Research` or `## Tests` section.
 
 `parsePlan(markdown)` returns:
 
@@ -1831,7 +1830,6 @@ interface PlanStatus {
   slug?: string;
   profile?: string; // the header profile key; status replaces it with the effective name
   maxParallel?: number; // the header max-parallel key, when it is valid
-  maxTasks?: number; // the header max-tasks key, when it is valid
   items: PlanItem[];
   counts: Record<"U" | "D" | "F", { open: number; done: number; blocked: number; total: number }>;
   next?: PlanItem; // the first open U item in file order
@@ -1840,7 +1838,7 @@ interface PlanStatus {
 }
 ```
 
-`omt plan status` adds `warnings: string[]` to this object: the result of `dependencyWarnings(markdown)`, in file order of the units, and empty when there are none. `parsePlan` does not return it.
+`omt plan status` adds `warnings: string[]` to this object: the result of `headerWarnings(markdown)`, then the result of `dependencyWarnings(markdown)` in file order of the units, and empty when there are none. `parsePlan` does not return it.
 
 Human output of `omt plan status`:
 
@@ -1883,7 +1881,11 @@ On a match the command prints one line of JSON and exits 0:
 {"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"<pointer>"}}
 ```
 
-The pointer text is at most 1,000 characters. It says that ultrawork is on for this request, that the agent loads the `omt-ulw` skill before anything else and follows it in order (the banner, then step 0 and step 1), that the full loop runs even for a small task, that children make every product edit, and that done needs evidence from checks that ran.
+The pointer text is at most 1,000 characters. It gives the build contract. Its text is:
+
+```text
+omt ultrawork is on for this request. Load the omt-ulw skill before anything else and follow it in order: the banner first, then step 0 and step 1. You explore, ask question batches, plan, and build in this thread. One review child and one QA child check the work. Done needs evidence: report done only after the checks ran and passed, and quote their output.
+```
 
 On no match, on empty input, or on invalid JSON, the command prints nothing and exits 0. It ignores arguments after the hook name and never exits non-zero. Only `omt hook` with no hook name or an unknown one is a usage error.
 
@@ -2382,17 +2384,17 @@ Required coverage:
 - Profiles: `test/config/profiles.test.ts` checks presets, sparse overrides, code-point limits, per-key pruning, profile removal, legacy `roles.test` warnings, and merged-layer inheritance errors. `test/profile/resolve.test.ts` checks precedence, root-to-child application, limits, roles, models, implicit normal inheritance, cycles, depth, and non-mutation. `test/profile/profile.test.ts` runs custom-profile selection, plan switches, profile limits, output sources, and errors through the CLI.
 - Locks: `test/lock/lock.test.ts` checks real process contention, wrapper SIGKILL, inherited background holders, Node child waits, failure and signal release, wait output, holder metadata, inode preservation, no-tool fallback, argument errors, and help. It also checks shared ignored locks across linked worktrees, nested projects, separate Git directories, and trailing-space paths.
 - Fast mode: `test/routing/fast.test.ts` uses `test/fixtures/capabilities-live.json` for advertised options, unsupported models, false overrides, precedence, raw options, and unverified mapping. The older `capabilities.json` fixture still checks fallback when Haiku is absent.
-- Config: defaults pass validation, the exact default chains and `crossFamily` flags, layering order, `null` removal, chain replacement, new-role defaults, `crossFamily` kept, set, and overridden by a layer, every validation error class (including a non-boolean `crossFamily`), and a syntax error that skips one file.
+- Config: defaults pass validation, the exact default chains and `crossFamily` flags, set 2026-12 without the retired keys and roles, sets 2026-10 and 2026-11 that load without them and without a warning, one warning for each retired key or role that a layer sets (at root and in a profile) with no effect on the effective config, layering order, `null` removal, chain replacement, new-role defaults, `crossFamily` kept, set, and overridden by a layer, every validation error class (including a non-boolean `crossFamily`), and a syntax error that skips one file.
 - Routing: a fixture with Claude, Codex, Pi, and Cursor enabled and Grok disabled. Cover a resolved role, fallback past a disabled provider, a missing model, effort mapping for each driver, nearest-value mapping, invalid raw options, driver-only rungs, unverified mode, and the MCP content wrapper.
 - Routing also covers both mode ceilings, the inherited-instance preference for driver-only rungs, and a rung whose provider instance is not registered: with a `driver` it runs on an instance of that driver with its note, and without a `driver` it fails.
 - Cross-family routing: the reorder for `--against claudeAgent` and `--against codex` on `review`, a role without `crossFamily` that ignores `--against` with its note, a chain with only same-family rungs that keeps its order with the same-family note, a provider instance id that maps to its driver kind with capabilities and through a configured rung without capabilities, a worker family that matches no rung with its note, and an unavailable other-family rung that falls back to the same family with the note.
 - Cross-family routing also covers a rung that names only a provider. A configured rung maps that provider to its driver, the same way as the `--against` value. The rung is in the worker's family for the reorder and for each note, through `--against <provider>` and through `--against auto`. `workerFamily` and `rungFamily` give the same family for the same provider id.
 - `pickWorker`: `--unit` takes the last worker entry of the unit, the plan-wide majority, the tie rule with replaced entries, entries without a unit, an invalid provider with its warning, no worker entries, and roles with result `review` or `test` that do not count as workers. A mixed-provider review plan gives each fix unit `F<k>` a reviewer from the family other than its fix worker's. `--against auto` without `--plan` is a usage error (exit 2).
 - Defaults: unverified default targets name `providerInstanceId`, and a user rung with only a `driver` still gives a `driverKind` target.
-- Brief: every section, omitted sections, access and delegation lines, plan mode, per-role test policy, CLI and shared-build lines, template lookup, title, and JSON payload. Also cover saved bytes, request-id and hash paths, the short pointer, complete ledger command, unavailable-route writes, profile flags with missing plan files, and failure-proof values.
-- Plan: the template with `## Tests`, every checkbox state, counts, next unit, `complete`, profile headers, plan profile switches, and effective status output, and each dependency warning: an unknown unit, a self-dependency, a cycle, units inside code fences, and the `warning:` lines and the JSON `warnings` field of `omt plan status`.
-- Ledger: append, list, stats, a malformed line, and `requestId` sanitizing with round and attempt.
-- Hook: a detection matrix (inside a code block, inside quotes, `ulwx`, `$ulw`, `ULTRAWORK`, a prompt with `<!-- omt-brief`, a prompt that starts with `Act as the `, a prompt that starts with `/omt-ulw`, a prompt that starts with `<task-notification>`, negated keywords and the two-word window, a 200,000-character negated prompt), invalid JSON, and the output shape.
+- Brief: every section, omitted sections, access and delegation lines, plan mode, per-role test policy, CLI and shared-build lines, template lookup, title, and JSON payload. Also cover saved bytes, request-id and hash paths, the short pointer, complete ledger command, unavailable-route writes, profile flags with missing plan files, the device line for every role except `qa`, the `qa` access and test lines, and an unknown-role exit for `verify`, `quick`, and `deep`.
+- Plan: the template with `## Tests`, every checkbox state, counts, next unit, `complete`, profile headers, plan profile switches, and effective status output, and each dependency warning: an unknown unit, a self-dependency, a cycle, units inside code fences, and the `warning:` lines and the JSON `warnings` field of `omt plan status`, including the `max-tasks` header warning. `plan limit --tasks` and `plan new --max-tasks` exit 2 and change no file.
+- Ledger: append, list, stats, a malformed line, and `requestId` sanitizing with round and attempt. `canDispatch` depends only on `active` and `maxParallel`, also after many dispatched entries, and stats ignores a config `maxTasksPerRun` and a plan `max-tasks`.
+- Hook: a detection matrix (inside a code block, inside quotes, `ulwx`, `$ulw`, `ULTRAWORK`, a prompt with `<!-- omt-brief`, a prompt that starts with `Act as the `, a prompt that starts with `/omt-ulw`, a prompt that starts with `<task-notification>`, negated keywords and the two-word window, a 200,000-character negated prompt), invalid JSON, the output shape, and the build-contract text of the pointer.
 - Install: create, idempotent rerun, conflict without and with `--force`, a locally modified managed skill, backups outside the skill roots, `--dry-run` and a declined prompt write nothing, non-TTY without `--yes`, roots that resolve to the same directory, hook add and update that keep other settings, an unchanged hook writes nothing, a symlinked `settings.json` stays a symlink, `--hooks` refused for a temp `cliPath`, uninstall removes only managed paths, and `--purge`.
 - Project install: the files of section 14.8, an idempotent rerun, `--dry-run`, the exclude file for a `.git` directory and a worktree `.git` file, block replacement, no `.git`, `--no-git-exclude` (also on a reinstall, and its `.omt/.gitignore` restore), the conditional `.omt` and `settings.local.json` lines, the hook in `settings.local.json`, uninstall with a locally modified skill and `--purge`, `--targets gemini` (exit 2), a temp `cliPath`, and the shim conflict and update. Also: a copied project, a moved clone round trip, a tracked manifest with paths outside the root, a symlinked path to the root, the home directory as the root (exit 2), a dangling settings symlink, a failed scratch delete, glob characters in a package path, worktrees, a block whose root is gone, the exact bytes of the exclude file, a kept created `settings.local.json`, and a kept ledger. Also: a reinstall that appends `plans/`, `locks/`, and `guardrails.md` to an unedited `.omt/.gitignore` that an earlier install created, and one that leaves an edited file alone. Also: uninstall, reinstall, and a second uninstall after each kind of kept created file, each with an empty `git status`; an uninstall that fails midway; a symlinked exclude file and `.omt/.gitignore`; a crafted tracked manifest that names project files; a package copied inside the same repository; and the exact paths that stay after a failed install and its uninstall.
 - Doctor: each status that the table in section 14.7 defines, with `runtimeName` and `runtimeVersion` injected through the context.

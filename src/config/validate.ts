@@ -15,7 +15,7 @@ import type {
   WorkflowLayer,
 } from "../types.ts";
 import { usageError } from "../util/errors.ts";
-import { defaultSetNames, isDefaultSet } from "./defaultSets.ts";
+import { defaultSetNames, isDefaultSet, RETIRED_BUILD_KEYS, RETIRED_LIMIT_KEYS, RETIRED_ROLES } from "./defaultSets.ts";
 import { isRecord } from "../util/json.ts";
 
 export const ROOT_KEYS: readonly string[] = ["$schema", "version", "defaults", "profile", "profiles", "models", "roles", "limits", "harnesses", "update"];
@@ -34,7 +34,7 @@ export const ROLE_KEYS: readonly string[] = [
   "chain",
 ];
 export const RUNG_KEYS: readonly string[] = ["provider", "driver", "model", "effort", "fast", "options"];
-export const LIMIT_KEYS: readonly string[] = ["maxParallel", "maxTasksPerRun", "maxDepth", "maxReviewRounds"];
+export const LIMIT_KEYS: readonly string[] = ["maxParallel", "maxDepth", "maxReviewRounds"];
 export const PROFILE_KEYS: readonly string[] = ["description", "extends", "workflow", "limits", "roles", "models"];
 export const MODEL_KEYS: readonly string[] = ["fast"];
 export const PRESET_PROFILE_NAMES: readonly string[] = ["normal", "prototype", "pr-review"];
@@ -52,12 +52,9 @@ export const WORKFLOW_RULES = {
   design: { variants: { minimum: 1, maximum: 5 } },
   build: {
     review: { values: ["every-round", "first-round", "off"] },
-    verify: { values: ["heavy", "every-unit"] },
     qa: { values: ["planned", "off"] },
     failureProofs: { values: ["on", "off"] },
     oracle: { values: ["heavy", "always", "off"] },
-    checkpoint: { values: ["none", "layer", "unit"] },
-    stallMinutes: { minimum: 10, maximum: 120 },
   },
   review: {
     reviewers: { minimum: 1, maximum: 4, auto: true },
@@ -101,7 +98,6 @@ export const HARNESSES_MIN = 1;
 export const HARNESSES_MAX = 10;
 export const LIMIT_RANGES: Readonly<Record<keyof Limits, readonly [number, number]>> = {
   maxParallel: [1, 32],
-  maxTasksPerRun: [1, 500],
   maxDepth: [0, 3],
   maxReviewRounds: [1, 10],
 };
@@ -157,6 +153,10 @@ class Collector {
 
   error(path: string, message: string): void {
     this.issues.push({ source: this.source, path, message, severity: "error" });
+  }
+
+  retired(path: string): void {
+    this.issues.push({ source: this.source, path, message: `${path} is no longer used; remove it`, severity: "warning" });
   }
 }
 
@@ -242,6 +242,10 @@ function validateLimits(value: unknown, path: string, out: Collector): Partial<L
   const limits: Partial<Limits> = {};
   for (const [key, item] of Object.entries(value)) {
     const keyPath = `${path}.${key}`;
+    if (RETIRED_LIMIT_KEYS.includes(key)) {
+      out.retired(keyPath);
+      continue;
+    }
     if (!LIMIT_KEYS.includes(key)) {
       out.error(keyPath, `unknown limit "${key}"; allowed keys: ${LIMIT_KEYS.join(", ")}`);
       continue;
@@ -268,11 +272,15 @@ function validateRoles(value: unknown, path: string, out: Collector): ConfigLaye
       out.error(keyPath, `role name "${name}" must match ${ROLE_NAME_PATTERN}`);
       continue;
     }
+    if (RETIRED_ROLES.includes(name)) {
+      out.retired(keyPath);
+      continue;
+    }
     if (name === "test") {
       out.issues.push({
         source: out.source,
         path: keyPath,
-        message: 'role "test" was split into "verify" and "qa"; rename it',
+        message: 'role "test" was renamed to "qa"; rename it',
         severity: "warning",
       });
     }
@@ -334,7 +342,9 @@ function validateWorkflow(value: unknown, path: string, out: Collector): Workflo
     for (const [key, field] of Object.entries(item)) {
       const keyPath = `${groupPath}.${key}`;
       const rule = Object.hasOwn(rules, key) ? rules[key] : undefined;
-      if (rule === undefined) {
+      if (group === "build" && RETIRED_BUILD_KEYS.includes(key)) {
+        out.retired(keyPath);
+      } else if (rule === undefined) {
         out.error(keyPath, `unknown workflow key "${key}"; allowed keys: ${Object.keys(rules).join(", ")}`);
       } else if ("values" in rule) {
         if (typeof field === "string" && rule.values.includes(field)) fields[key] = field;
@@ -439,7 +449,7 @@ export function validateLayer(value: unknown, source: string): { layer: ConfigLa
   }
   for (const [key, item] of Object.entries(value)) {
     if (RETIRED_ROOT_KEYS.includes(key)) {
-      out.issues.push({ source: out.source, path: key, message: `${key} is no longer used; remove it`, severity: "warning" });
+      out.retired(key);
     } else if (!ROOT_KEYS.includes(key)) {
       out.error(key, `unknown key "${key}"; allowed keys: ${ROOT_KEYS.join(", ")}`);
     } else if (key === "$schema") {

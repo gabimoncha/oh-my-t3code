@@ -23,7 +23,6 @@ export interface PlanStatus {
   slug?: string;
   profile?: string;
   maxParallel?: number;
-  maxTasks?: number;
   items: PlanItem[];
   counts: Record<PlanItemKind, PlanCounts>;
   next?: PlanItem;
@@ -203,8 +202,6 @@ export function parsePlan(markdown: string): PlanStatus {
   const profile = headerValue(header, "profile");
   const maxParallelText = headerValue(header, "max-parallel");
   const maxParallel = maxParallelText === undefined ? undefined : parseLimit(maxParallelText, "maxParallel");
-  const maxTasksText = headerValue(header, "max-tasks");
-  const maxTasks = maxTasksText === undefined ? undefined : parseLimit(maxTasksText, "maxTasksPerRun");
   const next = items.find((item) => item.kind === "U" && item.state === "open");
   const status: PlanStatus = {
     title,
@@ -216,7 +213,6 @@ export function parsePlan(markdown: string): PlanStatus {
   if (slug !== undefined) status.slug = slug;
   if (profile !== undefined) status.profile = profile;
   if (maxParallel !== undefined) status.maxParallel = maxParallel;
-  if (maxTasks !== undefined) status.maxTasks = maxTasks;
   if (next !== undefined) status.next = next;
   return status;
 }
@@ -248,6 +244,16 @@ function findCycle(ids: string[], deps: Map<string, string[]>): string[] | undef
 
 // Problems in the "Depends on" fields of the U items outside code fences: unknown units,
 // self-dependencies, and the first dependency cycle.
+// Header keys of older releases that no longer have an effect.
+const RETIRED_HEADER_KEYS = ["max-tasks"];
+
+export function headerWarnings(markdown: string): string[] {
+  const header = findPlanHeader(markdown)?.text ?? "";
+  return RETIRED_HEADER_KEYS
+    .filter((key) => headerValue(header, key) !== undefined)
+    .map((key) => `the ${key} header key is no longer used; remove it`);
+}
+
 export function dependencyWarnings(markdown: string): string[] {
   const unfenced = blankFences(markdown);
   const units = parsePlan(unfenced).items.filter((item) => item.kind === "U");

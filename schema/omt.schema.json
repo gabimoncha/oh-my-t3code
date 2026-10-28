@@ -15,9 +15,10 @@
     "defaults": {
       "enum": [
         "2026-10",
-        "2026-11"
+        "2026-11",
+        "2026-12"
       ],
-      "description": "Pinned default set. Without it, omt uses the latest set (2026-11). Run omt defaults diff to see what a newer set changes."
+      "description": "Pinned default set. Without it, omt uses the latest set (2026-12). Run omt defaults diff to see what a newer set changes."
     },
     "profile": {
       "type": "string",
@@ -89,12 +90,6 @@
           "maximum": 32,
           "description": "Most child tasks that run at the same time."
         },
-        "maxTasksPerRun": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 500,
-          "description": "Most child tasks in one run."
-        },
         "maxDepth": {
           "type": "integer",
           "minimum": 0,
@@ -105,7 +100,11 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 10,
-          "description": "Most review rounds for one unit."
+          "description": "Most review rounds for one change."
+        },
+        "maxTasksPerRun": {
+          "deprecated": true,
+          "description": "No longer used. omt ignores this key."
         }
       }
     },
@@ -347,12 +346,6 @@
                 "off"
               ]
             },
-            "verify": {
-              "enum": [
-                "heavy",
-                "every-unit"
-              ]
-            },
             "qa": {
               "enum": [
                 "planned",
@@ -372,17 +365,17 @@
                 "off"
               ]
             },
+            "verify": {
+              "deprecated": true,
+              "description": "No longer used. omt ignores this key."
+            },
             "checkpoint": {
-              "enum": [
-                "none",
-                "layer",
-                "unit"
-              ]
+              "deprecated": true,
+              "description": "No longer used. omt ignores this key."
             },
             "stallMinutes": {
-              "type": "integer",
-              "minimum": 10,
-              "maximum": 120
+              "deprecated": true,
+              "description": "No longer used. omt ignores this key."
             }
           }
         },

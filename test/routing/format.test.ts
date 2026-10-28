@@ -51,8 +51,8 @@ test("formatRolesTable shows skipped rungs and the chosen rung's notes, not late
   const config: OmtConfig = {
     ...DEFAULT_CONFIG,
     roles: {
-      deep: {
-        ...DEFAULT_CONFIG.roles.deep!,
+      execute: {
+        ...DEFAULT_CONFIG.roles.execute!,
         chain: [
           { driver: "grok", model: "grok-build" },
           { driver: "codex", model: "gpt-6-luna", effort: "max" },
@@ -62,7 +62,7 @@ test("formatRolesTable shows skipped rungs and the chosen rung's notes, not late
     },
   };
   const lines = formatRolesTable(resolveAll(config, caps())).split("\n");
-  assert.equal(lines[1], "deep         resolved    codex/gpt-6-luna reasoningEffort=xhigh         edit       default  no");
+  assert.equal(lines[1], "execute      resolved    codex/gpt-6-luna reasoningEffort=xhigh         edit       default  no");
   assert.deepEqual(lines.slice(2, 4), [
     "  rung 1 grok/grok-build: provider grok cannot run child tasks: Provider instance is disabled.; Provider executable is not installed.",
     "  rung 2 codex/gpt-6-luna: effort max mapped to xhigh for option reasoningEffort",

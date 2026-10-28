@@ -70,8 +70,8 @@ export function ultraworkContext(): string {
   return [
     "omt ultrawork is on for this request.",
     "Load the omt-ulw skill before anything else and follow it in order: the banner first, then step 0 and step 1.",
-    "Run the full loop even for a small task.",
-    "Children make every product edit; you edit no code, tests, docs, or config yourself.",
+    "You explore, ask question batches, plan, and build in this thread.",
+    "One review child and one QA child check the work.",
     "Done needs evidence: report done only after the checks ran and passed, and quote their output.",
   ].join(" ");
 }

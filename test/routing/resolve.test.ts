@@ -363,12 +363,9 @@ test("every default role resolves against the fixture", () => {
     "plan-review": ["codex", "gpt-6-astra", { reasoningEffort: "high" }],
     grill: ["codex", "gpt-6-astra", { reasoningEffort: "high" }],
     execute: ["claudeAgent", "claude-opus-5-5", { effort: "medium" }],
-    quick: ["codex", "gpt-6-luna", { reasoningEffort: "high" }],
-    deep: ["claudeAgent", "claude-opus-5-5", { effort: "max" }],
     review: ["codex", "gpt-6-astra", { reasoningEffort: "high" }],
     oracle: ["codex", "gpt-6-astra", { reasoningEffort: "high" }],
-    verify: ["claudeAgent", "claude-sonnet-5-5", { effort: "low" }],
-    qa: ["codex", "gpt-6.1-sol", { reasoningEffort: "medium", serviceTier: "priority" }],
+    qa: ["claudeAgent", "claude-sonnet-5-5", { effort: "low" }],
     guardrail: ["claudeAgent", "claude-opus-5-5", { effort: "high" }],
     writing: ["claudeAgent", "claude-opus-5-5", { effort: "high" }],
     design: ["claudeAgent", "claude-opus-5-5", { effort: "high" }],
@@ -388,13 +385,13 @@ test("every default role resolves against the fixture", () => {
     assert.deepEqual(resolution.delegateTask?.target, { providerInstanceId, model, options }, name);
     assert.equal(resolution.delegateTask?.role, config.t3Role, name);
     assert.equal(resolution.delegateTask?.interactionMode, config.interactionMode, name);
-    assert.equal(resolution.fallbacks.length, config.chain.length - (name === "verify" ? 2 : 1), name);
-    assert.equal(resolution.attempts.filter((a) => !a.ok).length, name === "verify" ? 1 : 0, name);
+    assert.equal(resolution.fallbacks.length, config.chain.length - (name === "qa" ? 2 : 1), name);
+    assert.equal(resolution.attempts.filter((a) => !a.ok).length, name === "qa" ? 1 : 0, name);
   }
 });
 
-test("verify routes to Sonnet with the old fixture, which has no Haiku", () => {
-  const resolution = resolveAll(DEFAULT_CONFIG, caps(), ["verify"]).roles.verify;
+test("qa routes to Sonnet with the old fixture, which has no Haiku", () => {
+  const resolution = resolveAll(DEFAULT_CONFIG, caps(), ["qa"]).roles.qa;
   assert.equal(resolution?.delegateTask?.target.model, "claude-sonnet-5-5");
   assert.equal(resolution?.attempts[0]?.reason, "model claude-haiku-5-5 is not advertised by claudeAgent");
   assert.equal(resolution?.attempts[1]?.ok, true);

@@ -1,10 +1,11 @@
-import { lstatSync, mkdirSync, readFileSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "bun:test";
 import assert from "node:assert/strict";
 import { run } from "../../src/commands/plan.ts";
-import { dependencyWarnings, parsePlan } from "../../src/plan/parse.ts";
+import { dependencyWarnings, headerWarnings, parsePlan } from "../../src/plan/parse.ts";
 import { planTemplate } from "../../src/plan/template.ts";
+import { OmtError } from "../../src/util/errors.ts";
 import { omtExit, projectContext, spawnOmt, tempDir } from "../helpers.ts";
 
 const header = (extra: string) => `# P\n\n<!-- omt-plan v1 slug=p created=2026-01-01T00:00:00.000Z${extra} -->\n`;
@@ -358,12 +359,10 @@ test("parsePlan reads a valid max-parallel header key and ignores a missing or i
   assert.equal(parsePlan("# P\n\nmax-parallel=2\n").maxParallel, undefined);
 });
 
-test("parsePlan reads a valid max-tasks header key and ignores a missing or invalid one", () => {
-  assert.equal(parsePlan(header(" max-tasks=1")).maxTasks, 1);
-  assert.equal(parsePlan(header(" max-parallel=2 max-tasks=500")).maxTasks, 500);
-  for (const extra of ["", " max-tasks=0", " max-tasks=501", " max-tasks=many"]) {
-    assert.equal(parsePlan(header(extra)).maxTasks, undefined, extra);
-  }
+test("parsePlan has no task budget, and headerWarnings flags a max-tasks key", () => {
+  assert.equal(Object.hasOwn(parsePlan(header(" max-tasks=80")), "maxTasks"), false);
+  assert.deepEqual(headerWarnings(header(" max-parallel=2 max-tasks=80")), ["the max-tasks header key is no longer used; remove it"]);
+  assert.deepEqual(headerWarnings(header(" max-parallel=2")), []);
 });
 
 const QUOTED = "- [ ] U2. Add the key, for example `<!-- omt-plan v1 slug=x created=... max-parallel=1 -->`\n\n<!-- omt-plan v1 slug=y created=2026-01-01T00:00:00.000Z max-parallel=1 -->\n";
@@ -383,7 +382,7 @@ test("the template has a Summary section between the header and Objective, also 
     const text = planTemplate("x", "x", "t", { light });
     assert.match(
       text,
-      /-->\n\n## Summary\n\n<at most 15 lines for the owner: what changes for them, the work and its task budget, the main risk, the open decisions, and what is not in this plan>\n\n## Objective\n/,
+      /-->\n\n## Summary\n\n<at most 15 lines for the owner: what changes for them, the work, the main risk, the open decisions, and what is not in this plan>\n\n## Objective\n/,
     );
   }
 });
@@ -457,50 +456,37 @@ test("plan limit exits 1 for a missing plan and 2 for a bad value", async () => 
   await assert.rejects(run(ctx.at(["limit", "demo"])), omtExit(2));
 });
 
-test("plan limit --tasks exits 2 for a value out of range and leaves the plan unchanged", async () => {
+test("plan limit --tasks and plan new --max-tasks exit 2 because the task budget was removed", async () => {
   const ctx = projectContext(["new", "demo"]);
   assert.equal(await run(ctx), 0);
   const path = join(ctx.cwd, ".omt", "plans", "demo.md");
   const original = readFileSync(path, "utf8");
-  for (const value of ["0", "501"]) await assert.rejects(run(ctx.at(["limit", "demo", "--tasks", value])), omtExit(2));
-  await assert.rejects(run(ctx.at(["limit", "demo", "2", "--tasks", "0"])), omtExit(2));
+  for (const argv of [["limit", "demo", "--tasks", "80"], ["limit", "demo", "2", "--tasks", "none"], ["new", "other", "--max-tasks", "80"]]) {
+    await assert.rejects(run(ctx.at(argv)), (error: unknown) =>
+      error instanceof OmtError && error.exitCode === 2 && /the task budget was removed/.test(error.message));
+  }
   assert.equal(readFileSync(path, "utf8"), original);
+  assert.equal(existsSync(join(ctx.cwd, ".omt", "plans", "other.md")), false);
+  assert.equal(await run(ctx.at(["limit", "demo", "2"])), 0);
+  assert.equal(readFileSync(path, "utf8"), withHeaderKeys(original, "max-parallel=2"));
 });
 
-test("plan new --max-tasks writes the header key after max-parallel and rejects a bad value", async () => {
-  const ctx = projectContext(["new", "demo", "--max-tasks", "80", "--max-parallel", "2"]);
+test("plan status warns about a max-tasks header key, which has no effect", async () => {
+  const ctx = projectContext(["new", "demo", "--max-parallel", "2"]);
   assert.equal(await run(ctx), 0);
-  const text = readFileSync(join(ctx.cwd, ".omt", "plans", "demo.md"), "utf8");
-  assert.match(text, /^<!-- omt-plan v1 slug=demo created=2026-01-02T03:04:05\.000Z max-parallel=2 max-tasks=80 -->$/m);
-
+  const path = join(ctx.cwd, ".omt", "plans", "demo.md");
+  writeFileSync(path, readFileSync(path, "utf8").replace("max-parallel=2", "max-parallel=2 max-tasks=80"));
   const status = ctx.at(["status", "demo"]);
   assert.equal(await run(status), 0);
-  assert.match(status.out(), /^max parallel: 2\nmax tasks: 80$/m);
-
-  for (const value of ["0", "501", "x"]) {
-    const bad = ctx.at(["new", "other", "--max-tasks", value]);
-    await assert.rejects(run(bad), omtExit(2));
-  }
+  assert.match(status.out(), /^max parallel: 2\nnext: /m);
+  assert.doesNotMatch(status.out(), /max tasks/);
+  assert.match(status.out(), /^warning: the max-tasks header key is no longer used; remove it$/m);
+  const json = ctx.at(["status", "demo", "--json"]);
+  assert.equal(await run(json), 0);
+  assert.deepEqual(JSON.parse(json.out()).warnings, ["the max-tasks header key is no longer used; remove it"]);
 });
 
-test("plan limit --tasks sets and removes max-tasks, also with the positional value in one call", async () => {
-  const ctx = projectContext(["new", "demo"]);
-  assert.equal(await run(ctx), 0);
-  const path = join(ctx.cwd, ".omt", "plans", "demo.md");
-  const original = readFileSync(path, "utf8");
-
-  const set = ctx.at(["limit", "demo", "--tasks", "80"]);
-  assert.equal(await run(set), 0);
-  assert.equal(set.out(), "set max-tasks=80 for demo\n");
-  assert.equal(readFileSync(path, "utf8"), withHeaderKeys(original, "max-tasks=80"));
-
-  const both = ctx.at(["limit", "demo", "3", "--tasks", "none"]);
-  assert.equal(await run(both), 0);
-  assert.equal(both.out(), "set max-parallel=3 for demo\nremoved the max-tasks limit of demo\n");
-  assert.equal(readFileSync(path, "utf8"), withHeaderKeys(original, "max-parallel=3"));
-});
-
-test("plan limit with neither a value nor --tasks exits 2", async () => {
+test("plan limit without a value exits 2", async () => {
   const ctx = projectContext(["new", "demo"]);
   assert.equal(await run(ctx), 0);
   const bare = ctx.at(["limit", "demo"]);

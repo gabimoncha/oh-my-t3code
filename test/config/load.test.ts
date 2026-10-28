@@ -35,12 +35,12 @@ test("with no files the result is the defaults, and every source is listed", asy
 
 test("layers apply in order: defaults, then user, then project", async () => {
   const { userPath, projectPath, write, load } = setup();
-  write(userPath, '// user\n{ "limits": { "maxParallel": 8, "maxDepth": 2, }, "roles": { "quick": null } }');
+  write(userPath, '// user\n{ "limits": { "maxParallel": 8, "maxDepth": 2, }, "roles": { "explore": null } }');
   write(projectPath, '{ "limits": { "maxParallel": 2 }, "roles": { "review": { "runtimeMode": "auto" } } }');
   const loaded = await load();
   assert.deepEqual(loaded.issues, []);
   assert.deepEqual(loaded.config.limits, { ...DEFAULT_CONFIG.limits, maxParallel: 2, maxDepth: 2 });
-  assert.equal(loaded.config.roles.quick, undefined);
+  assert.equal(loaded.config.roles.explore, undefined);
   assert.equal(loaded.config.roles.review?.runtimeMode, "auto");
   assert.deepEqual(
     loaded.sources.map((source) => source.present),
