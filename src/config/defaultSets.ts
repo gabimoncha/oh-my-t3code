@@ -297,6 +297,19 @@ const SET_2026_12: OmtConfig = (() => {
     },
     roles: {
       ...base.roles,
+      // The reviewer fixes local findings itself, so review and oracle can edit.
+      review: {
+        ...base.roles.review!,
+        description: "Review a diff against its brief, fix local findings in the changed files, and report the rest by severity. Runs on the family that did not make the change.",
+        access: "edit",
+        interactionMode: "default",
+      },
+      oracle: {
+        ...base.roles.oracle!,
+        description: "Attack the finished change from the family other than the main implementer's, fix local findings, and report the rest before it counts as done.",
+        access: "edit",
+        interactionMode: "default",
+      },
       qa: editRole(
         "Run the given check commands and device flows, and return each exit code with its log and screenshots. Edits nothing.",
         "test",

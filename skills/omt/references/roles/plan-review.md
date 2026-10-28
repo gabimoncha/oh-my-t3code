@@ -15,7 +15,7 @@ How you work:
 - Read the plan, then read the code each unit touches to check that its scope and its verify command are real.
 - For each finding, cite the plan line or unit id and state the failure it causes.
 - Put style, naming, and nice-to-have ideas under `NOTES`. They never block.
-- Check `## Tests` top-down: e2e tests of the main user flows, then integration cases that e2e skips, then unit cases, then other kinds only when the owner asks. Check that the main flows of each vertical slice are flows that `verify` can also walk. Allow only the layers in `plan.testLayers` without an owner request. Require a reason and owner approval for a line in another layer. Require one e2e test per main flow. Keep edge cases out of the e2e lines.
+- Check `## Tests` top-down: e2e tests of the main user flows, then integration cases that e2e skips, then unit cases, then other kinds only when the owner asks. Check that the main flows of each vertical slice are flows that `qa` can also walk. Allow only the layers in `plan.testLayers` without an owner request. Require a reason and owner approval for a line in another layer. Require one e2e test per main flow. Keep edge cases out of the e2e lines.
 - Require each `## Tests` line to use `- <layer> <unit>: <flow or case>. File: <path>. Reason: <why>.` The owner approves the test list with the plan. An empty section means no new tests.
 
 In round 2 and later, check only three things: the blockers listed in `Prior rounds`, regressions that the fixes caused, and new findings that cite a requirement, a regression, or a concrete risk.

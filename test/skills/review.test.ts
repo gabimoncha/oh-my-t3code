@@ -77,25 +77,26 @@ test("omt-review pins 2. Size and split", () => {
 test("omt-review pins 3. Dispatch the reviewers", () => {
   const text = section(readSkill("omt-review"), "### 3. Dispatch the reviewers");
   assert.match(text, /Before every task dispatch, run `omt ledger stats --plan review-<slug>`\./);
-  assert.match(text, /Use `dispatched` and `active` from the output\./);
-  assert.match(text, /Use `limits\.maxTasksPerRun` and `limits\.maxParallel` from `omt profile show <profile> --json`\./);
-  assert.match(text, /Dispatch only when `dispatched` is below `limits\.maxTasksPerRun` and `active` is below `limits\.maxParallel`\./);
+  assert.match(text, /Use `active` from the output\./);
+  assert.match(text, /Use `limits\.maxParallel` from `omt profile show <profile> --json`\./);
+  assert.match(text, /Dispatch only when `active` is below `limits\.maxParallel`\./);
+  assert.doesNotMatch(text, /maxTasksPerRun/);
   assert.match(text, /Ignore the `can dispatch` line because it uses the config's profile limits\./);
   assert.match(text, /Build each group brief with `omt brief review --task-file - --title "review G<k>: <group paths>" --round <n> --attempt 1 --plan review-<slug> --unit G<k> --profile <profile> --save --json`\./);
   assert.match(text, /For `review\.families: both`, use units `G<k>\.codex` and `G<k>\.claude` with `--against claudeAgent` and `--against codex`, respectively\./);
   assert.match(text, /Check each resolved target's family with \[roles\.md\]\(\.\.\/omt\/references\/roles\.md#cross-family-roles\)\./);
   assert.match(text, /If both calls resolve to one family, report the unavailable family and stop instead of counting two reviews from one family\./);
-  assert.match(text, /Build every task with `omt brief <role> \.\.\. --profile <profile> --save --json`, including oracle, fix, verify, guardrail, and qa tasks\./);
+  assert.match(text, /Build every task with `omt brief <role> \.\.\. --profile <profile> --save --json`, including oracle, fix, guardrail, and qa tasks\./);
   assert.match(text, /Pass `delegateTask` to `delegate_task` and retain its `taskId`\./);
   assert.match(text, /Record the dispatch with the returned `ledger\.dispatched` command after replacing only `<taskId>`\./);
   assert.match(text, /For a fallback, use the provider and model of the target that you actually sent \(\[results\.md\]\(\.\.\/omt\/references\/results\.md#recording\)\)\./);
   assert.match(text, /In default mode, end your turn after recording the dispatches\./);
-  assert.match(text, /For PR step 5, record the review and verify dispatches before ending the turn\./);
+  assert.match(text, /For PR step 5, record the review and qa dispatches before ending the turn\./);
   assert.match(text, /That step adds the pending-CI watch just before the turn ends\./);
   assert.match(text, /Give every edit child an explicit file scope\./);
   assert.match(text, /Run edit tasks with overlapping scopes one at a time\./);
   assert.match(text, /Let no child commit or push\./);
-  assert.match(text, /Keep child changes uncommitted for the conductor\./);
+  assert.match(text, /Keep child changes uncommitted for the main thread\./);
   assert.match(text, /Workers write no new tests\./);
   assert.match(text, /Only an owner-approved `qa` task writes its listed tests\./);
 });
@@ -210,26 +211,26 @@ test("omt-review pins PR 4. Coverage", () => {
 
 test("omt-review pins PR 5. Round 1", () => {
   const text = section(readSkill("omt-review"), "### PR 5. Round 1");
-  assert.match(text, /Dispatch the read-only review groups on the PR head with the rule-file list and coverage path, using step 3 above\./);
+  assert.match(text, /Dispatch the report-only review groups on the PR head with the rule-file list and coverage path, using step 3 above\./);
   assert.match(text, /Apply the PR step 1 diff and file-read rules to every review task\./);
   assert.match(text, /With `review\.crap: report`, ask each reviewer to compute the values in PR step 9 for every added or changed function in its group\./);
-  assert.match(text, /With `review\.verify: changed-flows`, dispatch one `verify` task when the PR changes a screen, a CLI command, or an API route\./);
+  assert.match(text, /With `review\.verify: changed-flows`, dispatch one `qa` task when the PR changes a screen, a CLI command, or an API route\./);
   assert.match(text, /Name the changed flows from the PR body and diff, and the build and run commands from the rules\./);
-  assert.match(text, /Name the PR's changed paths, excluding `docs\/design\/`, as the code under test in the `verify` task\./);
-  assert.match(text, /Require the verify result to name each flow's covering test file, or `none`\./);
-  assert.match(text, /The `verify` task writes no tests and changes no product files\./);
-  assert.match(text, /Only `verify` drives a device, a Simulator UI, a browser, or a computer\./);
+  assert.match(text, /Name the PR's changed paths, excluding `docs\/design\/`, as the code under test in the `qa` task\./);
+  assert.match(text, /Require the qa result to name each flow's covering test file, or `none`\./);
+  assert.match(text, /The `qa` task writes no tests and changes no files\./);
+  assert.match(text, /Only `qa` drives a device, a Simulator UI, a browser, or a computer\./);
   assert.match(text, /With `review\.verify: off`, skip this task\./);
-  assert.match(text, /When verify returns `INCONCLUSIVE` because it cannot reach a local tool, send the same task once to the next rung of another provider\./);
+  assert.match(text, /When qa returns `INCONCLUSIVE` because it cannot reach a local tool, send the same task once to the next rung of another provider\./);
   assert.match(text, /Record the dispatches, then apply the PR step 3 watch rule before ending the turn\./);
   assert.match(text, /On wake, refresh CI at PR step 3 and collect every round-1 verdict before PR step 6\./);
-  assert.match(text, /Done when: every group and any required verify task has a verdict, or waits on an active task or a limit\./);
+  assert.match(text, /Done when: every group and any required qa task has a verdict, or waits on an active task or a limit\./);
 });
 
 test("omt-review pins PR 6. Merge and oracle", () => {
   const text = section(readSkill("omt-review"), "### PR 6. Merge and oracle");
   assert.match(text, /Merge the findings with step 4 above\./);
-  assert.match(text, /Turn each flow that verify returns as `NOT VERIFIED` into a P1 finding with its evidence\./);
+  assert.match(text, /Turn each flow that qa returns as `NOT VERIFIED` into a P1 finding with its evidence\./);
   assert.match(text, /Apply step 5 above only when `review\.oracle` is `on`\./);
   assert.match(text, /Apply the PR step 1 diff and file-read rules to the oracle task\./);
   assert.match(text, /Keep every confirmed rule citation and CRAP value in the merged list\./);
@@ -266,7 +267,7 @@ test("omt-review pins PR 8. Guardrails", () => {
   assert.match(text, /Append each new proposal to `\.omt\/guardrails\.md` as `- \[ \] G<k> <date> PR #<n> <class>: <proposal>\. Where: <file>\. Proof: <command or none>\.`\./);
   assert.match(text, /Set `<k>` one above the highest id in the file for each new proposal\./);
   assert.match(text, /Leave implementation of the proposals to owner-approved omt-ulw work on a separate branch\./);
-  assert.match(text, /Done when: each finding has a new proposal or a reason for none, and the conductor has saved the new proposals\./);
+  assert.match(text, /Done when: each finding has a new proposal or a reason for none, and the main thread has saved the new proposals\./);
 });
 
 test("omt-review pins PR 9. CRAP", () => {

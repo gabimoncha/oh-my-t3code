@@ -33,13 +33,13 @@ A brief is the whole world of a child task. The child sees nothing else. Write o
 - <plan-mode line, read-only roles only>
 - <children line, when the child may start children>
 - CLI: Run omt as <command>.
-- Tests: <role's test policy; qa ends with failureProofs: on or failureProofs: off>
+- Tests: <role's test policy>
 - You do not see the parent conversation. This brief is your full context. If you need something that is missing, say so in your final message.
 - Other agents may edit other files in this repository at the same time. Leave changes outside your scope alone. Do not commit, push, or create branches.
 - Processes: <process limits and session cleanup>
 - Shared files: <private-copy rule for failure proofs>
 - Shared builds: <lock and retry rule>
-- Devices: <device rule, except for verify>
+- Devices: <device rule, except for qa>
 
 # Done when
 
@@ -69,16 +69,16 @@ Constraint lines, word for word:
 - Read-only access: `Access: read-only. Change no files. Run only commands that leave the repository unchanged.`
 - Edit access with a scope: `Access: edit. Change only the files in Scope. If the task needs a change outside Scope, stop and report it under OPEN.`
 - Edit access without a scope: `Access: edit. Change only what the task needs.`
-- At maximum depth for `verify` or a read-only role: `Delegation: you are at depth <d> of <max>. Do all work yourself. Start no subagents and no delegated tasks.`
-- At maximum depth for another edit role: ``Delegation: you are at depth <d> of <max>. Do all work yourself. Start no subagents and no delegated tasks, except `verify` tasks for device checks (see Devices).`` With a plan or an explicit profile, append `For device checks, pass <selection> to omt brief.`
+- `qa`: `Access: edit no files in the repository. Write only command output, logs, and screenshots under the Evidence directory.`
+- At maximum depth: `Delegation: you are at depth <d> of <max>. Do all work yourself. Start no subagents and no delegated tasks.`
 - Below maximum depth, with a plan or an explicit profile: `Delegation: you are at depth <d> of <max>. You may delegate with the T3 delegate_task tool. For each child, pass <selection> --depth <d+1>[ --max-depth <max>] to omt brief.` Here `<selection>` contains `--plan <slug>` when set and `--profile <name>` when explicit. Keep both flags when both were given. Include `--max-depth <max>` only when the max differs from the effective config.
 - Below maximum depth, without a plan or an explicit profile: `Delegation: you are at depth <d> of <max>. You may delegate with the T3 delegate_task tool. Give each child depth <d+1> in its brief.`
 - Plan mode: `Mode: you run in plan mode. Stay in it. Do not call ExitPlanMode and do not write a proposed plan. Put the result block in your final assistant message.`
-- Children, except at maximum depth for `verify` and for plan-mode roles: ``Children: after you read a child's result, settle the child with the T3 `t3_thread_organize` tool, with `action: "settle"` and the child's `childThreadId`, never the `taskId`. Skip a child that still runs or waits for an answer. Settle nothing when `git rev-parse --git-dir --git-common-dir` prints two different paths, because then you work in a git worktree. A settle error is not a failure of your task.``
+- Children, below maximum depth: ``Children: after you read a child's result, settle the child with the T3 `t3_thread_organize` tool, with `action: "settle"` and the child's `childThreadId`, never the `taskId`. Skip a child that still runs or waits for an answer. Settle nothing when `git rev-parse --git-dir --git-common-dir` prints two different paths, because then you work in a git worktree. A settle error is not a failure of your task.``
 
-Every brief has `CLI:`, `Tests:`, and `Shared builds:` lines. The `CLI:` line names `<project root>/.omt/bin/omt` when it exists, else `omt`. The `Tests:` line gives the role's test policy. For `qa`, it ends with `failureProofs: on` or `failureProofs: off` from `build.failureProofs`. The `Shared builds:` line requires the task's exact lock command. Retry a failed build or test only when the file is outside your scope and outside the task's named code under test. The file is the one where the error occurs, such as a file with a compile or load error, also when a test in your scope loads it. Wait 60 seconds and run the command once more. When it fails there again, report the command, the outside-scope file, and the message as another unit's state. For a failure in your scope or the named code under test, follow your result block. For `test` results, return `VERDICT: NOT VERIFIED` for that failure. When `omt lock run` exits 75, report the command, the lock name, and its message. Leave the lock to the conductor. For both reports: in `work` results, keep the `STATUS` that your own work earns and put the report under `OPEN`. For `test` results, including `verify` and `qa`, return `VERDICT: INCONCLUSIVE` and put the report under `FAILURES`. For other results, put the report under `NOTES`, or before the result block when it has no `NOTES`.
+Every brief has `CLI:`, `Tests:`, and `Shared builds:` lines. The `CLI:` line names `<project root>/.omt/bin/omt` when it exists, else `omt`. The `Tests:` line gives the role's test policy. For `qa`, it says to write no tests and no failure proofs, and to report each command with its exit code and log path. The `Shared builds:` line requires the task's exact lock command. Retry a failed build or test only when the file is outside your scope and outside the task's named code under test. The file is the one where the error occurs, such as a file with a compile or load error, also when a test in your scope loads it. Wait 60 seconds and run the command once more. When it fails there again, report the command, the outside-scope file, and the message as another unit's state. For a failure in your scope or the named code under test, follow your result block. For `test` results, return `VERDICT: NOT VERIFIED` for that failure. When `omt lock run` exits 75, report the command, the lock name, and its message. Leave the lock to the main thread. For both reports: in `work` results, keep the `STATUS` that your own work earns and put the report under `OPEN`. For `test` results, including `qa`, return `VERDICT: INCONCLUSIVE` and put the report under `FAILURES`. For other results, put the report under `NOTES`, or before the result block when it has no `NOTES`.
 
-Workers write no new test file or case. A worker updates an existing test only when its change breaks the test and reports that update under `NOTES`. Give `qa` only the unit's approved `## Tests` lines. Give `verify` the checks and main flows without new tests. Read [delegation.md](delegation.md#verification-and-devices) for device routing and [delegation.md](delegation.md#shared-builds) for lock handling.
+Children write no new test file or case: the main thread writes the planned tests. A worker updates an existing test only when its change breaks the test and reports that update under `NOTES`. Give `qa` the verify commands, the final checks, and the device flows, with no new tests. Each device flow has its steps and expected result. Read [delegation.md](delegation.md#verification-and-devices) for device routing and [delegation.md](delegation.md#shared-builds) for lock handling.
 
 ## Writing the task text
 
@@ -94,6 +94,8 @@ Put background in `Context`, not in `Task`: the relevant decisions, file paths w
 For round 2 and later, `Prior rounds` holds every earlier finding, the response to each, and each objection still open. A fresh child cannot see earlier rounds any other way.
 
 ## Example
+
+An `execute` brief for a large unit that runs as an independent track while the main thread builds the other units.
 
 Command:
 
@@ -119,7 +121,7 @@ Saved brief (abridged):
 
 # Role: execute
 
-You implement one planned unit. ...
+You implement one planned unit inside its scope, as an independent track. ...
 
 # Task
 
@@ -139,8 +141,8 @@ Callers: src/sync/pull.ts:41 and src/sync/push.ts:58. Tests use node:test with a
 # Constraints
 
 - Access: edit. Change only the files in Scope. If the task needs a change outside Scope, stop and report it under OPEN.
-- Delegation: you are at depth 1 of 1. Do all work yourself. Start no subagents and no delegated tasks, except `verify` tasks for device checks (see Devices). For device checks, pass --plan http-retry to omt brief.
-- Children: after you read a child's result, settle the child with the T3 `t3_thread_organize` tool, with `action: "settle"` and the child's `childThreadId`, never the `taskId`. Skip a child that still runs or waits for an answer. Settle nothing when `git rev-parse --git-dir --git-common-dir` prints two different paths, because then you work in a git worktree. A settle error is not a failure of your task.
+- Delegation: you are at depth 1 of 1. Do all work yourself. Start no subagents and no delegated tasks.
+- Evidence: save command output and logs under <evidence>.
 - CLI: Run omt as omt.
 - Tests: write no new test file and no new test case, and do not prove that tests can fail. Update an existing test only when your change breaks it, and say so under NOTES.
 - You do not see the parent conversation. ...

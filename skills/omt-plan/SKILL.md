@@ -29,10 +29,10 @@ With a selected profile and no plan file for the `--plan` id:
 
 - Pass `--profile <name>` to every `omt brief`, `omt roles`, and `omt route` command.
 - Before each dispatch, run `omt ledger stats --plan <slug>` and `omt profile show <name> --json`.
-- Dispatch only when the ledger's `dispatched` is below the profile's `limits.maxTasksPerRun` and `active` is below `limits.maxParallel`.
+- Dispatch only when the ledger's `active` is below the profile's `limits.maxParallel`.
 - Use this check in place of `can dispatch`.
 
-Read the code the goal touches. For a large or unknown area, dispatch parallel read-only `explore` tasks (`--plan <slug> --unit E<k> --round 1 --attempt 1 --title "explore E<k>: <question>"`), one narrow question each, then end the turn. On wake, read the results and record them ([results.md](../omt/references/results.md#recording)).
+Read the code the goal touches. For a large or unknown area, dispatch parallel read-only `explore` tasks (`--plan <slug> --unit E<k> --round 1 --attempt 1 --title "explore E<k>: <question>"`), one narrow question each, and wait for them in this turn ([delegation.md](../omt/references/delegation.md#waiting)). Then read the results and record them ([results.md](../omt/references/results.md#recording)).
 
 Done when: you can name each file and function the change touches, with a `path:line` citation.
 
@@ -48,13 +48,11 @@ Ask the user only owner decisions. Before you ask, finish all work that does not
 
 Include the proposed `## Tests` lines in that message. Ask the owner to approve the test list with the plan. Give a reason for each proposed line outside `plan.testLayers`.
 
-For a HEAVY plan, the owner decisions include the task budget. Use the effective profile from step 1 for the estimate. Read `workflow.build.review` as `build.review`. Count 5 tasks per unit for every profile, or 4 when `build.review` is `first-round` or `off`. This gives 5 tasks per unit for `normal` and 4 for `prototype`. Start with the tasks the plan already used (`dispatched` in `omt ledger stats --plan <slug>`). Add 4 for the plan-review rounds and the per-unit estimate. Add 1 more per `ui` unit and 1 more per unit with `## Tests` lines. Add 3 for the final gate and 5 when the plan has an `omt-design` step. Round the sum up to a multiple of 10.
-
 Done when: every decision is settled from evidence or answered by the user.
 
 ### 3. Write the plan
 
-`omt plan status <slug>` prints the absolute plan path, also from a worktree. Steps 3 and 4 edit and hash the plan at that path. When the plan exists, edit it. Otherwise run `omt plan new <slug> --title "<title>" --profile <name>`, after `omt init` when `.omt/.gitignore` is missing. Keep an existing plan: pass no `--force`. Fill every section. The persona in [roles/plan.md](../omt/references/roles/plan.md) is the standard. For a large plan, you may dispatch a `plan` task to fill that file. Before you dispatch a `plan` task, create any missing plan file yourself with `omt plan new <slug> --title "<title>" --profile <name>`. In every `plan` task, name the plan path and state that the file already exists. Tell the worker to edit that file and not to run `omt plan new`. On wake, read its result and record it ([results.md](../omt/references/results.md#recording)).
+`omt plan status <slug>` prints the absolute plan path, also from a worktree. Steps 3 and 4 edit and hash the plan at that path. When the plan exists, edit it. Otherwise run `omt plan new <slug> --title "<title>" --profile <name>`, after `omt init` when `.omt/.gitignore` is missing. Keep an existing plan: pass no `--force`. Fill every section. The persona in [roles/plan.md](../omt/references/roles/plan.md) is the standard. For a large plan, you may dispatch a `plan` task to fill that file. Before you dispatch a `plan` task, create any missing plan file yourself with `omt plan new <slug> --title "<title>" --profile <name>`. In every `plan` task, name the plan path and state that the file already exists. Tell the worker to edit that file and not to run `omt plan new`. Wait for it ([delegation.md](../omt/references/delegation.md#waiting)), then read its result and record it ([results.md](../omt/references/results.md#recording)).
 
 Read the effective profile again with the step 1 command before you fill `## Tests` or build a `plan` task. Read `workflow.plan.testLayers` as `plan.testLayers` and `workflow.build.qa` as `build.qa`. Name the effective `plan.testLayers` and `build.qa` values in every `plan` task.
 
@@ -66,7 +64,7 @@ Read the effective profile again with the step 1 command before you fill `## Tes
 - Paste the output of `omt roles --plan <slug>` under `Roles`.
 - Under `## Research`, write each research question, its answer, and its sources.
 - When `build.qa` is `off`, leave `## Tests` empty. When `build.qa` is `planned`, fill `## Tests` top-down with the owner's approved lines.
-- Start with e2e tests of the main user flows of each vertical slice that `verify` can also walk. Then add integration cases that e2e skips, followed by unit cases. Add other test kinds only when the owner asks.
+- Start with e2e tests of the main user flows of each vertical slice that `qa` can also walk. Then add integration cases that e2e skips, followed by unit cases. Add other test kinds only when the owner asks.
 - Propose only the layers in `plan.testLayers` without an owner request. Keep a line in another layer only with its reason and the owner's approval.
 - Use one e2e test per main flow. Keep edge cases out of the e2e lines.
 - Map each grill edge case with `State: accepted` or `State: changed`. A changed edge case uses the user's handling and test layer from the grill file. A `dropped` edge case gets no line and no done condition. A `pending` edge case gets no line until the owner answers it.
@@ -77,7 +75,6 @@ Read the effective profile again with the step 1 command before you fill `## Tes
 - Check for a lock tool with `command -v flock || command -v lockf`. When neither tool exists, run `omt plan limit <slug> 1` for a plan with shared build state and say why.
 - When a command leaves processes running after it exits, run that command outside `omt lock`. When a unit uses that command, run `omt plan limit <slug> 1` for the whole plan and say why in the plan.
 - Keep units parallel for shared build state alone when a lock tool exists and the command leaves no process running after it exits.
-- For a HEAVY plan, run `omt plan limit <slug> --tasks <n>` with the task budget from step 2. In plan mode, give the budget in your final message instead.
 
 Done when: `omt plan status <slug>` lists every unit, and each unit has all five fields.
 
@@ -96,7 +93,7 @@ For `two-families` or `one`, run up to `maxReviewRounds` rounds (default 4). Eac
    - With `plan.review=one`, round 1 has one task: `--unit plan --against <the plan author's provider>`.
    - From round 2, both values use one task: `--unit plan --against <the plan author's provider>`. You wrote the plan, so pass your provider instance from step 0. When a `plan` task wrote the plan, pass that task's provider instead.
    - With `one`, use a reviewer from the other family in every round. If no reviewer from the other family can run, stop and tell the user.
-3. Before each dispatch, run `omt ledger stats --plan <slug>`. When a plan file exists, dispatch only while it reports `can dispatch: yes`. Otherwise, use the step 1 dispatch check. Record the dispatch with `--task-id`, `--provider`, and `--model`, and end the turn. On wake, read the verdict and record it ([results.md](../omt/references/results.md#recording)). With `two-families` in round 1, run `omt ledger stats --plan <slug>` again after you record the first dispatch. Apply the same dispatch check to the second task. When the check passes, dispatch the second task before you end the turn. When the check fails, wait for the first task to finish. Repeat the check before the second dispatch. Record and wait for both.
+3. Before each dispatch, run `omt ledger stats --plan <slug>`. When a plan file exists, dispatch only while it reports `can dispatch: yes`. Otherwise, use the step 1 dispatch check. Record the dispatch with `--task-id`, `--provider`, and `--model`, and wait for it in this turn ([delegation.md](../omt/references/delegation.md#waiting)). Then read the verdict and record it ([results.md](../omt/references/results.md#recording)). With `two-families` in round 1, run `omt ledger stats --plan <slug>` again after you record the first dispatch. Apply the same dispatch check to the second task. When the check passes, dispatch the second task before you wait. When the check fails, wait for the first task to finish. Repeat the check before the second dispatch. Record and wait for both.
    - Each round-1 task runs only on its own family. Check the provider of the target before the call. When a failure code would move the task to a rung of the other family, do not fall back. Stop and tell the user which reviewer is unavailable.
 4. Round 1: the frozen blocker list is the union of the reviewers' blocking findings, without duplicates. With `two-families`, round 1 approves only when both reviewers approve. With `one`, round 1 approves when its reviewer approves. Write the list under `Log` in the plan.
 5. Round 2 and later: count a finding only when it is on the frozen list, is a regression from your fixes, or cites a requirement, a regression, or a concrete risk. Record anything else as a note.
@@ -114,7 +111,7 @@ Before you report, run the settle sweep ([delegation.md](../omt/references/deleg
 
 Show the plan to the owner first, also when `omt-ulw` called this skill. Write the `## Summary` text in full in the reply. The reply also gives the plan path, the review result, and each decision still open.
 
-When `omt-ulw` called this skill and step 4 has approval from the owner or a review round (approval with notes counts), return to its step 5 with the plan slug. Step 5 starts with the design check, so the `omt-design` step runs before any `ui` unit is dispatched. When the rounds ended at `maxReviewRounds` with blockers open, stop and give the user the open blockers; start no units.
+When `omt-ulw` called this skill and step 4 has approval from the owner or a review round (approval with notes counts), return to its step 5 with the plan slug. There the owner approves the plan, and step 6 runs the design check, so the `omt-design` step runs before any `ui` unit is built. When the rounds ended at `maxReviewRounds` with blockers open, stop and give the user the open blockers; start no units.
 
 Otherwise stop. Start no units.
 

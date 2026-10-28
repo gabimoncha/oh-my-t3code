@@ -20,8 +20,8 @@ In `plan` mode:
 - Dispatch only `explore` and `grill` tasks.
 - Build each brief without `--save`.
 - Write no grill file and no ledger entry.
-- Count your dispatched and active tasks yourself against the profile limits, and keep each task id.
-- Name the kept task ids in the stall heartbeat prompt. On each tick, read those task ids with `task_status` and `t3_thread_read` instead of `omt ledger list`, and write nothing.
+- Count your active tasks yourself against the profile limits, and keep each task id.
+- Read the kept task ids with `task_status` and `t3_thread_read` instead of `omt ledger list`, and write nothing.
 - Deliver the grill text, in the [grill file](#grill-file) layout, in your final message.
 
 Then run the [branch check](../omt/references/delegation.md#branch-check).
@@ -44,7 +44,7 @@ Before each dispatch, run `omt ledger stats --plan <slug>`. When the plan file e
 
 - Pass `--profile <name>` to every `omt brief`, `omt roles`, and `omt route` command.
 - Before each dispatch, run `omt ledger stats --plan <slug>` and `omt profile show <name> --json`.
-- Dispatch only when the ledger's `dispatched` is below the profile's `limits.maxTasksPerRun` and `active` is below `limits.maxParallel`.
+- Dispatch only when the ledger's `active` is below the profile's `limits.maxParallel`.
 - Use this check in place of `can dispatch`.
 
 When `$(omt paths --grills)/<slug>.md` exists, read it and its `Log`. Only recorded answers settle an item.
@@ -54,7 +54,7 @@ When `$(omt paths --grills)/<slug>.md` exists, read it and its `Log`. Only recor
 
 Write the goal in at most 5 lines. List the areas that the goal touches. Mark each area `user` when the user knows it and can choose, or `models` when the models decide it. Take the marks from the conversation. When the conversation does not show them, ask the user once, in one message, and end the turn.
 
-Find the facts that the panel needs. For each narrow question, dispatch a read-only `explore` task with `omt brief explore --task-file - --title "explore GX<k>: <question>" --plan <slug> --unit GX<k> --round 1 --attempt 1 --save --json`. Record each dispatch ([results.md](../omt/references/results.md#recording)) and end the turn. On wake, read each result, record it, and settle the child. The units are `GX<k>`, so the later plan's explore units `E<k>` get their own request ids.
+Find the facts that the panel needs. For each narrow question, dispatch a read-only `explore` task with `omt brief explore --task-file - --title "explore GX<k>: <question>" --plan <slug> --unit GX<k> --round 1 --attempt 1 --save --json`. Record each dispatch ([results.md](../omt/references/results.md#recording)) and wait for the tasks in this turn ([delegation.md](../omt/references/delegation.md#waiting)). Then read each result, record it, and settle the child. The units are `GX<k>`, so the later plan's explore units `E<k>` get their own request ids.
 
 Done when: the `grill` role resolves, and your reply has the goal, each area with its mark, and the facts with `path:line` citations.
 
@@ -77,15 +77,13 @@ Run the dispatch check of step 1 before each call. Check that the target provide
 
 Each child runs only on its own family. When a failure code would move a task to a rung of the other family, do not fall back. Tell the user which family cannot run, and ask whether to run the round with one family.
 
-Before you end the turn with an active task, start the stall heartbeat ([delegation.md](../omt/references/delegation.md#stalled-tasks)). Then end the turn.
-
-When the stall check accepts a result, continue here, not at its "step 6". An explore result goes back to step 1. A grill result goes to step 3 when both panel results of the round have a terminal entry or a recorded failure.
+Wait for both tasks in this turn ([delegation.md](../omt/references/delegation.md#waiting)). A grill result goes to step 3 when both panel results of the round have a terminal entry or a recorded failure.
 
 Done when: both tasks of round `<n>` have a dispatch entry, or the user has the question about a one-family round.
 
 ### 3. Merge
 
-On wake, read both results with `task_status`. Record each result with its `VERDICT` ([results.md](../omt/references/results.md#recording)). Settle each child ([delegation.md](../omt/references/delegation.md#releasing-children)).
+Read both results with `task_status`. Record each result with its `VERDICT` ([results.md](../omt/references/results.md#recording)). Settle each child ([delegation.md](../omt/references/delegation.md#releasing-children)).
 
 Merge the `DIRECTIONS` of both children into one list, without duplicates. Give each direction its gain and its cost. While no direction is chosen:
 
@@ -144,7 +142,7 @@ Done when: you stopped for one of the three reasons, you sent the direction ques
 
 ### 6. Hand off
 
-Before you report, run the settle sweep ([delegation.md](../omt/references/delegation.md#releasing-children)), except when `omt-plan` called this skill. Delete the stall heartbeat when no task is active.
+Before you report, run the settle sweep ([delegation.md](../omt/references/delegation.md#releasing-children)), except when `omt-plan` called this skill.
 
 Set `status=done` in the grill file header. When you stopped with no chosen direction, write `No direction chosen.` in the `## Directions` section. The reply names the grill file path, the number of decisions, edge cases, and open questions, and each open question. List each `pending` edge case with the open questions.
 

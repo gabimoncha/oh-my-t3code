@@ -31,7 +31,7 @@ With a selected profile and no plan file for the `--plan` id:
 
 - Pass `--profile <name>` to every `omt brief`, `omt roles`, and `omt route` command.
 - Before each dispatch, run `omt ledger stats --plan <ledger plan>` and `omt profile show <name> --json`.
-- Dispatch only when the ledger's `dispatched` is below the profile's `limits.maxTasksPerRun` and `active` is below `limits.maxParallel`.
+- Dispatch only when the ledger's `active` is below the profile's `limits.maxParallel`.
 - Use this check in place of `can dispatch`.
 
 Done when: the frame and the slug are written in your reply.
@@ -42,7 +42,7 @@ Read the effective profile again with the step 1 command before each design pass
 
 Before each dispatch, run `omt ledger stats --plan <ledger plan>`. When a plan file exists, dispatch only while it reports `can dispatch: yes`. Otherwise, use the step 1 dispatch check. Build the brief with `omt brief design --task-file - --title "design DS<k>: <slug> variants" --scope docs/design/<slug>/ --scope docs/design/<slug>.md --plan <ledger plan> --unit DS<k> --round 1 --attempt 1 --json`. The task carries the frame from step 1. When the owner asked for another count, use that count. The task asks the designer to make a new Paper file named after the project, not to reuse an open file.
 
-Call `delegate_task`, record the dispatch with `--task-id`, `--provider`, and `--model` ([results.md](../omt/references/results.md#recording)), and end your turn.
+Call `delegate_task`, record the dispatch with `--task-id`, `--provider`, and `--model` ([results.md](../omt/references/results.md#recording)), and wait for it in this turn ([delegation.md](../omt/references/delegation.md#waiting)).
 
 A `design` dispatch never falls back to another family. When T3 refuses its rung, or `omt roles --plan <ledger plan>` reports `design` as `unavailable`, stop and tell the owner which target failed and why.
 
@@ -50,7 +50,7 @@ Done when: the design task has a ledger entry, or the owner knows why it cannot 
 
 ### 3. Owner checkpoint
 
-On wake, read the result and record it ([results.md](../omt/references/results.md#recording)). Check that each screenshot path in `CHANGES` exists.
+Read the result and record it ([results.md](../omt/references/results.md#recording)). Check that each screenshot path in `CHANGES` exists.
 
 Show the owner every screenshot as an image with its absolute path, for example `![Home, variant A](/abs/path/docs/design/<slug>/home-a.png)`. Group the screenshots by screen, with one line on each variant. Then ask in one message: which variant for each screen, and what to change. The owner may mix variants across screens.
 
@@ -76,6 +76,6 @@ Done when: `docs/design/<slug>.md` exists, its screenshot paths exist, and the o
 
 Before you report, run the settle sweep ([delegation.md](../omt/references/delegation.md#releasing-children)).
 
-Every unit that builds or changes this UI cites `docs/design/<slug>.md` in its task and scope, and uses the `ui` role in every round. The `verify` task of such a unit gets no `docs/design/` paths and no visual-match conditions. The `ui` task and the owner compare the result with the design. When `omt-plan` or `omt-ulw` called this skill, return to it with the spec path. Otherwise give the owner the spec path and the screenshot folder.
+Every unit that builds or changes this UI cites `docs/design/<slug>.md` in its task and scope, and uses the `ui` role. The `qa` task of such a unit gets no `docs/design/` paths and no visual-match conditions. The owner compares the result with the design. When `omt-plan` or `omt-ulw` called this skill, return to it with the spec path. Otherwise give the owner the spec path and the screenshot folder.
 
 Done when: the caller, or the owner, has the spec path.

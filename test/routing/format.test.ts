@@ -37,8 +37,8 @@ test("formatRolesTable matches the section 5.3 layout", () => {
     [
       "ROLE         STATUS      TARGET                                         ACCESS     MODE     CROSS",
       "execute      resolved    claudeAgent/claude-opus-5-5 effort=medium      edit       default  no",
-      "review       resolved    codex/gpt-6-astra reasoningEffort=high         read-only  plan     yes",
-      "oracle       unavailable -                                              read-only  plan     yes",
+      "review       resolved    codex/gpt-6-astra reasoningEffort=high         edit       default  yes",
+      "oracle       unavailable -                                              edit       default  yes",
       "  rung 1 grok/grok-build: provider grok cannot run child tasks: Provider instance is disabled.; Provider executable is not installed.",
       "",
       "verified against orchestrator_capabilities",
@@ -93,7 +93,7 @@ test("formatRolesTable widens columns and prints the unverified footer", () => {
   );
   assert.equal(
     longLines[1],
-    "a-very-long-role-name  resolved    claudeAgent/claude-opus-5-5 contextWindow=1m fastMode=true  read-only  plan     yes",
+    "a-very-long-role-name  resolved    claudeAgent/claude-opus-5-5 contextWindow=1m fastMode=true  edit       default  yes",
   );
 });
 

@@ -35,7 +35,7 @@ An empty section means no new tests.
 ## Units
 
 - [ ] U1. <title>
-  - Role: execute
+  - Role: main
   - Scope: <files or directories>
   - Done when: <condition>
   - Verify: \`<command>\`

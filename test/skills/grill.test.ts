@@ -84,7 +84,8 @@ test("omt-grill writes nothing in plan mode and returns the grill text", () => {
   assert.match(mode, /Dispatch only `explore` and `grill` tasks/);
   assert.match(mode, /Build each brief without `--save`/);
   assert.match(mode, /Write no grill file and no ledger entry/);
-  assert.match(mode, /On each tick[^\n]*write nothing/);
+  assert.match(mode, /Read the kept task ids with `task_status`[^\n]*write nothing/);
+  assert.doesNotMatch(text, /heartbeat|stalled-tasks|On wake/);
   assert.match(mode, /Deliver the grill text[^\n]*in your final message/);
   assert.match(section(text, "### 4. "), /In `plan` mode, keep the same text in your reply instead/);
   assert.match(section(text, "### 6. "), /In `plan` mode, return the grill text instead/);

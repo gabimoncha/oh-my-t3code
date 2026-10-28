@@ -9,7 +9,7 @@ function gitActions(): string {
 }
 
 test("omt-ulw applies the shared Git actions rules to each commit, push, and PR", () => {
-  const text = section(readSkill("omt-ulw"), "### 11. ");
+  const text = section(readSkill("omt-ulw"), "### 12. ");
   assert.match(text, /make one commit for the run, then push and open or update the PR, each by the \[Git actions\]\(\.\.\/omt\/references\/delegation\.md#git-actions\) rules/);
 });
 

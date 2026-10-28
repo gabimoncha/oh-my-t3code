@@ -35,7 +35,7 @@ test("roles --role keeps the given order, drops duplicates, and --json prints th
   assert.equal(report.verified, false);
   assert.deepEqual(Object.keys(report.roles), ["review", "explore"]);
   assert.deepEqual(report.limits, DEFAULT_CONFIG.limits);
-  assert.equal(report.roles.review?.interactionMode, "plan");
+  assert.equal(report.roles.review?.interactionMode, "default");
   assert.equal(report.roles.review?.t3Role, "review");
   assert.equal(report.roles.review?.runtimeMode, "inherit");
   assert.equal(report.roles.review?.crossFamily, true);

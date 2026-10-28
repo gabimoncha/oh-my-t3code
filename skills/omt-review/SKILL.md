@@ -53,7 +53,7 @@ Done when: each changed file outside `docs/design/` is in exactly one group, and
 
 ### 3. Dispatch the reviewers
 
-In default mode, run `omt init` first when `.omt/.gitignore` is missing; the ledger and the evidence file in step 6 live under `.omt/`. Before every task dispatch, run `omt ledger stats --plan review-<slug>`. Use `dispatched` and `active` from the output. Use `limits.maxTasksPerRun` and `limits.maxParallel` from `omt profile show <profile> --json`. Dispatch only when `dispatched` is below `limits.maxTasksPerRun` and `active` is below `limits.maxParallel`. Ignore the `can dispatch` line because it uses the config's profile limits. Build each group brief with `omt brief review --task-file - --title "review G<k>: <group paths>" --round <n> --attempt 1 --plan review-<slug> --unit G<k> --profile <profile> --save --json`. The task gives the diff command limited to the group's paths, which never include `docs/design/`, and the intent of the change (PR description, commit messages, or the user's words). Reviewers run the diff themselves; paste a diff only when it is short. Each round is a fresh task; from round 2, `--prior-file` carries the earlier findings and the responses.
+In default mode, run `omt init` first when `.omt/.gitignore` is missing; the ledger and the evidence file in step 6 live under `.omt/`. Before every task dispatch, run `omt ledger stats --plan review-<slug>`. Use `active` from the output. Use `limits.maxParallel` from `omt profile show <profile> --json`. Dispatch only when `active` is below `limits.maxParallel`. Ignore the `can dispatch` line because it uses the config's profile limits. Build each group brief with `omt brief review --task-file - --title "review G<k>: <group paths>" --round <n> --attempt 1 --plan review-<slug> --unit G<k> --profile <profile> --save --json`. The task gives the diff command limited to the group's paths, which never include `docs/design/`, and the intent of the change (PR description, commit messages, or the user's words). Reviewers run the diff themselves; paste a diff only when it is short. Each round is a fresh task; from round 2, `--prior-file` carries the earlier findings and the responses. Every `review` and `oracle` task in this skill is report-only: its task says `Report every finding with its fix. Change no files, and write none under FIXES.`
 
 Round 1 reviews a change whose author is unknown. Pass no `--against`, so the configured order applies.
 
@@ -61,9 +61,9 @@ For `review.families: both`, use units `G<k>.codex` and `G<k>.claude` with `--ag
 
 A round after a fix loop (step 6) reviews each fix on its own, not each group. Dispatch one review per fix with `--unit F<k>`, `--title "review F<k>: <finding title>"`, and `--against auto`. Its task gives the finding, the fix task's result block, and the diff command limited to the paths that the fix changed. `--against auto` with `--unit F<k>` finds the worker of that fix, so the reviewer comes from the other family.
 
-Build every task with `omt brief <role> ... --profile <profile> --save --json`, including oracle, fix, verify, guardrail, and qa tasks. Pass `delegateTask` to `delegate_task` and retain its `taskId`. Record the dispatch with the returned `ledger.dispatched` command after replacing only `<taskId>`. For a fallback, use the provider and model of the target that you actually sent ([results.md](../omt/references/results.md#recording)). `<a>` is 1 for the first call, or the higher attempt of a retry or a fallback call ([delegation.md](../omt/references/delegation.md#failure-codes)). Groups or fixes left over when the limit is reached wait for the next wake. In default mode, end your turn after recording the dispatches. For PR step 5, record the review and verify dispatches before ending the turn. That step adds the pending-CI watch just before the turn ends.
+Build every task with `omt brief <role> ... --profile <profile> --save --json`, including oracle, fix, guardrail, and qa tasks. Pass `delegateTask` to `delegate_task` and retain its `taskId`. Record the dispatch with the returned `ledger.dispatched` command after replacing only `<taskId>`. For a fallback, use the provider and model of the target that you actually sent ([results.md](../omt/references/results.md#recording)). `<a>` is 1 for the first call, or the higher attempt of a retry or a fallback call ([delegation.md](../omt/references/delegation.md#failure-codes)). Groups or fixes left over when the limit is reached wait for the next wake. In default mode, end your turn after recording the dispatches. For PR step 5, record the review and qa dispatches before ending the turn. That step adds the pending-CI watch just before the turn ends.
 
-Give every edit child an explicit file scope. Run edit tasks with overlapping scopes one at a time. Let no child commit or push. Keep child changes uncommitted for the conductor. Workers write no new tests. Only an owner-approved `qa` task writes its listed tests.
+Give every edit child an explicit file scope. Run edit tasks with overlapping scopes one at a time. Let no child commit or push. Keep child changes uncommitted for the main thread. Workers write no new tests. Only an owner-approved `qa` task writes its listed tests.
 
 Done when: every group, or every fix after a fix loop, has a dispatched task with a ledger entry, or waits on a limit.
 
@@ -133,15 +133,15 @@ Done when: reviewers have the measured coverage path or know that coverage data 
 
 ### PR 5. Round 1
 
-Dispatch the read-only review groups on the PR head with the rule-file list and coverage path, using step 3 above. Apply the PR step 1 diff and file-read rules to every review task. With `review.crap: report`, ask each reviewer to compute the values in PR step 9 for every added or changed function in its group. With `review.verify: changed-flows`, dispatch one `verify` task when the PR changes a screen, a CLI command, or an API route. Name the changed flows from the PR body and diff, and the build and run commands from the rules. Name the PR's changed paths, excluding `docs/design/`, as the code under test in the `verify` task. Require the verify result to name each flow's covering test file, or `none`. The `verify` task writes no tests and changes no product files. Only `verify` drives a device, a Simulator UI, a browser, or a computer. With `review.verify: off`, skip this task. When verify returns `INCONCLUSIVE` because it cannot reach a local tool, send the same task once to the next rung of another provider.
+Dispatch the report-only review groups on the PR head with the rule-file list and coverage path, using step 3 above. Apply the PR step 1 diff and file-read rules to every review task. With `review.crap: report`, ask each reviewer to compute the values in PR step 9 for every added or changed function in its group. With `review.verify: changed-flows`, dispatch one `qa` task when the PR changes a screen, a CLI command, or an API route. Name the changed flows from the PR body and diff, and the build and run commands from the rules. Name the PR's changed paths, excluding `docs/design/`, as the code under test in the `qa` task. Require the qa result to name each flow's covering test file, or `none`. The `qa` task writes no tests and changes no files. Only `qa` drives a device, a Simulator UI, a browser, or a computer. With `review.verify: off`, skip this task. When qa returns `INCONCLUSIVE` because it cannot reach a local tool, send the same task once to the next rung of another provider.
 
 Record the dispatches, then apply the PR step 3 watch rule before ending the turn. On wake, refresh CI at PR step 3 and collect every round-1 verdict before PR step 6.
 
-Done when: every group and any required verify task has a verdict, or waits on an active task or a limit.
+Done when: every group and any required qa task has a verdict, or waits on an active task or a limit.
 
 ### PR 6. Merge and oracle
 
-Merge the findings with step 4 above. Turn each flow that verify returns as `NOT VERIFIED` into a P1 finding with its evidence. Apply step 5 above only when `review.oracle` is `on`. Apply the PR step 1 diff and file-read rules to the oracle task. Keep every confirmed rule citation and CRAP value in the merged list.
+Merge the findings with step 4 above. Turn each flow that qa returns as `NOT VERIFIED` into a P1 finding with its evidence. Apply step 5 above only when `review.oracle` is `on`. Apply the PR step 1 diff and file-read rules to the oracle task. Keep every confirmed rule citation and CRAP value in the merged list.
 
 Done when: the merged list includes verify failures and the enabled oracle's verdict.
 
@@ -157,7 +157,7 @@ With `review.guardrails: off`, skip this step. With `review.guardrails: propose`
 
 Before the append, run `omt init` if `.omt/.gitignore` lacks `guardrails.md`. Append each new proposal to `.omt/guardrails.md` as `- [ ] G<k> <date> PR #<n> <class>: <proposal>. Where: <file>. Proof: <command or none>.`. Set `<k>` one above the highest id in the file for each new proposal. Leave implementation of the proposals to owner-approved omt-ulw work on a separate branch.
 
-Done when: each finding has a new proposal or a reason for none, and the conductor has saved the new proposals.
+Done when: each finding has a new proposal or a reason for none, and the main thread has saved the new proposals.
 
 ### PR 9. CRAP
 

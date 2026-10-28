@@ -64,7 +64,8 @@ test("plan and design use the selected profile for routing and dispatch limits b
     assert.match(frame, /With a selected profile and no plan file for the `--plan` id:/, name);
     assert.match(frame, /Pass `--profile <name>` to every `omt brief`, `omt roles`, and `omt route` command\./, name);
     assert.ok(frame.includes(`Before each dispatch, run \`omt ledger stats --plan ${planId}\` and \`omt profile show <name> --json\`.`), name);
-    assert.match(frame, /Dispatch only when the ledger's `dispatched` is below the profile's `limits\.maxTasksPerRun` and `active` is below `limits\.maxParallel`\./, name);
+    assert.match(frame, /Dispatch only when the ledger's `active` is below the profile's `limits\.maxParallel`\./, name);
+    assert.doesNotMatch(readSkill(name), /maxTasksPerRun|task budget/, name);
     assert.match(frame, /Use this check in place of `can dispatch`\./, name);
   }
 });
@@ -81,9 +82,9 @@ test("plan and design dispatch steps use the step 1 check without a plan file", 
     assert.match(dispatch, /Otherwise, use the step 1 dispatch check\./, name);
   }
   const rounds = section(readSkill("omt-plan"), "### 4. ");
-  assert.match(rounds, /Record the dispatch with `--task-id`, `--provider`, and `--model`, and end the turn\./);
+  assert.match(rounds, /Record the dispatch with `--task-id`, `--provider`, and `--model`, and wait for it in this turn \(\[delegation\.md\]\(\.\.\/omt\/references\/delegation\.md#waiting\)\)\./);
   assert.match(rounds, /Apply the same dispatch check to the second task\./);
-  assert.match(rounds, /When the check passes, dispatch the second task before you end the turn\./);
+  assert.match(rounds, /When the check passes, dispatch the second task before you wait\./);
   assert.match(rounds, /When the check fails, wait for the first task to finish\./);
   assert.match(rounds, /Repeat the check before the second dispatch\./);
 });
@@ -100,7 +101,7 @@ test("omt-plan asks the owner to approve the test lines and reads the profile's 
   assert.match(write, /Name the effective `plan\.testLayers` and `build\.qa` values in every `plan` task\./);
   assert.match(write, /When `build\.qa` is `off`, leave `## Tests` empty\./);
   assert.match(write, /When `build\.qa` is `planned`, fill `## Tests` top-down with the owner's approved lines\./);
-  assert.match(write, /Start with e2e tests of the main user flows of each vertical slice that `verify` can also walk\./);
+  assert.match(write, /Start with e2e tests of the main user flows of each vertical slice that `qa` can also walk\./);
   assert.match(write, /Then add integration cases that e2e skips, followed by unit cases\./);
   assert.match(write, /Add other test kinds only when the owner asks\./);
   assert.match(write, /Propose only the layers in `plan\.testLayers` without an owner request\./);
@@ -171,22 +172,12 @@ test("the design and ui personas exist, and no model reviews design artifacts (p
 
 test("the design check runs before any ui dispatch, also after the omt-plan hand-off (plan-design)", () => {
   const handOff = section(readSkill("omt-plan"), "### 5. ");
-  assert.match(handOff, /return to its step 5 with the plan slug\. Step 5 starts with the design check/);
+  assert.match(handOff, /return to its step 5 with the plan slug\. There the owner approves the plan, and step 6 runs the design check/);
 });
 
-test("omt-plan estimates the task budget from the profile, ui units, and planned tests", () => {
+test("omt-plan sets no task budget", () => {
   const text = readSkill("omt-plan");
-  const ask = section(text, "### 2. ");
-  assert.match(ask, /Use the effective profile from step 1 for the estimate\./);
-  assert.match(ask, /Read `workflow\.build\.review` as `build\.review`\./);
-  assert.match(ask, /Count 5 tasks per unit for every profile, or 4 when `build\.review` is `first-round` or `off`\./);
-  assert.match(ask, /This gives 5 tasks per unit for `normal` and 4 for `prototype`\./);
-  assert.match(ask, /Start with the tasks the plan already used \(`dispatched` in `omt ledger stats --plan <slug>`\)\./);
-  assert.match(ask, /Add 4 for the plan-review rounds and the per-unit estimate\./);
-  assert.match(ask, /Add 1 more per `ui` unit and 1 more per unit with `## Tests` lines\./);
-  assert.match(ask, /Add 3 for the final gate and 5 when the plan has an `omt-design` step\./);
-  assert.match(ask, /Round the sum up to a multiple of 10\./);
-  assert.match(section(text, "### 3. "), /run `omt plan limit <slug> --tasks <n>`/);
+  assert.doesNotMatch(text, /task budget|--tasks|maxTasksPerRun/);
 });
 
 test("omt-plan hashes the plan after every edit", () => {
@@ -229,10 +220,10 @@ test("omt-design uses design.variants per screen in a new Paper file and asks fo
   assert.match(section(design, "### 3. "), /The owner may mix variants across screens\./);
 });
 
-test("omt-design keeps design artifacts and visual-match conditions out of verify tasks", () => {
+test("omt-design keeps design artifacts and visual-match conditions out of qa tasks", () => {
   const handOff = section(readSkill("omt-design"), "### 6. ");
-  assert.match(handOff, /The `verify` task of such a unit gets no `docs\/design\/` paths and no visual-match conditions\./);
-  assert.match(handOff, /The `ui` task and the owner compare the result with the design\./);
+  assert.match(handOff, /The `qa` task of such a unit gets no `docs\/design\/` paths and no visual-match conditions\./);
+  assert.match(handOff, /The owner compares the result with the design\./);
 });
 
 test("omt-plan keeps the real-data done condition (plan-design)", () => {

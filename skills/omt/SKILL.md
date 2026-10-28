@@ -6,20 +6,19 @@ disable-model-invocation: true
 
 # oh-my-t3code
 
-omt turns this T3 thread into a conductor: it plans, delegates each unit to a role-routed subagent through the T3 `delegate_task` tool, reviews, tests, and verifies. Pick the workflow that matches the request, then load that skill.
+omt runs workflows in this T3 thread: the main thread explores, plans, and builds, and role-routed subagents started with the T3 `delegate_task` tool review and test the work. Pick the workflow that matches the request, then load that skill.
 
 ## Workflows
 
 | Skill | Use it when |
 | --- | --- |
-| `omt-ulw` | The user wants something built or fixed end to end with subagents ("ulw", "ultrawork"). The default. |
+| `omt-ulw` | The user wants something built or fixed end to end ("ulw", "ultrawork"). The main thread explores, asks, plans, and builds; one review child and one QA child check the work. The default. |
 | `omt-plan` | The user wants a reviewed plan before any code changes, or `omt-ulw` needs one for a HEAVY task. |
 | `omt-grill` | The user wants a goal grilled or stress-tested, its edge cases found, or a brainstorm before a plan, or `omt-plan` offers a grill for a vague goal. |
 | `omt-design` | The user wants designs, mockups, screens, or a design pass, or a plan needs a design spec before its UI units. |
 | `omt-review` | The user wants a review of uncommitted changes, a branch, a commit, or a PR. |
 | `omt-research` | The user wants a cited answer from this repository, docs, or the web, with no code changes. |
 | `omt-swarm` | The user asks for separate threads: independent tracks in their own worktrees, each ending in a PR. |
-| `omt-loop` | The user wants the work to keep going across turns until a condition holds. |
 | `omt-help` | The user asks for help, what omt can do, what to do next, how to do something, which skill to use, or what a command means, or wants a tour. It only reads, and hands changes to `omt-setup`. |
 | `omt-setup` | The user wants omt set up, configured, or updated: harnesses, the default set, models, roles, profiles, or worktree setup. It asks before each write. |
 
@@ -48,7 +47,7 @@ To find the CLI (`omt`, `.omt/bin/omt`, or the manual steps), follow [The CLI](r
 | `omt plan mark <slug> <id> <done\|open\|blocked>` | ticks one plan item, for example `omt plan mark auth U3 done` |
 | `omt plan status [<slug>]` | unit counts, the next open unit, the ready units, and one `warning:` line per dependency problem |
 | `omt ledger add --plan <slug> --unit <id> --role <r> --round <n> --attempt <n> --status <s> ...` | appends one ledger entry; a terminal entry closes the matching dispatched entry ([results.md](references/results.md#recording)) |
-| `omt ledger stats --plan <slug>` | `dispatched` and `active` counts, the limits, and `can dispatch: yes` or `no` |
+| `omt ledger stats --plan <slug>` | `dispatched` and `active` counts, `max parallel`, and `can dispatch: yes` or `no` |
 | `omt ledger request-id --plan <slug> --unit <id> --role <r> --round <n> --attempt <n>` | the `clientRequestId` |
 | `omt config show` | the merged config before profile selection, including limits |
 | `omt config explain [--profile <name>] [--json]` | the layer that sets each value (the default set, the user or project config, or a profile and the file that declares it) and the lower layers that it overrides |
