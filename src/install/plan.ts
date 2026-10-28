@@ -66,6 +66,7 @@ export interface SkillStep {
   reason?: string;
   backup?: boolean; // uninstall --force: move a locally modified skill to the backups before removal
   existed?: boolean; // uninstall --project: kept, because it was in place before the install
+  retired?: boolean; // install: a managed skill that the bundle no longer ships
 }
 
 export interface LinkStep {
@@ -76,6 +77,7 @@ export interface LinkStep {
   action: PlanAction;
   reason?: string;
   existed?: boolean; // uninstall --project: kept, because it was in place before the install
+  retired?: boolean; // install: points at a retired skill that the plan removes
 }
 
 export interface ConfigStep {
@@ -588,6 +590,8 @@ export async function buildInstallPlan(ctx: CliContext, options: InstallOptions)
     bundled.map((skill) => skill.name),
   );
   const links: LinkStep[] = linkPlan.links.map(({ canonical: _canonical, ...link }) => link);
+  const { manifest: previous, from } = await loadScopeManifest(paths);
+  await planRetired(paths, previous, bundled, skills, links);
   const sync = options.sync === true;
   const config: ConfigStep = { path: paths.configPath, action: (await pathExists(paths.configPath)) ? "unchanged" : "create" };
   if (sync && config.action === "create") {
@@ -608,7 +612,6 @@ export async function buildInstallPlan(ctx: CliContext, options: InstallOptions)
     config,
     scratch: paths.root === undefined ? [] : await listScratch(paths.agentsRoot),
   };
-  const { manifest: previous, from } = await loadScopeManifest(paths);
   if (previous !== undefined) plan.previous = previous;
   if (sync) {
     const unmanaged = new Set(skills.filter((step) => step.action === "conflict" && step.reason !== "locally modified").map((step) => step.name));
@@ -634,14 +637,70 @@ export async function buildInstallPlan(ctx: CliContext, options: InstallOptions)
     for (const step of replaceableSteps(plan)) {
       if (step.action !== "conflict") continue;
       step.action = "keep";
-      step.reason = step.reason === "locally modified" ? "locally modified; omt install --force replaces it" : "not managed by omt";
+      step.reason =
+        step.reason !== "locally modified"
+          ? "not managed by omt"
+          : (step as SkillStep).retired === true
+            ? "locally modified; no longer shipped; omt install --force backs it up and removes it"
+            : "locally modified; omt install --force replaces it";
     }
   } else if (options.force) {
     for (const step of replaceableSteps(plan)) {
       if (step.action === "conflict") step.action = "replace";
     }
   }
+  // A link to a kept retired skill stays, because the skill stays.
+  const removed = new Set(skills.filter(removesRetired).map((step) => step.name));
+  plan.links = links.filter((link) => link.retired !== true || removed.has(link.name));
   return plan;
+}
+
+// True for a retired skill or link that the apply removes (`replace` backs the skill up first).
+export function removesRetired(step: { retired?: boolean; action: PlanAction }): boolean {
+  return step.retired === true && (step.action === "remove" || step.action === "replace");
+}
+
+// The names of the skills that an earlier install of this scope wrote and that the bundle no longer
+// ships. A skill counts only when the manifest lists it and its folder holds the omt marker, the check
+// that the uninstall makes. A folder in place before a project install stays the user's.
+export async function retiredSkills(agentsRoot: string, manifest: Manifest | undefined, shipped: readonly string[]): Promise<string[]> {
+  const existing = manifest?.project?.existing?.skills ?? [];
+  const names: string[] = [];
+  for (const name of manifest?.skills ?? []) {
+    if (shipped.includes(name) || existing.includes(name) || name !== basename(name) || name === "." || name === "..") continue;
+    if (await isManagedDir(join(agentsRoot, name))) names.push(name);
+  }
+  return names;
+}
+
+// Adds a remove step for each retired skill, and for each link in a link root of the scope that resolves
+// to it. An edited retired skill is a conflict, as an edited bundled skill is.
+async function planRetired(paths: ScopePaths, manifest: Manifest | undefined, bundled: { name: string }[], skills: SkillStep[], links: LinkStep[]): Promise<void> {
+  const names = await retiredSkills(paths.agentsRoot, manifest, bundled.map((skill) => skill.name));
+  const existingLinks = manifest?.project?.existing?.links ?? [];
+  const linkRoots = Object.entries(paths.linkRoots) as [LinkRootName, string][];
+  for (const name of names) {
+    const path = join(paths.agentsRoot, name);
+    const step: SkillStep = { name, source: "", path, sourceHash: "", action: "remove", reason: "no longer shipped", retired: true };
+    if (await isLocallyModified(path)) {
+      step.action = "conflict";
+      step.reason = "locally modified";
+    } else {
+      const hash = (await readMarker(path))?.hash;
+      if (hash !== undefined) step.installedHash = hash;
+    }
+    skills.push(step);
+    const real = await nativeRealOrSelf(path);
+    const seen = new Set<string>();
+    for (const [root, dir] of linkRoots) {
+      const linkPath = join(dir, name);
+      const key = join(await resolveReal(dir), name);
+      if (seen.has(key) || existingLinks.includes(linkPath)) continue;
+      seen.add(key);
+      if ((await managedLinkTarget(linkPath)) !== real) continue;
+      links.push({ root, name, path: linkPath, target: await readlink(linkPath), action: "remove", reason: "no longer shipped", retired: true });
+    }
+  }
 }
 
 export function replaceableSteps(plan: InstallPlan): { action: PlanAction; path: string; reason?: string }[] {

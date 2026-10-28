@@ -1104,7 +1104,8 @@ export async function recordApplyAttempt(ctx: CliContext, latest: string): Promi
 
 Skill sync. The sync runs the install planner (section 14.2) with `InstallOptions.sync: true`. With `sync`:
 
-- Every `conflict` step becomes `keep`, with the reason `locally modified; omt install --force replaces it` or `not managed by omt`.
+- Every `conflict` step becomes `keep`, with the reason `locally modified; omt install --force replaces it` or `not managed by omt`. For a retired skill (section 14.2), the reason is `locally modified; no longer shipped; omt install --force backs it up and removes it`.
+- A retired skill that is not locally modified is removed with its links, as in `omt install`. Its name is in the `changed` list of the scope result.
 - When the config is absent, the config step is `keep`, with the reason `absent; omt update creates no config`.
 - An absent link to a skill that is kept because omt does not manage it is `keep`, with the reason `points at a skill that omt does not manage`.
 - `planHarnesses` does not run.
@@ -1923,6 +1924,8 @@ The user config is `create` when absent, else `unchanged`.
 
 The plan also holds a harness step. The install runs `detectHarnesses` (section 5.13), with the file of `--capabilities` when given. When the config step is `create`, a default driver is missing, and at least one driver is detected, the starter gets `"harnesses": [<recommended>]`, inserted after the `defaults` line with `setTopLevelValue`. When the config exists, the install never edits it. When its effective `harnesses` (unset means both default drivers) differ from `recommended` and a driver is detected, the step holds the hint `run omt detect --write`. The Claude hook, only with `--hooks`, is `create`, `update`, or `unchanged` (section 14.4).
 
+Retired skills. A retired skill is a skill that the bundle no longer ships and that an earlier install of the scope wrote. A name counts only when all of these hold: the scope's manifest `skills` list names it, `<agents root>/<name>` is a managed directory (the check that the uninstall makes, section 14.6), and in project scope `project.existing.skills` does not name it. A folder that the manifest does not list, or that has no marker, is the user's, and the plan never touches it. For each retired skill the plan holds a skill step `remove` with the reason `(no longer shipped)`. When the hash of its files differs from the marker hash, the step is `conflict` with `(locally modified)`, as for a bundled skill, and `--force` makes it `replace`. The plan also holds a link step `remove` with `(no longer shipped)` for each link at `<link root>/<name>`, in every link root of the scope, that is a symlink resolving to the retired folder, except a link that `project.existing.links` names. A link to a skill that stays (a `conflict` or `keep`) gets no step. The plan output and `--dry-run` show these lines with the other actions, for example `remove   omt-loop  (no longer shipped)`.
+
 `--targets` is a comma-separated subset of `agents`, `claude`, and `gemini`. `agents` is always included. The default is `agents,claude`, plus `gemini` when `<home>/.gemini` exists.
 
 A directory is managed when it contains `.omt-managed.json`:
@@ -1943,6 +1946,7 @@ The hash is SHA-256 over the sorted relative paths and the contents of a skill d
    - For each `replace`, move the existing path to `<configDir>/backups/<YYYYMMDDHHmmss>/<root name>/<name>`. When the stamp directory already exists, use `<YYYYMMDDHHmmss>-<n>` with the lowest free `n`. Backups never stay inside a skill root, because Cursor and OpenCode scan skill roots recursively and would load a backup as a duplicate skill.
    - For each `create`, `update`, or `replace` copy, build the new directory at `<parent of the agents root>/.omt-tmp-<random>`, write the marker into it, then move it into place. For an existing target, first rename it to `<parent of the agents root>/.omt-old-<random>`, then rename the new directory in, then delete the old one. Temp directories never sit inside a skill root. When the delete of a scratch directory fails, the run stops with an error that names the directory.
    - When a swap fails, delete the temp directory and move the old directory back, so the installed skill stays in place.
+   - Before the skill copies, remove the links of the retired skills, then the retired skills. A `remove` skill is renamed to `<parent of the agents root>/.omt-old-<random>`, then deleted. When its files no longer have the hash that the plan read, it moves back and the run stops. A `replace` retired skill moves to `<configDir>/backups/<stamp>/agents/<name>` and gets no new copy.
    - Create the links, write the starter user config, add the hook, and write the manifest.
 6. Print a summary and the next steps: restart agent sessions in T3 so they load the new skills, then try `$omt-ulw <task>`.
 
@@ -2000,7 +2004,7 @@ Verify the hook schema against the current Claude Code hooks documentation befor
 }
 ```
 
-A new install merges into an existing manifest. `created` is present, and true, when an install created the settings file. A later run keeps it. `backup` is the install-time backup of the settings file (section 14.4). A later run keeps the old value when it records none.
+A new install merges into an existing manifest. After the merge, `skills` keeps only the names that the plan keeps: a bundled skill, or a retired skill that stays (a `keep` step). So the record drops a removed retired skill, and a recorded name that is no longer shipped and is no longer managed (its folder is gone or has no marker). `links` drops each removed link, and each link whose name `skills` no longer lists. `created` is present, and true, when an install created the settings file. A later run keeps it. `backup` is the install-time backup of the settings file (section 14.4). A later run keeps the old value when it records none.
 
 ### 14.6 Uninstall
 
@@ -2026,7 +2030,7 @@ The plan lists the user config and the manifest only when they exist. Two names 
 | `defaults` | a config file pins the latest set: `<set> (pinned, latest)` | | | no file pins a set: `<set> (latest, not pinned); run omt defaults use latest to pin`; or a file pins an older set: `pinned <set> from <file>; omt ships <latest>; run omt defaults diff` |
 | `update` | only when the update check is on (section 5.14), also with `--project`: `omt <v> is the latest (checked <date>)` | | never: a failed check is `INFO` | `omt <latest> is out; run omt update`; or `the update check failed: <reason>` |
 | `harnesses` | the config sets no `harnesses` key: `claudeAgent, codex`; or the key holds both | | | the key leaves out `claudeAgent`: `<list> only; design and ui are unavailable`; or it leaves out `codex`: `<list> only; cross-family review uses the same family` |
-| `skills` | every bundled skill is installed, managed, and current | missing, outdated, or locally modified skills | the CLI has no bundled skills (section 14.1) | |
+| `skills` | every bundled skill is installed, managed, and current, and no retired skill is left | missing, outdated, or locally modified skills; a retired skill (section 14.2) that is still in place, as `no longer shipped: <names> in <agents root>; run omt install` | the CLI has no bundled skills (section 14.1) | |
 | `links` | every Claude link resolves to its canonical directory | a missing link | a broken or conflicting link | |
 | `hooks` | the manifest hook is present in the Claude settings, and the paths in its command exist | the manifest hook is missing from the settings | a path in the hook's command does not exist | no hook installed; suggest `omt install --hooks` |
 | `path` | an executable `omt` exists in a `PATH` directory | none found; skills fall back to manual role resolution, and the message names the install channels of section 14.2 | | |
