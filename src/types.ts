@@ -70,6 +70,7 @@ export interface GitPolicy {
   defaultBranch: "ask" | "auto";
   merge: "ask" | "auto";
   owners: string[]; // GitHub owners besides the user whose repos count as the user's own
+  maxPrFiles: number; // most changed files in one PR before the skills split it into a stack; 0 means no limit
 }
 
 export type WorkflowLayer = { [K in keyof Workflow]?: Partial<Workflow[K]> };

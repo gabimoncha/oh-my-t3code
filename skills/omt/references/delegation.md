@@ -78,10 +78,23 @@ The git policy in the config (`workflow.git`) is the owner's standing approval f
 - Follow the repository's commit conventions in `AGENTS.md` and the recent `git log`.
 - Children never commit, push, or create branches.
 - A PR is a ready PR against the base that the run was given. With no given base, the PR goes against the `defaultBranch` field that `omt git check pr --json` prints. When that field is `null`, ask the owner for the base. Open the PR only in the `origin` repo, with `gh pr create --repo <host>/<owner>/<repo>` from the `host`, `owner`, and `repo` fields of the check. A PR to a repo of another owner, such as an upstream repo of a fork, always asks the owner.
-- When the branch already has an open PR, the push updates it. Do not open a second PR.
+- When the branch already has an open PR, the push updates it. Do not open a second PR, except for the slices of a stack (below).
+- A PR holds at most `maxPrFiles` changed files, from the `maxPrFiles` field of `omt git check pr --json`. `0` or `null` means no limit. Before you open a PR or push to an open one, count the files with `git diff --name-only <base>...HEAD | wc -l`. When the count is over the limit, split the branch into stacked PRs ([Stacked PRs](#stacked-prs)).
 - Link each PR with `link_pull_request` when available.
 - A force push always asks the owner, whatever the policy says. So a rebase of a pushed branch needs the owner's yes before `git push --force-with-lease`.
 - In `plan` interaction mode, make no git action.
+
+### Stacked PRs
+
+A stack is a chain of PRs. Each PR targets the branch of the PR below it, and the bottom PR targets the run's base. Use the GitHub CLI extension `gh stack` (`github/gh-stack`). When `gh stack --help` fails, ask the owner.
+
+1. Cut the branch's commits into slices, bottom to top. Cut only between existing commits, and do not rewrite them. Each slice changes at most `maxPrFiles` files against the slice below it. Put code and its tests low in the stack, and docs and site changes on top. When no set of cuts meets these rules, ask the owner.
+2. Run the typecheck and the tests on the last commit of each slice. A slice that fails needs a different cut.
+3. Give each slice except the top one a new branch at its last commit: `git branch <slice branch> <commit>`. The top slice keeps the run's branch, so an open PR on it stays.
+4. Push each new slice branch with `git push origin <slice branch>:<slice branch>`, after `omt git check push` for it.
+5. Open each PR with `gh pr create --repo <host>/<owner>/<repo> --base <branch below> --head <slice branch>`, after `omt git check pr`. Write one body for each slice that describes only its own change. When the top branch already has a PR, set its base with `gh pr edit <number> --repo <host>/<owner>/<repo> --base <branch below>`, and update its body.
+6. Link the PRs into one stack, bottom to top: `gh stack link <number> <number> ...`.
+7. Link each PR with `link_pull_request`, and report every PR URL in stack order.
 
 ## `delegate_task`
 

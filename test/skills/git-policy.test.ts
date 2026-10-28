@@ -45,3 +45,17 @@ test("no skill requires a separate user request for every commit", () => {
     assert.doesNotMatch(text, /Commit only when the user asked for a commit/i, path);
   }
 });
+
+test("Git actions caps a PR at maxPrFiles and splits a larger branch into a stack", () => {
+  const text = gitActions();
+  assert.match(text, /A PR holds at most `maxPrFiles` changed files, from the `maxPrFiles` field of `omt git check pr --json`\. `0` or `null` means no limit\./);
+  assert.match(text, /count the files with `git diff --name-only <base>\.\.\.HEAD \| wc -l`/);
+  const stack = section(readFileSync(join(SKILLS_DIR, "omt/references/delegation.md"), "utf8"), "### Stacked PRs");
+  assert.match(stack, /When `gh stack --help` fails, ask the owner\./);
+  assert.match(stack, /Cut only between existing commits, and do not rewrite them\./);
+  assert.match(stack, /Each slice changes at most `maxPrFiles` files against the slice below it\./);
+  assert.match(stack, /Run the typecheck and the tests on the last commit of each slice\./);
+  assert.match(stack, /The top slice keeps the run's branch, so an open PR on it stays\./);
+  assert.match(stack, /--base <branch below> --head <slice branch>/);
+  assert.match(stack, /`gh stack link <number> <number> \.\.\.`/);
+});
