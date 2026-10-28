@@ -46,7 +46,7 @@ To find the CLI (`omt`, `.omt/bin/omt`, or the manual steps), follow [The CLI](r
 | `omt plan new <slug> [--light] [--profile <name>]` | path of a new plan file under `.omt/plans/`; `--light` leaves out the `F2` oracle item |
 | `omt plan profile <slug> <name\|none>` | switches the plan's profile; `none` removes the plan override |
 | `omt plan mark <slug> <id> <done\|open\|blocked>` | ticks one plan item, for example `omt plan mark auth U3 done` |
-| `omt plan status [<slug>]` | unit counts, the next open unit, the ready units, and one `warning:` line per dependency problem |
+| `omt plan status [<slug>]` | unit counts, the next open unit, the ready units, and a `warning:` line for each dependency that names no unit or names its own unit. It also prints one warning for the first dependency cycle only. |
 | `omt ledger add --plan <slug> --unit <id> --role <r> --round <n> --attempt <n> --status <s> ...` | appends one ledger entry; a terminal entry closes the matching dispatched entry ([results.md](references/results.md#recording)) |
 | `omt ledger stats --plan <slug>` | `dispatched` and `active` counts, the limits, and `can dispatch: yes` or `no` |
 | `omt ledger request-id --plan <slug> --unit <id> --role <r> --round <n> --attempt <n>` | the `clientRequestId` |
