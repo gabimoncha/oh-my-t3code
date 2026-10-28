@@ -104,19 +104,22 @@ test("omt-ulw sends a question to omt-research and explores before it asks", () 
   assert.match(section(ulw, "## Rules"), /Ask each owner question once\. Later status messages do not repeat open questions\./);
 });
 
-test("omt-ulw frames the run and reads the profile", () => {
+test("omt-ulw selects the profile before exploration and frames the run", () => {
+  const explore = section(readSkill("omt-ulw"), "### 2. ");
+  assert.match(explore, /Pick the plan slug before the first brief/);
+  assert.match(explore, /compare `active` with the selected profile/);
   const frame = section(readSkill("omt-ulw"), "### 3. ");
   assert.match(frame, /Each done condition is a check that can fail: a command, a test, or an observable result\./);
   assert.match(frame, /Tier LIGHT: one or two units, one area of code, no design decision left\. Tier HEAVY: anything else\./);
   assert.match(frame, /The slug matches `\^\[a-z0-9\]\[a-z0-9-\]\{0,63\}\$`/);
-  assert.match(frame, /When the plan file exists, run `omt profile show --plan <slug> --json`\./);
-  assert.match(frame, /`omt profile show <name> --json` for `ulw --profile <name>`/);
-  assert.match(frame, /Keep the effective `profile`, `workflow`, `limits`, `roles`, and `models`\./);
-  assert.match(frame, /pass the run's `--profile <name>` to every `omt brief`, `omt roles`, and `omt route` command/);
-  assert.match(frame, /\[The CLI\]\(\.\.\/omt\/references\/delegation\.md#the-cli\) says where to find the CLI\./);
-  assert.match(frame, /\[roles\.md\]\(\.\.\/omt\/references\/roles\.md#resolve-by-hand\)/);
+  assert.match(explore, /When the plan file exists, run `omt profile show --plan <slug> --json`\./);
+  assert.match(explore, /`omt profile show <name> --json` for `ulw --profile <name>`/);
+  assert.match(explore, /Keep the effective `profile`, `workflow`, `limits`, `roles`, and `models`\./);
+  assert.match(explore, /pass the run's `--profile <name>` to every `omt brief`, `omt roles`, and `omt route` command/);
+  assert.match(explore, /\[The CLI\]\(\.\.\/omt\/references\/delegation\.md#the-cli\) says where to find the CLI\./);
+  assert.match(explore, /\[roles\.md\]\(\.\.\/omt\/references\/roles\.md#resolve-by-hand\)/);
   assert.match(frame, /`omt plan profile <slug> <name>`/);
-  assert.match(section(readSkill("omt-ulw"), "## Rules"), /After a context reset, read the plan \(`omt plan status <slug>`\), the ledger \(`omt ledger list --plan <slug>`\), and the profile \(step 3\) before you act\./);
+  assert.match(section(readSkill("omt-ulw"), "## Rules"), /After a context reset, read the plan \(`omt plan status <slug>`\), the ledger \(`omt ledger list --plan <slug>`\), and the profile \(step 2\) before you act\./);
 });
 
 test("omt-ulw plans LIGHT runs itself and HEAVY runs through omt-plan", () => {
@@ -157,7 +160,8 @@ test("omt-ulw builds every unit in the main thread", () => {
   assert.match(build, /omt brief <role> --task-file - --title "<role> <unit>: <short unit title>" --scope \.\.\. --done \.\.\. --verify \.\.\. --plan <slug> --unit <id> --round 1 --attempt 1 --save --json/);
   assert.match(build, /Dispatch only while `omt ledger stats --plan <slug>` reports `can dispatch: yes`\./);
   assert.match(build, /run its printed `ledger\.dispatched` line/);
-  assert.match(build, /run its verify command yourself before you mark the unit done/);
+  assert.match(build, /Then write its planned tests and make its failure proofs with items 3 and 4 above/);
+  assert.match(build, /Run the verify command again with those tests before you mark the unit done/);
   assert.match(build, /\[delegation\.md\]\(\.\.\/omt\/references\/delegation\.md#shared-builds\)/);
 });
 

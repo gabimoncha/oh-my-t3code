@@ -1,9 +1,9 @@
 import { randomBytes } from "node:crypto";
-import { chmod, readdir, rename, rm, rmdir, symlink } from "node:fs/promises";
+import { chmod, readdir, readlink, rename, rm, rmdir, symlink } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { starterConfig } from "../config/starter.ts";
 import { errorMessage, OmtError } from "../util/errors.ts";
-import { copyDir, ensureDir, hashDir, pathExists, readFileIfExists, writeFileAtomic } from "../util/fs.ts";
+import { copyDir, ensureDir, hashDir, lstatIfExists, pathExists, readFileIfExists, writeFileAtomic } from "../util/fs.ts";
 import { isOmtLayout, writeHookChange } from "./claudeHook.ts";
 import type { HookChange } from "./claudeHook.ts";
 import { movePath, newBackupDir, projectWriteTarget, writeTargetFor } from "./fsops.ts";
@@ -12,7 +12,7 @@ import type { Manifest, ManifestFile, ManifestHook } from "./manifest.ts";
 import { removesRetired, replaceableSteps, sha256 } from "./plan.ts";
 import type { FileStep, HookStep, InstallPlan, PlanAction, SkillStep, UninstallPlan } from "./plan.ts";
 import { BACKUPS_GITIGNORE } from "./project.ts";
-import { PACKAGE_NAME, writeMarker } from "./skills.ts";
+import { isManagedDir, PACKAGE_NAME, writeMarker } from "./skills.ts";
 
 export interface ApplyResult {
   changed: string[]; // paths written, created, or removed
@@ -177,7 +177,7 @@ async function removeSkillDir(path: string, hash?: string): Promise<void> {
       cause: error,
     });
   }
-  if (hash !== undefined && (await hashDir(old).catch(() => undefined)) !== hash) {
+  if (hash !== undefined && (!(await isManagedDir(old)) || (await hashDir(old).catch(() => undefined)) !== hash)) {
     if (!(await pathExists(path))) await rename(old, path);
     throw new OmtError("file_changed", `${path} changed after the plan was made; it was kept, and nothing more was written`, {
       hint: "run the command again",
@@ -190,6 +190,9 @@ async function removeSkillDir(path: string, hash?: string): Promise<void> {
 async function removeRetired(plan: InstallPlan, backupDir: () => Promise<string>, result: ApplyResult): Promise<void> {
   for (const link of plan.links) {
     if (!removesRetired(link)) continue;
+    if ((await readlink(link.path).catch(() => undefined)) !== link.target) {
+      throw new OmtError("file_changed", `${link.path} changed after the plan was made; it was kept`, { hint: "run the command again" });
+    }
     await removePath(link.path);
     result.changed.push(link.path);
   }
@@ -200,6 +203,10 @@ async function removeRetired(plan: InstallPlan, backupDir: () => Promise<string>
       await movePath(step.path, backup);
       result.backups.push(backup);
     } else {
+      if (await lstatIfExists(step.path) === undefined) continue;
+      if (step.installedHash === undefined) {
+        throw new OmtError("file_changed", `${step.path} appeared after the plan was made; it was kept`, { hint: "run the command again" });
+      }
       await removeSkillDir(step.path, step.installedHash);
     }
     result.changed.push(step.path);

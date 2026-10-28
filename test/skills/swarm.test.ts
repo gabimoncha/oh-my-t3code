@@ -23,7 +23,7 @@ test("omt-swarm launches each track with t3_thread_launch to run omt-ulw steps 7
   const text = section(swarm(), "### 3. Launch");
   assert.match(text, /t3_thread_launch/);
   assert.match(text, /"type": "worktree", "baseRef": "<base>", "branch": "omt\/<slug>\/<track>"/);
-  assert.match(text, /Run steps 7 to 12 of the `omt-ulw` skill for the units of plan `<slug>-<track>` only\./);
+  assert.match(text, /Then run steps 7 to 12 of the `omt-ulw` skill for the units of plan `<slug>-<track>` only\./);
   assert.match(text, /Do not push\. Do not open a PR\. The main thread owns the PR\./);
   assert.match(text, /--role swarm --round 1 --attempt 1 --status dispatched --note <threadId>/);
 });

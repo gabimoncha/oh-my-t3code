@@ -39,7 +39,7 @@ Done when: both modes match and you are on a feature branch. Otherwise the user 
 
 Find the plan slug in the user's message, or run `omt plan list`. When no plan exists, tell the user to run `omt-plan` first, or `omt-grill` and then `omt-plan`. Then stop.
 
-Run `omt plan status <slug>` and `omt profile show --plan <slug> --json`. Keep the effective `profile`, `limits`, `roles`, and `models`.
+Run `omt plan status <slug>` and `omt profile show --plan <slug> --json`. Keep the effective `profile`, `workflow`, `limits`, `roles`, and `models`.
 
 Run `git status --porcelain`. When it lists changes outside `.omt/`, tell the user that uncommitted edits do not reach the tracks. Ask them to commit what the tracks need, and stop. Save the output under `Log` in the plan ([Git actions](../omt/references/delegation.md#git-actions)).
 
@@ -55,7 +55,7 @@ Split the open units of the plan into tracks. Each track gets a kebab-case name,
 
 Keep `<base>`, the output of `git rev-parse HEAD`. Every track starts from `<base>`.
 
-For each track, run `omt plan new <slug>-<track> --light`. Copy the track's units, their `## Tests` lines, and the plan `## Summary` into it. Then run `omt plan limit <slug>-<track> <k>`. Pick `<k>` so that the tracks together stay near the `maxParallel` of this plan, for example 1 or 2. The `.omt/` config is shared by all worktrees, so do not change `limits` in it.
+For each track, run `omt plan new <slug>-<track> --light --profile <profile>`. Copy the track's units, their `## Tests` lines, the applicable done conditions and final checks, and the plan `## Summary` into it. Keep each unit's approved design spec. Assign LIGHT or HEAVY by the tier rule in `omt-ulw` step 3, and record the tier in the track plan. Then run `omt plan limit <slug>-<track> <k>`. Pick `<k>` so that the tracks together stay near the `maxParallel` of this plan, for example 1 or 2. The `.omt/` config is shared by all worktrees, so do not change `limits` in it.
 
 Write the split under `Log` in the plan: each track, its units, its scope, its branch `omt/<slug>/<track>`, and `<base>`.
 
@@ -77,7 +77,7 @@ For each track, call `t3_thread_launch` with:
 The launch message is a plain task, not an `omt brief`. It says:
 
 1. You are track `<track>` of the swarm plan `<slug>`. Your plan is `<slug>-<track>`. Your scope is `<scope paths>`. Edit no file outside it.
-2. Run steps 7 to 12 of the `omt-ulw` skill for the units of plan `<slug>-<track>` only. Build, run your own review child and QA child, and fix.
+2. First call `t3_thread_configuration` to read your own modes and `modelSelection`. Read `omt profile show --plan <slug>-<track> --json`, the track plan, and its tier. Use your own driver as `<your family>` for review. Apply the `F2` rule from `omt-ulw` step 5 and its step 6 design check. Then run steps 7 to 12 of the `omt-ulw` skill for the units of plan `<slug>-<track>` only. Build, run your own review child and QA child, and fix.
 3. Commit on branch `omt/<slug>/<track>` by the `Git actions` rules of the omt `delegation.md` reference, with `--plan <slug>-<track>`. Do not push. Do not open a PR. The main thread owns the PR.
 4. Report what changed, each check with its exit code and log path, and the commit hash.
 5. End with one line: `TRACK <track>: DONE <commit hash>`, or `TRACK <track>: BLOCKED <reason>`.
@@ -102,6 +102,8 @@ Done when: every track reported `DONE` with a commit on its branch, or the owner
 ### 5. Review before the merge
 
 Dispatch one `review` child over all track diffs. It runs on the family that is not yours.
+
+Before each dispatch or fallback, check the target's family with [roles.md](../omt/references/roles.md#cross-family-roles). When it is your family, stop and report that no reviewer from the other family can run. The CLI can return a same-family fallback even with `--against`.
 
 Write the context to a temp file such as `$TMPDIR/omt-<slug>-swarm-review.md`: the plan `## Summary`, the done conditions, and for each track its name, its branch, its `<track worktree>`, and its scope paths. Leave `docs/design/` out of the scope paths.
 
@@ -153,7 +155,7 @@ Done when: the QA result is recorded and every check passed, or step 9 has the f
 
 ### 9. Fix failed checks
 
-For each failed check, find the cause in the last lines of its log. Fix it yourself on your branch, and run the check yourself. Then dispatch QA again for only the failed checks, with the next `--round`.
+For each failed check, find the cause in the last lines of its log. Fix it yourself on your branch, and run the check yourself. Then dispatch QA again for only the failed checks, with the next `--round`. After a check passes, mark its `D` and `F` items done as in step 8.
 
 Run at most 2 QA re-runs. When a check still fails after the second re-run, run the settle sweep ([delegation.md](../omt/references/delegation.md#releasing-children)) and ask the owner, with each failed command, its exit code, and its log path.
 

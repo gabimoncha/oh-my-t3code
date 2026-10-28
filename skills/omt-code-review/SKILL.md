@@ -14,7 +14,7 @@ You review a change with report-only children and merge their findings. A small 
 - Reviewers report only. Every `review` and `oracle` task says `Report every finding with its fix. Change no files, and write none under FIXES.`
 - Set `interactionMode` to `"plan"` in the `delegateTask` of each `review` and `oracle` task before you call `delegate_task`. Then the child cannot edit. Set 2026-12 makes `review` and `oracle` edit roles, because the omt-ulw reviewer fixes local findings. So the role alone does not stop edits.
 - The brief of an edit role has no plan-mode line. So each `review` and `oracle` task also says `You run in plan mode. Stay in it. Do not call ExitPlanMode and do not write a proposed plan. Put the result block in your final assistant message.`
-- You make every fix and write every approved test in the main thread. Only a large set of approved tests may go to one `execute` child (PR step 11).
+- You make every fix and write every approved test in the main thread.
 - Record every dispatch and every result in the ledger under `review-<slug>`.
 - Read only the part of a child's evidence that your next action needs.
 
@@ -203,7 +203,7 @@ After the owner approves a fix loop or a set of tests, check whether PR step 1 c
 
 With `review.fixLoop: offer`, ask before each fix loop as in step 6 above. With `review.fixLoop: off`, make no fix-loop offer.
 
-With `review.tests: offer`, list one e2e test per verified flow that no test covers, with its flow and file path. When the project has no e2e test framework, offer no test and say so in the report. Ask the owner and wait for yes on the exact test lines. The `qa` role edits nothing and writes no tests, so a `qa` child never writes them. After yes, write only the approved tests yourself in the main thread. For a large set, such as more than 3 test files, send the approved lines to one `execute` child in this checkout instead: `--unit FIX`, an explicit scope of the test files, and `mode: "wait"`. Then dispatch one `qa` child with `mode: "wait"` to run the new tests and return each exit code with its log. Name the PR's changed paths, excluding `docs/design/`, as the code under test in the `qa` task. With `review.tests: off`, offer no tests. Leave the test changes uncommitted, and include them in one fix review (step 3) before the commit. Send product failures from qa to an owner-approved fix loop.
+With `review.tests: offer`, list one e2e test per verified flow that no test covers, with its flow and file path. When the project has no e2e test framework, offer no test and say so in the report. Ask the owner and wait for yes on the exact test lines. The `qa` role edits nothing and writes no tests, so a `qa` child never writes them. After yes, write only the approved tests yourself in the main thread. Then dispatch one `qa` child with `mode: "wait"` to run the new tests and return each exit code with its log. Name the PR's changed paths, excluding `docs/design/`, as the code under test in the `qa` task. With `review.tests: off`, offer no tests. Leave the test changes uncommitted, and include them in one fix review (step 3) before the commit. Send product failures from qa to an owner-approved fix loop.
 
 Before finishing, call `list_thread_pull_requests` when available. Link this PR if it is missing from the list. Report a failed linking call as a failure.
 
