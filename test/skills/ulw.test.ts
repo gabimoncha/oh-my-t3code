@@ -92,12 +92,14 @@ test("omt-ulw fix rounds use deep only when a finding needs investigation", () =
   assert.match(fix, /A fix is an `execute` fix, or a `deep` fix when an open finding needs investigation/);
 });
 
-test("omt-plan shows the final plan as a page unless visuals.plan is off, and every plan has a summary (ulw)", () => {
+test("every plan has a summary (ulw)", () => {
   assert.match(section(readSkill("omt-ulw"), "### 4. "), /`## Summary` last by the rule in \[roles\/plan\.md\]/);
 });
 
-test("omt-show builds the page with omt visual and shows it with html_render (ulw)", () => {
-  assert.match(readSkill("omt"), /\| `omt-show` \|/);
+test("omt-ulw reports the dependency warnings of omt plan status when no unit is ready", () => {
+  const dispatch = section(readSkill("omt-ulw"), "### 5. ");
+  assert.match(dispatch, /When `ready:` is `none`, open units remain, and no task is active, report the `warning:` lines of `omt plan status <slug>` to the user\./);
+  assert.doesNotMatch(dispatch, /omt visual/);
 });
 
 test("delegation.md names the plan task budget in the limits and the stalled-run text", () => {
@@ -480,7 +482,8 @@ test("omt routes pull request reviews to pr-review and lists the profile command
   assert.match(text, /\| `omt plan profile <slug> <name\\\|none>` \| switches the plan's profile; `none` removes the plan override \|/);
   assert.match(text, /\| `omt lock run <name> \[--wait <seconds>\] -- <command>` \| runs a command under a shared build lock and returns its exit code \|/);
   assert.match(text, /\| `omt lock list` \| each lock's state and the holder of a held lock \|/);
-  assert.match(text, /\| `omt config show` \| the merged config before profile selection, including limits and `visuals` \|/);
+  assert.match(text, /\| `omt config show` \| the merged config before profile selection, including limits \|/);
+  assert.doesNotMatch(text, /omt-show|omt visual|visuals/);
   assert.match(text, /Pass `delegateTask` to `delegate_task` unchanged\./);
   assert.match(text, /Record the dispatch with the printed `ledger\.dispatched` line after replacing `<taskId>`\./);
   assert.match(text, /Use \[delegation\.md\]\(references\/delegation\.md#getting-the-arguments\) for retries and plan-mode dispatch\./);

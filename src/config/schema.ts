@@ -83,15 +83,8 @@ export const CONFIG_SCHEMA = {
       },
     },
     visuals: {
-      type: "object",
-      description: "Visual pages that omt shows in the T3 thread.",
-      additionalProperties: false,
-      properties: {
-        plan: {
-          type: "boolean",
-          description: "Show a final plan as a page in the T3 thread. Default true.",
-        },
-      },
+      deprecated: true,
+      description: "No longer used. omt ignores this key.",
     },
     update: {
       enum: [...UPDATE_VALUES],

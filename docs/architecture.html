@@ -349,7 +349,7 @@ footer.page-footer ul { columns: 2 300px; }
   <text class="b" x="407" y="178" text-anchor="middle">Skills (judgment)</text>
   <text class="m" x="407" y="200" text-anchor="middle">omt-ulw  omt-plan  omt-design</text>
   <text class="m" x="407" y="218" text-anchor="middle">omt-review  omt-research</text>
-  <text class="m" x="407" y="236" text-anchor="middle">omt-show  omt-swarm  omt-loop</text>
+  <text class="m" x="407" y="236" text-anchor="middle">omt-grill  omt-swarm  omt-loop</text>
   <text class="m" x="407" y="254" text-anchor="middle">omt-help  omt-setup  omt</text>
   <text class="s" x="407" y="276" text-anchor="middle">plan, split work, read results,</text>
   <text class="s" x="407" y="294" text-anchor="middle">choose the next step</text>
@@ -982,7 +982,7 @@ OPEN:
   </figure>
   <ul>
     <li>Each file is JSONC. Comments and trailing commas are allowed. A syntax error becomes one issue, and the loader skips that file. A missing file is not an error.</li>
-    <li>Root keys are <code>$schema</code>, <code>version</code> (must be 1), <code>profile</code>, <code>profiles</code>, <code>models</code>, <code>roles</code>, <code>limits</code>, and <code>visuals</code>. An unknown key is an error, and the loader drops it.</li>
+    <li>Root keys are <code>$schema</code>, <code>version</code> (must be 1), <code>profile</code>, <code>profiles</code>, <code>models</code>, <code>roles</code>, and <code>limits</code>. An unknown key is an error, and the loader drops it. The retired key <code>visuals</code> is a warning, and the loader drops it.</li>
     <li>An existing role merges field by field. A new <code>chain</code> replaces the old chain as a whole. A new role needs <code>description</code>, <code>access</code>, and <code>chain</code>.</li>
     <li><code>src/config/schema.ts</code> builds the JSON Schema from the constants in <code>validate.ts</code>. <code>bun run schema</code> writes it to <code>schema/omt.schema.json</code>, and a test checks that the committed file matches.</li>
   </ul>
@@ -1005,8 +1005,6 @@ OPEN:
   "limits": {
     // "maxParallel": 2,
   },
-  // Example: write the plan summary as text instead of showing the plan as a page.
-  // "visuals": { "plan": false },
 }</code></pre>
 
   <h3>The plan file</h3>
@@ -1141,7 +1139,7 @@ can dispatch: yes</code></pre>
         <dt>Trigger</dt><dd>A plan, spec, or design before code. ulw HEAVY step 4.</dd>
         <dt>Does</dt><dd>Writes a plan file, then applies <code>plan.review</code>. With <code>owner</code>, the owner approves the plan and no <code>plan-review</code> task runs. With <code>two-families</code> or <code>one</code>, it runs up to <code>maxReviewRounds</code> fresh <code>plan-review</code> rounds. With <code>two-families</code>, round 1 has one reviewer from each family (<code>--against codex</code> and <code>--against claudeAgent</code>). With <code>one</code>, round 1 has one reviewer. Round 1 blockers become a frozen list under Log. The plan hash comes from <code>shasum -a 256</code>. Step 0 keeps its own provider instance (<code>modelSelection.instanceId</code>). The single-reviewer briefs pass it to <code>--against</code>. When a <code>plan</code> task wrote the plan, they pass that task's provider.</dd>
         <dt>Dispatches</dt><dd><code>explore</code>, <code>plan-review</code>, optional <code>plan</code>.</dd>
-        <dt>Hands off to</dt><dd><code>omt-show</code> shows the plan first when <code>visuals.plan</code> is <code>true</code>. On approval by a review round or the owner, back to ulw step 5 with the slug. At the round limit with blockers, it stops and starts no units.</dd>
+        <dt>Hands off to</dt><dd>The reply holds the plan summary in full. On approval by a review round or the owner, back to ulw step 5 with the slug. At the round limit with blockers, it stops and starts no units.</dd>
       </dl>
     </article>
     <article class="card">
@@ -1175,16 +1173,6 @@ can dispatch: yes</code></pre>
       </dl>
     </article>
     <article class="card">
-      <h3>omt-show</h3>
-      <p class="kind">model-invoked plan page</p>
-      <dl>
-        <dt>Trigger</dt><dd>See a plan, a flow, or a status as a page. <code>omt-plan</code> runs it when it hands off a plan and <code>visuals.plan</code> is <code>true</code>.</dd>
-        <dt>Does</dt><dd>Writes a page spec. <code>omt visual --plan &lt;slug&gt; --spec - --json</code> builds a self-contained HTML page with the <code>Summary</code>, <code>Units</code>, and <code>Checks</code> tabs, plus a <code>Design</code> tab from the spec. Shows the page with T3 <code>html_render</code>. Without <code>html_render</code>, the page path is the result.</dd>
-        <dt>Dispatches</dt><dd>No roles.</dd>
-        <dt>Hands off to</dt><dd><code>omt-plan</code> step 5 when <code>omt-plan</code> called it.</dd>
-      </dl>
-    </article>
-    <article class="card">
       <h3>omt-swarm</h3>
       <p class="kind">user-invoked worktree tracks</p>
       <dl>
@@ -1210,7 +1198,7 @@ can dispatch: yes</code></pre>
     <div class="fig-scroll" tabindex="0" role="region" aria-label="Skill hand-offs">
 <svg class="diagram" role="img" aria-labelledby="fig8-t fig8-d" width="1150" height="470" viewBox="0 0 1150 470">
   <title id="fig8-t">Skill hand-offs</title>
-  <desc id="fig8-d">The omt router points to the eight workflow skills. The ulw hook points to omt-ulw. omt-ulw hands HEAVY planning to omt-plan, which returns to step 5 after approval. omt-ulw runs omt-design at step 5 when the plan has a design step. omt-design dispatches design variants in Paper, the owner picks and approves them, and it writes a design spec for the UI units. omt-plan runs omt-show when it hands off a plan. omt-show renders a plan page with omt visual and html_render. omt-loop continues omt-ulw steps on each tick. omt-swarm launches track threads with t3_thread_launch, and each track runs omt-ulw and opens a PR. A heartbeat schedule on the caller's thread reads the tracks, and T3 PR watches wake omt-swarm. omt-research is a read-only fan-out. omt-review fans out read-only reviewers over 1 to 4 file groups, runs an oracle pass when the profile asks for one, and can run an optional execute fix loop.</desc>
+  <desc id="fig8-d">The omt router points to the eight workflow skills. The ulw hook points to omt-ulw. omt-ulw hands HEAVY planning to omt-plan, which returns to step 5 after approval. omt-ulw runs omt-design at step 5 when the plan has a design step. omt-design dispatches design variants in Paper, the owner picks and approves them, and it writes a design spec for the UI units. omt-grill runs a two-family grill panel and explore tasks before a plan, and writes no plan and no code. omt-loop continues omt-ulw steps on each tick. omt-swarm launches track threads with t3_thread_launch, and each track runs omt-ulw and opens a PR. A heartbeat schedule on the caller's thread reads the tracks, and T3 PR watches wake omt-swarm. omt-research is a read-only fan-out. omt-review fans out read-only reviewers over 1 to 4 file groups, runs an oracle pass when the profile asks for one, and can run an optional execute fix loop.</desc>
   <rect class="box-w" x="16" y="20" width="210" height="44" rx="8"/>
   <text class="b" x="121" y="39" text-anchor="middle">ulw hook pointer</text>
   <text class="s" x="121" y="56" text-anchor="middle">Claude Code only</text>
@@ -1233,7 +1221,7 @@ can dispatch: yes</code></pre>
   <rect class="box-a" x="442" y="140" width="124" height="44" rx="8"/><text class="m b" x="504" y="167" text-anchor="middle">omt-design</text>
   <rect class="box-a" x="584" y="140" width="124" height="44" rx="8"/><text class="m b" x="646" y="167" text-anchor="middle">omt-review</text>
   <rect class="box-a" x="726" y="140" width="124" height="44" rx="8"/><text class="m b" x="788" y="167" text-anchor="middle">omt-research</text>
-  <rect class="box-a" x="868" y="140" width="124" height="44" rx="8"/><text class="m b" x="930" y="167" text-anchor="middle">omt-show</text>
+  <rect class="box-a" x="868" y="140" width="124" height="44" rx="8"/><text class="m b" x="930" y="167" text-anchor="middle">omt-grill</text>
   <rect class="box-a" x="1010" y="140" width="124" height="44" rx="8"/><text class="m b" x="1072" y="167" text-anchor="middle">omt-swarm</text>
   <path class="ln" d="M140,162 L156,162" marker-end="url(#ah)"/>
   <path class="ln" d="M220,184 Q291,250 362,184" marker-start="url(#ah)" marker-end="url(#ah)"/>
@@ -1250,9 +1238,9 @@ can dispatch: yes</code></pre>
   <text class="s" x="788" y="208" text-anchor="middle">2 to 6 sub-questions</text>
   <text class="s" x="788" y="224" text-anchor="middle">explore and research</text>
   <text class="s" x="788" y="240" text-anchor="middle">cited answer</text>
-  <text class="s" x="930" y="208" text-anchor="middle">plan page</text>
-  <text class="s" x="930" y="224" text-anchor="middle">omt visual</text>
-  <text class="s" x="930" y="240" text-anchor="middle">html_render</text>
+  <text class="s" x="930" y="208" text-anchor="middle">grill panel per round</text>
+  <text class="s" x="930" y="224" text-anchor="middle">one per family</text>
+  <text class="s" x="930" y="240" text-anchor="middle">no plan, no code</text>
   <rect class="box-t" x="964" y="20" width="170" height="44" rx="8"/>
   <text class="b" x="1049" y="47" text-anchor="middle">T3 PR watch</text>
   <path class="ln-d" d="M1104,64 L1104,138" marker-end="url(#ah)"/>
@@ -1513,7 +1501,6 @@ can dispatch: yes</code></pre>
         <tr><th scope="row"><code class="cmd"><span class="nw">omt</span> <span class="nw">profile</span> <span class="nw">show</span> <span class="nw">[&lt;name&gt;]</span> <span class="nw">[--plan</span> <span class="nw">&lt;slug&gt;]</span> <span class="nw">[--profile</span> <span class="nw">&lt;name&gt;]</span> <span class="nw">[--json]</span></code></th><td>Print the effective profile, workflow, limits, roles, and models.</td></tr>
         <tr><th scope="row"><code class="cmd"><span class="nw">omt</span> <span class="nw">lock</span> <span class="nw">run</span> <span class="nw">&lt;name&gt;</span> <span class="nw">[--wait</span> <span class="nw">&lt;seconds&gt;]</span> <span class="nw">--</span> <span class="nw">&lt;command&gt;</span> <span class="nw">[args...]</span></code></th><td>Run a command under a shared build lock and return its exit code.</td></tr>
         <tr><th scope="row"><code class="cmd"><span class="nw">omt</span> <span class="nw">lock</span> <span class="nw">list</span></code></th><td>Print each lock's state and the holder of a held lock.</td></tr>
-        <tr><th scope="row"><code class="cmd"><span class="nw">omt</span> <span class="nw">visual</span> <span class="nw">[--plan</span> <span class="nw">&lt;slug|file.md&gt;]</span> <span class="nw">[--spec</span> <span class="nw">&lt;file|-&gt;]</span> <span class="nw">[--out</span> <span class="nw">&lt;path|-&gt;]</span> <span class="nw">[--json]</span></code></th><td>Build a self-contained HTML page from a plan or a page spec.</td></tr>
         <tr><th scope="row"><code class="cmd"><span class="nw">omt</span> <span class="nw">paths</span> <span class="nw">[--json]</span> <span class="nw">[--root|--plans|--ledger|--evidence|--config|--shim]</span></code></th><td>Print the absolute paths of the project's <code>.omt</code> state.</td></tr>
         <tr><th scope="row"><code class="cmd"><span class="nw">omt</span> <span class="nw">hook</span> <span class="nw">user-prompt-submit</span></code></th><td>Read the Claude Code hook JSON. On an ultrawork prompt, print the pointer. Always exit 0.</td></tr>
       </tbody>
@@ -1543,7 +1530,7 @@ can dispatch: yes</code></pre>
         <tr><th scope="row"><code>src/brief/</code>, <code>src/plan/</code>, <code>src/ledger/</code></th><td>Brief rendering, plan parsing and template, the ledger.</td></tr>
         <tr><th scope="row"><code>src/install/</code></th><td>apply, claudeHook, confirm, doctor, fsops, links, manifest, plan, project, skills</td></tr>
         <tr><th scope="row"><code>src/hooks/</code></th><td><code>userPromptSubmit.ts</code></td></tr>
-        <tr><th scope="row"><code>src/profile/</code>, <code>src/lock/</code>, <code>src/visual/</code></th><td>Profile resolution, the shared build lock, and the HTML page builder (spec, inline, flow, plan, page).</td></tr>
+        <tr><th scope="row"><code>src/profile/</code>, <code>src/lock/</code></th><td>Profile resolution and the shared build lock.</td></tr>
         <tr><th scope="row"><code>src/commands/</code></th><td>One file per command (15), plus <code>shared.ts</code>.</td></tr>
         <tr><th scope="row"><code>src/util/</code></th><td>args, errors (<code>OmtError</code>), fs (<code>writeFileAtomic</code>), ids, json, output</td></tr>
         <tr><th scope="row"><code>skills/</code></th><td>The 12 skills and <code>omt/references/</code>.</td></tr>

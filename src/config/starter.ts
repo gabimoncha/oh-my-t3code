@@ -34,8 +34,6 @@ export const USER_STARTER_CONFIG = `// oh-my-t3code user config. It applies to e
   "limits": {
     // "maxParallel": 6,
   },
-  // Example: write the plan summary as text instead of showing the plan as a page.
-  // "visuals": { "plan": false },
   // Check for a new omt once a day in omt install and omt doctor (asks the npm registry).
   // "update": "check",
 }
@@ -71,8 +69,6 @@ export const PROJECT_STARTER_CONFIG = `// oh-my-t3code project config. It overri
   "limits": {
     // "maxParallel": 2,
   },
-  // Example: write the plan summary as text instead of showing the plan as a page.
-  // "visuals": { "plan": false },
 }
 `;
 

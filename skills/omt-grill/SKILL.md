@@ -150,7 +150,7 @@ Set `status=done` in the grill file header. When you stopped with no chosen dire
 
 When `omt-plan` called this skill, return to its step 2 with the grill file path. In `plan` mode, return the grill text instead. Otherwise tell the user to say "plan it" to run `omt-plan` with the slug.
 
-Start no plan and no unit. Run the `omt-show` skill only when the user asks for a page.
+Start no plan and no unit.
 
 Done when: the grill file has `status=done`, or in `plan` mode your final message has the grill text, and the user or `omt-plan` has the path or the text.
 

@@ -54,7 +54,7 @@ test("the design and ui personas exist, and no model reviews design artifacts (p
   }
 });
 
-test("omt-plan shows the final plan as a page unless visuals.plan is off, and every plan has a summary (personas)", () => {
+test("every plan has a summary (personas)", () => {
   const rolesDir = join(SKILLS_DIR, "omt", "references", "roles");
   assert.match(readFileSync(join(rolesDir, "plan.md"), "utf8"), /Write `## Summary` last, in at most 15 lines for the owner/);
   assert.match(readFileSync(join(rolesDir, "plan-review.md"), "utf8"), /6\. A line of `## Summary` that the rest of the plan does not support\./);

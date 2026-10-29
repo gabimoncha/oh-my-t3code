@@ -35,26 +35,18 @@ test("config show --defaults prints the 16 default roles as JSON", async () => {
   const printed = JSON.parse(c.out());
   assert.deepEqual(printed, DEFAULT_CONFIG);
   assert.equal(Object.keys(printed.roles).length, 16);
-  assert.deepEqual(printed.visuals, { plan: true });
+  assert.equal("visuals" in printed, false);
 });
 
-test("a layer with visuals.plan false turns the plan page off, and a bad value is an error", async () => {
-  const { ctx, write, userPath, projectPath } = setup();
-  write(userPath, '{ "visuals": { "plan": false } }');
-  let c = ctx([]);
+test("an old config with visuals still loads, with a warning that drops the key", async () => {
+  const { ctx, write, userPath } = setup();
+  write(userPath, '{ "visuals": { "plan": false }, "limits": { "maxParallel": 2 } }');
+  const c = ctx([]);
   assert.equal(await config(c), 0);
-  assert.deepEqual(JSON.parse(c.out()).visuals, { plan: false });
-  assert.equal(c.err(), "");
-
-  write(projectPath, '{ "visuals": { "plan": "yes", "page": true } }');
-  c = ctx([]);
-  assert.equal(await config(c), 0);
-  assert.deepEqual(JSON.parse(c.out()).visuals, { plan: false });
-  assert.equal(
-    c.err(),
-    `error ${projectPath} visuals.plan: must be a boolean, got "yes"\n` +
-      `error ${projectPath} visuals.page: unknown visuals key "page"; allowed keys: plan\n`,
-  );
+  const printed = JSON.parse(c.out());
+  assert.equal("visuals" in printed, false);
+  assert.equal(printed.limits.maxParallel, 2);
+  assert.equal(c.err(), `warning ${userPath} visuals: visuals is no longer used; remove it\n`);
 });
 
 test("config with no subcommand shows the effective config and prints issues to stderr", async () => {

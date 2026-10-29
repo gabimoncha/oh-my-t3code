@@ -220,3 +220,53 @@ export function parsePlan(markdown: string): PlanStatus {
   if (next !== undefined) status.next = next;
   return status;
 }
+
+function findCycle(ids: string[], deps: Map<string, string[]>): string[] | undefined {
+  const state = new Map<string, number>();
+  const stack: string[] = [];
+  const visit = (id: string): string[] | undefined => {
+    state.set(id, 1);
+    stack.push(id);
+    for (const dep of deps.get(id) ?? []) {
+      if (state.get(dep) === 1) return [...stack.slice(stack.indexOf(dep)), dep];
+      if (state.get(dep) === undefined) {
+        const found = visit(dep);
+        if (found !== undefined) return found;
+      }
+    }
+    stack.pop();
+    state.set(id, 2);
+    return undefined;
+  };
+  for (const id of ids) {
+    if (state.get(id) !== undefined) continue;
+    const found = visit(id);
+    if (found !== undefined) return found;
+  }
+  return undefined;
+}
+
+// Problems in the "Depends on" fields of the U items outside code fences: unknown units,
+// self-dependencies, and the first dependency cycle.
+export function dependencyWarnings(markdown: string): string[] {
+  const unfenced = blankFences(markdown);
+  const units = parsePlan(unfenced).items.filter((item) => item.kind === "U");
+  const unitIds = new Set(units.map((unit) => unit.id));
+  const fields = unitFields(unfenced);
+  const warnings: string[] = [];
+  const deps = new Map<string, string[]>();
+  for (const unit of units) {
+    const text = fields.get(unit.id)?.get("depends on") ?? "";
+    const list: string[] = [];
+    for (const match of text.matchAll(/\bU\d+\b/g)) {
+      const token = match[0];
+      if (!unitIds.has(token)) warnings.push(`${unit.id} depends on ${token}, which is not a unit of the plan`);
+      else if (token === unit.id) warnings.push(`${unit.id} depends on itself`);
+      else if (!list.includes(token)) list.push(token);
+    }
+    deps.set(unit.id, list);
+  }
+  const cycle = findCycle(units.map((unit) => unit.id), deps);
+  if (cycle !== undefined) warnings.push(`the unit dependencies form a cycle: ${[...cycle].reverse().join(" -> ")}`);
+  return warnings;
+}

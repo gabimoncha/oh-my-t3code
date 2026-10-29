@@ -38,7 +38,7 @@ The plan has 4 units. Each unit depends on the one before it, because each unit 
 
 The plan header sets `max-tasks=40` and `max-parallel=2`. The planner expected 25 to 30 tasks. Two parallel tasks let the two reviewers of one round run at the same time.
 
-This is the Units tab of the plan page from before the run, so every unit shows as open. It shows the 4 units and their dependencies as a flowchart and as a table. The `omt-show` skill builds such a page with `omt visual --plan` and shows it in the T3 thread.
+This is the Units tab of the plan page from before the run, so every unit shows as open. It shows the 4 units and their dependencies as a flowchart and as a table. omt drew such pages at the time of this run. It no longer does, and `omt-plan` now writes the plan summary in its reply.
 
 ![The Units tab of the code-health plan page: a flowchart of U1 to U4, each unit depending on the one before it, and a table of the units with their dependencies](assets/walkthrough-plan.png)
 

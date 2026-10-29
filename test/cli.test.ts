@@ -17,7 +17,6 @@ const COMMAND_NAMES = [
   "plan",
   "profile",
   "ledger",
-  "visual",
   "hook",
 ];
 

@@ -60,7 +60,6 @@ test("the bundled skills are all present", () => {
     "omt-research",
     "omt-review",
     "omt-setup",
-    "omt-show",
     "omt-swarm",
     "omt-ulw",
   ]);
