@@ -28,14 +28,47 @@ function setup() {
   return { root, project, configDir, userPath, projectPath, ctx, write: writeFile };
 }
 
-test("config show --defaults prints the 16 default roles as JSON", async () => {
+test("config show --defaults prints the 13 default roles as JSON", async () => {
   const { ctx } = setup();
   const c = ctx(["show", "--defaults"]);
   assert.equal(await config(c), 0);
   const printed = JSON.parse(c.out());
   assert.deepEqual(printed, DEFAULT_CONFIG);
-  assert.equal(Object.keys(printed.roles).length, 16);
+  assert.equal(Object.keys(printed.roles).length, 13);
   assert.equal("visuals" in printed, false);
+});
+
+test("an old config with retired keys and roles still loads, with one warning per key, and the keys have no effect", async () => {
+  const { ctx, write, userPath } = setup();
+  write(userPath, JSON.stringify({
+    limits: { maxParallel: 2, maxTasksPerRun: 9 },
+    roles: { verify: { fast: true }, quick: null, deep: { description: "Deep." } },
+    profiles: {
+      normal: { workflow: { build: { verify: "heavy", checkpoint: "unit", stallMinutes: 20, review: "off" } } },
+      prototype: { limits: { maxTasksPerRun: 3 }, roles: { verify: { fast: true } } },
+    },
+  }));
+  const c = ctx([]);
+  assert.equal(await config(c), 0);
+  const printed = JSON.parse(c.out());
+  assert.deepEqual(printed.limits, { ...DEFAULT_CONFIG.limits, maxParallel: 2 });
+  for (const name of ["verify", "quick", "deep"]) assert.equal(name in printed.roles, false, name);
+  assert.deepEqual(printed.profiles.normal.workflow.build, { ...DEFAULT_CONFIG.profiles.normal?.workflow?.build, review: "off" });
+  assert.equal("limits" in printed.profiles.prototype, DEFAULT_CONFIG.profiles.prototype?.limits !== undefined);
+  assert.deepEqual(printed.profiles.prototype.limits, DEFAULT_CONFIG.profiles.prototype?.limits);
+  assert.equal("roles" in printed.profiles.prototype && Object.keys(printed.profiles.prototype.roles).length > 0, false);
+  const paths = [
+    "limits.maxTasksPerRun",
+    "roles.verify",
+    "roles.quick",
+    "roles.deep",
+    "profiles.normal.workflow.build.verify",
+    "profiles.normal.workflow.build.checkpoint",
+    "profiles.normal.workflow.build.stallMinutes",
+    "profiles.prototype.limits.maxTasksPerRun",
+    "profiles.prototype.roles.verify",
+  ];
+  assert.equal(c.err(), paths.map((path) => `warning ${userPath} ${path}: ${path} is no longer used; remove it\n`).join(""));
 });
 
 test("an old config with visuals still loads, with a warning that drops the key", async () => {

@@ -107,14 +107,12 @@ export const run: CommandRun = async (ctx) => {
   const maxDepthFlag = values["max-depth"];
   const maxDepthOverride = maxDepthFlag === undefined ? undefined : limitArg("--max-depth", maxDepthFlag, "maxDepth");
 
-  const { config, profile } = await loadEffectiveConfigReporting(ctx, { plan: values.plan, profile: values.profile, allowMissingPlan: true });
+  const { config } = await loadEffectiveConfigReporting(ctx, { plan: values.plan, profile: values.profile, allowMissingPlan: true });
   const role = findRole(config, name);
 
-  const limit = maxDepthOverride ?? config.limits.maxDepth;
-  // A worker at max depth can still send a device check to a verify child.
-  const maxDepth = name === "verify" && depth === limit + 1 ? depth : limit;
+  const maxDepth = maxDepthOverride ?? config.limits.maxDepth;
   if (depth > maxDepth) {
-    throw usageError(`--depth ${depth} is greater than the max depth ${limit}`, "pass --max-depth <n> to raise the limit (0 to 3)");
+    throw usageError(`--depth ${depth} is greater than the max depth ${maxDepth}`, "pass --max-depth <n> to raise the limit (0 to 3)");
   }
 
   const task = (await readText(ctx, values.task, "task-file", values["task-file"])) ?? "";
@@ -134,7 +132,6 @@ export const run: CommandRun = async (ctx) => {
     configuredMaxDepth: config.limits.maxDepth,
     access: role.access,
     interactionMode: role.interactionMode,
-    failureProofs: profile.workflow.build.failureProofs,
   };
   if (context !== undefined) input.context = context;
   if (prior !== undefined) input.prior = prior;

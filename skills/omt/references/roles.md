@@ -10,22 +10,19 @@ A role names a kind of work. The config maps each role to a chain of rungs (prov
 | `research` | read-only | research | A question that needs docs, the web, or other repositories. |
 | `plan` | edit | plan | Turning a goal into a plan file. Use it when the plan is large enough to hand off. |
 | `plan-review` | read-only | review | Checking a plan for gaps before any unit runs. Cross-family. Pass the plan author's provider with `--against`. |
-| `grill` | read-only | grill | Testing a goal before it has a plan: edge cases, open questions, and options. Cross-family. One child per family, each with the other family in `--against`. |
-| `execute` | edit | work | One planned unit inside its scope. The default worker. |
-| `quick` | edit | work | A small mechanical change: a rename, a typo, a one-file edit. |
-| `deep` | edit | work | A hard or cross-cutting problem that needs investigation first, also a fix whose cause is unknown, whose previous fix failed for the same reason, or that changes the design. |
-| `review` | read-only | review | One review round of a diff against its brief. Cross-family. Pass the worker with `--against`. |
-| `oracle` | read-only | review | The final gate. Attack the finished change from the family other than the main implementer's. Cross-family. |
-| `verify` | edit | test | Running the unit's checks and main flows for a verdict with logs and screenshots. Writes no tests and edits no product files. |
-| `qa` | edit | test | Writing only the task's test lines, top-down, and running them until they pass. Leaves product code unchanged. |
+| `grill` | read-only | grill | Testing a goal before it has a plan: edge cases, open questions, and options. Cross-family. One child per grill, with the main thread's family in `--against`. |
+| `execute` | edit | work | One large planned unit with a disjoint scope, built as an independent track while the main thread builds the rest. |
+| `review` | read-only | review | One review round of a diff against its brief. Fixes local findings when its access allows edits, and reports the rest. Cross-family. Pass the author's family with `--against`. |
+| `oracle` | read-only | review | The final gate. Attack the finished change from the family other than the main implementer's. Fixes local findings when its access allows edits. Cross-family. |
+| `qa` | edit | test | Running the given check commands and device flows for a verdict with exit codes, logs, and screenshots. Edits nothing and writes no tests. |
 | `guardrail` | read-only | guardrail | Turning review findings into deterministic checks and rule fixes. Proposes changes and edits no files. |
 | `writing` | edit | work | Documentation and other prose. |
 | `design` | edit | work | Design variants of each screen and the design spec for screens and flows ([omt-design](../../omt-design/SKILL.md)). Opus only, no fallback. |
-| `ui` | edit | work | One UI unit built from its design spec, in every round of that unit. Opus only, no fallback. |
+| `ui` | edit | work | One UI unit built from its design spec as an independent track, when the main thread is not Opus. Opus only, no fallback. |
 
 Read-only roles run in `plan` interaction mode; edit roles run in `default`. Every default role inherits your runtime mode. The persona for each role is `roles/<role>.md`, for example [roles/execute.md](roles/execute.md). The result block for each kind is `results/<kind>.md`, for example [results/work.md](results/work.md).
 
-Only `verify` drives a device, a Simulator UI, a browser, or a computer. Every other role in `default` mode delegates device checks with `omt brief verify`. A read-only role lists the steps and expected results for the conductor.
+Only `qa` drives a device, a Simulator UI, a browser, or a computer. Every other role lists each device check with its steps and expected results for the main thread, which sends it to `qa` ([delegation.md](delegation.md#verification-and-devices)).
 
 ## Resolve with the CLI
 
@@ -53,12 +50,9 @@ When neither `omt` nor `.omt/bin/omt` is found (see [The CLI](delegation.md#the-
 | `plan-review` | codex / gpt-6-astra / high | claudeAgent / claude-opus-5-5 / high | none |
 | `grill` | codex / gpt-6-astra / high | claudeAgent / claude-opus-5-5 / high | none |
 | `execute` | claudeAgent / claude-opus-5-5 / medium | codex / gpt-6.1-sol / xhigh | none |
-| `quick` | codex / gpt-6-luna / high | claudeAgent / claude-sonnet-5-5 / low | none |
-| `deep` | claudeAgent / claude-opus-5-5 / max | codex / gpt-6-astra / xhigh | none |
 | `review` | codex / gpt-6-astra / high | claudeAgent / claude-opus-5-5 / high | none |
 | `oracle` | codex / gpt-6-astra / high | claudeAgent / claude-opus-5-5 / high | none |
-| `verify` | claudeAgent / claude-haiku-5-5 / medium | claudeAgent / claude-sonnet-5-5 / low | codex / gpt-6.1-sol / low |
-| `qa` | codex / gpt-6.1-sol / medium | claudeAgent / claude-sonnet-5-5 / medium | none |
+| `qa` | claudeAgent / claude-haiku-5-5 / medium | claudeAgent / claude-sonnet-5-5 / low | codex / gpt-6.1-sol / low |
 | `guardrail` | claudeAgent / claude-opus-5-5 / high | codex / gpt-6-astra / high | none |
 | `writing` | claudeAgent / claude-opus-5-5 / high | codex / gpt-6-astra / medium | none |
 | `design` | claudeAgent / claude-opus-5-5 / high | none | none |
@@ -84,7 +78,7 @@ The effort option id depends on the driver:
 | `pi` | `thinking` | unchanged |
 | `opencode` | `variant` | `off` and `minimal` become `low`; `max` becomes `xhigh` |
 
-For any other driver, send no effort option. Set `role` to the T3 role (`research` for explore and research, `design` for plan and design, `review` for plan-review, grill, review, oracle, and guardrail, `implementation` for execute, quick, deep, writing, and ui, `test` for verify and qa). Set `interactionMode` from the Access column (`plan` for read-only, `default` for edit) and `runtimeMode` to `inherit`.
+For any other driver, send no effort option. Set `role` to the T3 role (`research` for explore and research, `design` for plan and design, `review` for plan-review, grill, review, oracle, and guardrail, `implementation` for execute, writing, and ui, `test` for qa). Set `interactionMode` from the Access column (`plan` for read-only, `default` for edit) and `runtimeMode` to `inherit`.
 
 ## Fast mode
 

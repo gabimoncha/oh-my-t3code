@@ -95,7 +95,7 @@ export async function readLedger(path: string): Promise<LedgerRead> {
 
 export function ledgerStats(
   entries: LedgerEntry[],
-  limits: Pick<Limits, "maxParallel" | "maxTasksPerRun">,
+  limits: Pick<Limits, "maxParallel">,
   plan?: string,
 ): LedgerStats {
   const selected = plan === undefined ? entries : entries.filter((entry) => entry.plan === plan);
@@ -118,8 +118,8 @@ export function ledgerStats(
     dispatched,
     active,
     terminal,
-    limits: { maxParallel: limits.maxParallel, maxTasksPerRun: limits.maxTasksPerRun },
-    canDispatch: active < limits.maxParallel && dispatched < limits.maxTasksPerRun,
+    limits: { maxParallel: limits.maxParallel },
+    canDispatch: active < limits.maxParallel,
   };
   return plan === undefined ? stats : { plan, ...stats };
 }

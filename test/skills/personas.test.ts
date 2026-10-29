@@ -67,108 +67,76 @@ test("omt-design asks for 3 variants per screen in a new Paper file and a pick p
   assert.match(persona, /make 3 variants of each screen/);
 });
 
-test("verify checks existing suites and running flows without writing tests (personas)", () => {
-  const persona = readFileSync(join(SKILLS_DIR, "omt", "references", "roles", "verify.md"), "utf8");
-  assert.equal(existsSync(join(SKILLS_DIR, "omt", "references", "roles", "test.md")), false);
-  assert.match(persona, /For each condition, pick a check that would fail if the condition were false: an existing test or a real command against the built artifact\./);
-  assert.match(persona, /Run the verify commands and the existing suites that cover Scope\./);
-  assert.match(persona, /Check the unit's main flows against the running artifact\./);
-  assert.match(persona, /For each flow you check, name the covering test file under `CHECKS`, or write `none`\./);
-  assert.match(persona, /Write no tests\./);
-  assert.match(persona, /Leave product files unchanged\./);
-  assert.doesNotMatch(persona, /Write missing tests|Write a new test|failureProofs|private copy|git ls-files/);
-  assert.match(persona, /When the task asks only for screenshots for a `ui` worker, capture those screenshots without repeating the unit's behavior flows\./);
+test("the retired verify, quick, and deep personas are gone (personas)", () => {
+  for (const role of ["verify", "quick", "deep", "test"]) {
+    assert.equal(existsSync(join(SKILLS_DIR, "omt", "references", "roles", `${role}.md`)), false, role);
+  }
 });
 
-test("verify keeps the real-data, evidence, verdict, and device-session rules (personas)", () => {
-  const persona = readFileSync(join(SKILLS_DIR, "omt", "references", "roles", "verify.md"), "utf8");
-  assert.match(persona, /at least one input shaped like real data/);
+test("qa runs checks and device flows, edits nothing, and writes no tests (personas)", () => {
+  const persona = readFileSync(join(SKILLS_DIR, "omt", "references", "roles", "qa.md"), "utf8");
+  assert.match(persona, /You run the checks that the task lists and report what each one did\. You edit nothing\./);
+  assert.match(persona, /Edit no files in the repository and write no tests\. Make no failure proofs\./);
+  assert.match(persona, /Run every command in Verify and every check that the task lists\./);
+  assert.match(persona, /Walk each device flow that the task lists, on a device, a Simulator, a browser, or a computer\./);
+  assert.match(persona, /at least one check with an input shaped like real data/);
   assert.match(persona, /A seeded or ideal sample alone is not enough\./);
-  assert.match(persona, /Run every check\. Save each command's full output in the evidence directory/);
+  assert.match(persona, /Save each command's full output in the evidence directory/);
   assert.match(persona, /`omt paths --evidence`/);
   assert.match(persona, /Capture each exit code in the command that runs it/);
   assert.match(persona, /Never add an exit code to a log afterwards\./);
-  assert.match(persona, /save a screenshot of the screen that shows the result, or a recording/);
+  assert.match(persona, /Save a screenshot of the screen that shows the result, or a recording/);
   assert.match(persona, /Report each check under `CHECKS` with its exit code and its key output line, copied from the output\./);
-  assert.match(persona, /List every log, screenshot, and recording under `EVIDENCE`\./);
-  assert.match(persona, /`VERIFIED`: every check ran and passed\./);
-  assert.match(persona, /Reading code is not a check; a verdict from reading code alone is not VERIFIED\./);
+  assert.match(persona, /List every log, screenshot, and recording under `EVIDENCE`, with its absolute path\./);
+  assert.match(persona, /For a `ui` unit, check behavior, not looks\./);
+  assert.match(persona, /`VERIFIED`: every check ran and passed\. Reading code is not a check; a verdict from reading code alone is not VERIFIED\./);
   assert.match(persona, /`NOT VERIFIED`: at least one check ran and failed\./);
   assert.match(persona, /`INCONCLUSIVE`: a check could not run/);
   assert.match(persona, /Use the running daemon as it is\. Never upgrade, restart, or replace it, and never stop a simulator or device that you did not boot\./);
   assert.match(persona, /When the daemon's version does not match what you need, or you cannot reach it, report `INCONCLUSIVE` with the reason\./);
   assert.match(persona, /Close each device or browser session that you open, also when a check fails\./);
   assert.match(persona, /run its close command on every exit path/);
-  assert.match(persona, /Stop when every done condition has a check that ran\. Leave the code under test unchanged; report failures for a worker to fix\./);
+  assert.doesNotMatch(persona, /failureProofs: on|qa_base|Write only the task's test lines|TESTS/);
   for (const kind of ["test", "work"]) {
     const contract = readFileSync(join(SKILLS_DIR, "omt", "references", "results", `${kind}.md`), "utf8");
     assert.match(contract, /EVIDENCE:\n- <path of a log, screenshot, or recording in the evidence directory>; or none/);
   }
 });
 
-test("qa writes only the task's test lines and reports new tests (personas)", () => {
-  const persona = readFileSync(join(SKILLS_DIR, "omt", "references", "roles", "qa.md"), "utf8");
-  assert.match(persona, /Read the task's test lines and the files in Scope\./);
-  assert.match(persona, /Write only the task's test lines, top-down: e2e, then integration, then unit, then other kinds that the task lists\./);
-  assert.match(persona, /Map each new test file or case to one test line\./);
-  assert.match(persona, /An empty list means no new tests\./);
-  assert.match(persona, /Leave product code unchanged\./);
-  assert.match(persona, /When a planned test fails because of product code, return `NOT VERIFIED` with the failure for a worker to fix\./);
-  assert.match(persona, /Run the tests until they pass\./);
-  assert.match(persona, /Save each command's full output in the evidence directory/);
-  assert.match(persona, /`omt paths --evidence`/);
-  assert.match(persona, /Capture the exit code in the command that runs it/);
-  assert.match(persona, /Never add an exit code to a log afterwards\./);
-  assert.match(persona, /List each new test by name and file path under `TESTS`\./);
-  assert.match(persona, /Report each check under `CHECKS` with its exit code and its key output line, copied from the output\./);
-  assert.match(persona, /List every log under `EVIDENCE`\./);
-});
-
-test("qa proves failures only when requested and only in a private working-tree copy (personas)", () => {
-  const persona = readFileSync(join(SKILLS_DIR, "omt", "references", "roles", "qa.md"), "utf8");
-  assert.match(persona, /When the task says `failureProofs: on`, prove that each new test can fail in a private copy of the working tree\./);
-  assert.match(persona, /qa_base=\$\(mktemp -d/);
-  assert.match(persona, /git ls-files -co --exclude-standard -z \| tar --null -T - -cf - \| tar -x -C "\$qa_base"/);
-  assert.match(persona, /Workers do not commit, so copy the working tree, not `HEAD`\./);
-  assert.doesNotMatch(persona, /git archive HEAD/);
-  assert.match(persona, /Link its dependencies, for example `ln -s "\$PWD\/node_modules" "\$qa_base\/node_modules"`\./);
-  assert.match(persona, /in the code under test that the done condition names, not in a test helper, a fixture, or a mock/);
-  assert.match(persona, /Run only those tests there, and see each fail\./);
-  assert.match(persona, /Delete the private copy on every exit path, for example with `trap 'rm -rf "\$qa_base"' EXIT`\./);
-  assert.match(persona, /Never break or restore files in the shared checkout\./);
-  assert.match(persona, /When a failure proof cannot run, report why under `CHECKS` and return `INCONCLUSIVE`\./);
-  assert.match(persona, /When the task does not say `failureProofs: on`, skip failure proofs\./);
-  assert.match(persona, /`VERIFIED`: every listed test ran and passed, and every required failure proof showed the test fail\./);
-  assert.match(persona, /`NOT VERIFIED`: a planned test failed, or a required failure proof did not show the test fail\./);
-  assert.match(persona, /List each under `FAILURES` as observed versus expected\./);
-  assert.match(persona, /`INCONCLUSIVE`: a test or a required failure proof could not run\. Say what blocked it\./);
-  assert.match(persona, /Stop when every test line has its passing tests and every required failure proof has run, or when you report a product failure or a blocker\./);
-});
-
-for (const role of ["execute", "quick", "deep", "ui", "writing"]) {
-  test(`${role} leaves new tests and failure proofs to qa (personas)`, () => {
+for (const role of ["execute", "ui", "writing"]) {
+  test(`${role} writes no new tests and makes no failure proofs (personas)`, () => {
     const persona = readFileSync(join(SKILLS_DIR, "omt", "references", "roles", `${role}.md`), "utf8");
     assert.match(persona, /Write no new test file and no new test case\./);
     assert.match(persona, /Update an existing test that your change breaks, and say so under `NOTES`\./);
     assert.match(persona, /Do not prove that tests can fail\./);
     assert.doesNotMatch(persona, /Add or update tests for the behavior you change/);
-    if (role === "deep") {
-      assert.match(persona, /Reproduce the problem with a command or an existing test that fails\./);
-      assert.match(persona, /Add no test case for the reproduction\./);
-      assert.match(persona, /Run every verify command and the reproduction command or existing test\./);
-      assert.match(persona, /Confirm that all pass\./);
-    }
   });
 }
 
-test("ui delegates screenshots to verify and leaves behavior flows for unit verification (personas)", () => {
+for (const role of ["execute", "ui"]) {
+  test(`${role} works as an independent track and drives no device (personas)`, () => {
+    const persona = readFileSync(join(SKILLS_DIR, "omt", "references", "roles", `${role}.md`), "utf8");
+    assert.match(persona, /as an independent track\. The main thread builds the other units at the same time, so stay inside your scope\./);
+    assert.doesNotMatch(persona, /`verify`|omt brief verify/);
+  });
+}
+
+test("ui lists screens for the qa task and leaves the visual comparison to the owner (personas)", () => {
   const persona = readFileSync(join(SKILLS_DIR, "omt", "references", "roles", "ui.md"), "utf8");
-  assert.match(persona, /Ask a `verify` task for a screenshot of each screen and state that you changed\./);
-  assert.match(persona, /Build the device-check brief with `omt brief verify`\./);
-  assert.match(persona, /For iOS, ask that task to run the app on a simulator with `agent-device`\./);
-  assert.match(persona, /Compare each screenshot with the spec's screenshot, and fix the differences\./);
-  assert.match(persona, /Leave behavior flows for the unit's separate `verify` task\./);
+  assert.match(persona, /Drive no device yourself\. Under `OPEN`, list each screen and state that you changed, with the steps to reach it, for the main thread to send to the `qa` task\./);
+  assert.match(persona, /The owner compares the screenshots with the spec\./);
 });
+
+for (const role of ["review", "oracle"]) {
+  test(`${role} fixes local findings when it may edit and reports the rest (personas)`, () => {
+    const persona = readFileSync(join(SKILLS_DIR, "omt", "references", "roles", `${role}.md`), "utf8");
+    assert.match(persona, /Fixes: when your Access line allows edits and the task asks for fixes, fix each local finding yourself\./);
+    assert.match(persona, /A local finding has a clear fix inside the changed files that agrees with the plan Summary in the task\./);
+    assert.match(persona, /Report every other finding, such as a finding that changes the approach or the plan\./);
+    assert.match(persona, /List each fix under `FIXES` with its paths\./);
+    assert.match(persona, /When your Access line is read-only, change no files/);
+  });
+}
 
 for (const role of ["review", "oracle"]) {
   test(`${role} reports missing tests only when the plan or task names them (personas)`, () => {
@@ -204,7 +172,7 @@ test("review cites written rules and computes requested CRAP findings (personas)
 test("plan writes the test list top-down with owner approval (personas)", () => {
   const persona = readFileSync(join(SKILLS_DIR, "omt", "references", "roles", "plan.md"), "utf8");
   assert.match(persona, /Fill `## Tests` top-down: e2e tests of the main user flows, then integration cases that e2e skips, then unit cases, then other kinds only when the owner asks\./);
-  assert.match(persona, /Use main flows of each vertical slice that `verify` can also walk\./);
+  assert.match(persona, /Use main flows of each vertical slice that `qa` can also walk\./);
   assert.match(persona, /Propose only the layers in `plan\.testLayers` without being asked\./);
   assert.match(persona, /Give a reason for a line in another layer, and keep it only when the owner approves it\./);
   assert.match(persona, /Use one e2e test per main flow\./);
@@ -218,7 +186,7 @@ test("plan-review checks the test list against the approved layers (personas)", 
   const persona = readFileSync(join(SKILLS_DIR, "omt", "references", "roles", "plan-review.md"), "utf8");
   assert.match(persona, /7\. A `## Tests` list that breaks the test policy below\. Cite the line and the policy it breaks\./);
   assert.match(persona, /Check `## Tests` top-down: e2e tests of the main user flows, then integration cases that e2e skips, then unit cases, then other kinds only when the owner asks\./);
-  assert.match(persona, /Check that the main flows of each vertical slice are flows that `verify` can also walk\./);
+  assert.match(persona, /Check that the main flows of each vertical slice are flows that `qa` can also walk\./);
   assert.match(persona, /Allow only the layers in `plan\.testLayers` without an owner request\./);
   assert.match(persona, /Require a reason and owner approval for a line in another layer\./);
   assert.match(persona, /Require one e2e test per main flow\./);
@@ -247,8 +215,8 @@ test("guardrail classifies every finding without editing files (personas)", () =
   assert.match(persona, /Number the task's proposals `G1`, `G2`, and so on\./);
   assert.match(persona, /Link each proposal to its finding ids\./);
   assert.match(persona, /Name its class, destination file, and proof command, or `none` when no command applies\./);
-  assert.match(persona, /Leave `\.omt\/guardrails\.md` unchanged for the conductor to update\./);
-  assert.match(persona, /Leave renumbering to the conductor when it appends proposals to `\.omt\/guardrails\.md`\./);
+  assert.match(persona, /Leave `\.omt\/guardrails\.md` unchanged for the main thread to update\./);
+  assert.match(persona, /Leave renumbering to the main thread when it appends proposals to `\.omt\/guardrails\.md`\./);
   assert.match(persona, /each proposal states a check or a rule change that would prevent the finding\./);
   assert.match(persona, /Return the `guardrail` result block\./);
   assert.match(persona, /Stop when every finding has a new proposal or a note that explains why it has none\./);
@@ -260,16 +228,16 @@ test("guardrail has the exact proposal contract from the design (personas)", () 
   assert.match(contract, /^```text\nVERDICT: PROPOSALS \| NONE\nSUMMARY: <one or two sentences>\nPROPOSALS:\n- G<k> \[check\|rule-fix\|new-rule\] <finding ids>: <proposal>\. Where: <file>\. Proof: <command that fails on the PR head and passes after the change, or none>\.\nNOTES:\n- <each finding with no proposal and why, or none>\n```\n$/);
 });
 
-test("roles explains verify, qa, guardrail, and device ownership (personas)", () => {
+test("roles explains qa, guardrail, and device ownership (personas)", () => {
   const text = readFileSync(join(SKILLS_DIR, "omt", "references", "roles.md"), "utf8");
-  assert.match(text, /\| `verify` \| edit \| test \| Running the unit's checks and main flows for a verdict with logs and screenshots\. Writes no tests and edits no product files\. \|/);
-  assert.match(text, /\| `qa` \| edit \| test \| Writing only the task's test lines, top-down, and running them until they pass\. Leaves product code unchanged\. \|/);
+  assert.doesNotMatch(text, /\| `(verify|quick|deep)` \|/);
+  assert.match(text, /\| `qa` \| edit \| test \| Running the given check commands and device flows for a verdict with exit codes, logs, and screenshots\. Edits nothing and writes no tests\. \|/);
+  assert.match(text, /\| `execute` \| edit \| work \| One large planned unit with a disjoint scope, built as an independent track while the main thread builds the rest\. \|/);
   assert.match(text, /\| `guardrail` \| read-only \| guardrail \| Turning review findings into deterministic checks and rule fixes\. Proposes changes and edits no files\. \|/);
-  assert.match(text, /Only `verify` drives a device, a Simulator UI, a browser, or a computer\./);
-  assert.match(text, /Every other role in `default` mode delegates device checks with `omt brief verify`\./);
-  assert.match(text, /A read-only role lists the steps and expected results for the conductor\./);
+  assert.match(text, /Only `qa` drives a device, a Simulator UI, a browser, or a computer\./);
+  assert.match(text, /Every other role lists each device check with its steps and expected results for the main thread, which sends it to `qa`/);
   assert.match(text, /`review` for plan-review, grill, review, oracle, and guardrail/);
-  assert.match(text, /`test` for verify and qa/);
+  assert.match(text, /`implementation` for execute, writing, and ui, `test` for qa\)/);
   assert.match(text, /A custom role gets its result block from its `result` field: `work`, `review`, `test`, `research`, `plan`, `guardrail`, or `grill`\./);
 });
 
@@ -295,21 +263,19 @@ test("roles pins fast defaults, precedence, mappings, and explicit overrides (pe
   assert.match(text, /For any other driver, send no effort option\./);
 });
 
-test("results maps verification, qa test lists, worker notes, and guardrail proposals (personas)", () => {
+test("results maps qa checks, review fixes, worker notes, and guardrail proposals (personas)", () => {
   const references = join(SKILLS_DIR, "omt", "references");
   const text = readFileSync(join(references, "results.md"), "utf8");
-  assert.match(text, /\| `test` \| verify, qa \| \[results\/test\.md\]\(results\/test\.md\)/);
+  assert.match(text, /\| `test` \| qa \| \[results\/test\.md\]\(results\/test\.md\)/);
+  assert.match(text, /\| `work` \| execute, writing, ui, design \|/);
   assert.match(text, /\| `guardrail` \| guardrail \| \[results\/guardrail\.md\]\(results\/guardrail\.md\) \| `VERDICT: PROPOSALS \\\| NONE` \|/);
-  assert.match(text, /It stays a claim until you or a `verify` task checks it against the real artifact\./);
-  assert.match(text, /Run at least one `VERIFY` command yourself, or send the unit to a `verify` task\./);
-  assert.match(text, /Check: record `verified` or `rejected` after your own check or a `verify` task\./);
-  assert.match(text, /\| `verified` \| your own check or a `verify` task confirmed the unit \|/);
+  assert.match(text, /It stays a claim until you or a `qa` task checks it against the real artifact\./);
+  assert.match(text, /Run at least one `VERIFY` command yourself, or send it to a `qa` task\./);
+  assert.match(text, /Check: record `verified` or `rejected` after your own check or a `qa` task\./);
+  assert.match(text, /\| `verified` \| your own check or a `qa` task confirmed the unit \|/);
   assert.match(text, /`NOTES` is optional\. A worker that updates an existing test because its change broke it reports the update there\./);
-  assert.match(text, /`verify` names the covering test file for each checked flow under `CHECKS`, or `none`\./);
-  assert.match(text, /`TESTS` is optional in the shared contract\./);
-  assert.match(text, /A `qa` result lists every new test by name and file path under `TESTS`; a `verify` result can omit it\./);
-  assert.match(text, /Check that every new test file or case maps to a test line in the task\./);
-  assert.match(text, /Send a test with no line to a `qa` fix task\./);
+  assert.match(text, /`FIXES` lists the fixes that the reviewer made, with their paths\. Read the diff of those paths before you act on the result\./);
+  assert.match(text, /Read the exit code of each `CHECKS` line and the last lines of each failed log\./);
   assert.match(text, /Check that each finding other than a CRAP finding names a concrete failure scenario\./);
   assert.match(text, /For a CRAP finding, accept the changed function and its complexity, coverage, and CRAP values instead of a failure scenario\./);
   assert.match(text, /Apply this CRAP exception in every round\./);
@@ -319,8 +285,11 @@ test("results maps verification, qa test lists, worker notes, and guardrail prop
   assert.match(text, /Set `<k>` to one above the highest id in the file\./);
   assert.match(text, /`NONE`: no new proposal remains\. Read `NOTES` for each finding with no proposal and its reason\./);
   assert.match(text, /The owner turns proposals into work with omt-ulw on a separate branch\./);
+  assert.doesNotMatch(text, /`verify`|`deep`|omt-loop/);
   const contract = readFileSync(join(references, "results", "test.md"), "utf8");
-  assert.match(contract, /TESTS:\n- <new test name and file path; optional for verify>/);
+  assert.doesNotMatch(contract, /TESTS:/);
+  const review = readFileSync(join(references, "results", "review.md"), "utf8");
+  assert.match(review, /FINDINGS:\n- \[P0\|P1\|P2\|P3\] <path>:<line> <problem>\. Fix: <fix>\.\nFIXES:\n- <path>: <the finding that you fixed and what changed>; or none\nNOTES:/);
   const work = readFileSync(join(references, "results", "work.md"), "utf8");
   assert.match(work, /NOTES:\n- <existing test updated because the change broke it, or other note; optional>/);
 });
@@ -328,9 +297,10 @@ test("results maps verification, qa test lists, worker notes, and guardrail prop
 test("the Mira fixes pin every new rule in the skills and references (personas)", () => {
   const references = join(SKILLS_DIR, "omt", "references");
   const results = readFileSync(join(references, "results.md"), "utf8");
-  assert.match(results, /A P0 with a clear fix inside the unit's scope goes to a fix task\./);
+  assert.match(results, /A P0 with a clear fix inside the scope needs a fix\./);
   assert.doesNotMatch(results, /Stop the unit and re-plan before more fixes\./);
-  assert.match(readFileSync(join(references, "roles", "plan.md"), "utf8"), /give it a done condition on an input shaped like real data/);
-  const persona = readFileSync(join(references, "roles", "verify.md"), "utf8");
-  assert.match(persona, /List every log, screenshot, and recording under `EVIDENCE`\./);
+  const plan = readFileSync(join(references, "roles", "plan.md"), "utf8");
+  assert.match(plan, /give it a done condition on an input shaped like real data/);
+  assert.match(plan, /The role is `main` for a unit that the main thread builds, and `ui` for a unit that implements a design or changes UI\./);
+  assert.doesNotMatch(plan, /task budget/);
 });

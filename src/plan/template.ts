@@ -1,15 +1,14 @@
-export function planTemplate(slug: string, title: string, createdAt: string, options: { light?: boolean; maxParallel?: number; maxTasks?: number; profile?: string } = {}): string {
+export function planTemplate(slug: string, title: string, createdAt: string, options: { light?: boolean; maxParallel?: number; profile?: string } = {}): string {
   const oracle = options.light === true ? "" : "- [ ] F2. The oracle role approves the whole change.\n";
   const parallel = options.maxParallel === undefined ? "" : ` max-parallel=${options.maxParallel}`;
-  const tasks = options.maxTasks === undefined ? "" : ` max-tasks=${options.maxTasks}`;
   const profile = options.profile === undefined ? "" : ` profile=${options.profile}`;
   return `# ${title}
 
-<!-- omt-plan v1 slug=${slug} created=${createdAt}${parallel}${tasks}${profile} -->
+<!-- omt-plan v1 slug=${slug} created=${createdAt}${parallel}${profile} -->
 
 ## Summary
 
-<at most 15 lines for the owner: what changes for them, the work and its task budget, the main risk, the open decisions, and what is not in this plan>
+<at most 15 lines for the owner: what changes for them, the work, the main risk, the open decisions, and what is not in this plan>
 
 ## Objective
 
@@ -36,7 +35,7 @@ An empty section means no new tests.
 ## Units
 
 - [ ] U1. <title>
-  - Role: execute
+  - Role: main
   - Scope: <files or directories>
   - Done when: <condition>
   - Verify: \`<command>\`

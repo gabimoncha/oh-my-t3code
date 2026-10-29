@@ -9,7 +9,7 @@ How you work:
 5. Use `new-rule` when no written rule covers the case. Name the file for the rule and state its text.
 6. Give no proposal for a finding that only judgment can catch. List each finding with no proposal and its reason under `NOTES`.
 7. Only when the task includes CRAP results, propose missing complexity lint and coverage gate checks as `check` proposals. Use the CRAP finding ids in these proposals' `<finding ids>` field.
-8. Number the task's proposals `G1`, `G2`, and so on. Link each proposal to its finding ids. Name its class, destination file, and proof command, or `none` when no command applies. Leave `.omt/guardrails.md` unchanged for the conductor to update. Leave renumbering to the conductor when it appends proposals to `.omt/guardrails.md`.
+8. Number the task's proposals `G1`, `G2`, and so on. Link each proposal to its finding ids. Name its class, destination file, and proof command, or `none` when no command applies. Leave `.omt/guardrails.md` unchanged for the main thread to update. Leave renumbering to the main thread when it appends proposals to `.omt/guardrails.md`.
 
 What good output looks like: each proposal states a check or a rule change that would prevent the finding. Return the `guardrail` result block.
 

@@ -1,4 +1,4 @@
-import type { ConfigLayer, DefaultsChange, Effort, OmtConfig, RoleConfig, Rung } from "../types.ts";
+import type { ConfigLayer, DefaultsChange, Effort, Limits, OmtConfig, ProfileConfig, RoleConfig, Rung, Workflow, WorkflowLayer } from "../types.ts";
 import { isRecord } from "../util/json.ts";
 
 export type { DefaultsChange } from "../types.ts";
@@ -52,8 +52,51 @@ const LUNA = "gpt-6-luna";
 const SOL = "gpt-6.1-sol";
 const ASTRA = "gpt-6-astra";
 
+// Keys that set 2026-12 retired. A config layer that sets one loads with a warning, and the key has no effect.
+export const RETIRED_BUILD_KEYS: readonly string[] = ["verify", "checkpoint", "stallMinutes"];
+export const RETIRED_LIMIT_KEYS: readonly string[] = ["maxTasksPerRun"];
+export const RETIRED_ROLES: readonly string[] = ["verify", "quick", "deep"];
+
+// Sets before 2026-12 still hold the retired keys. defaultSet() and DEFAULT_SETS drop them.
+type LegacyBuild = Workflow["build"] & {
+  verify: "heavy" | "every-unit";
+  checkpoint: "none" | "layer" | "unit";
+  stallMinutes: number;
+};
+interface LegacyProfile extends Omit<ProfileConfig, "workflow" | "limits"> {
+  workflow?: Omit<WorkflowLayer, "build"> & { build?: Partial<LegacyBuild> };
+  limits?: Partial<Limits & { maxTasksPerRun: number }>;
+}
+interface LegacySet extends Omit<OmtConfig, "profiles" | "limits"> {
+  profiles: Record<string, LegacyProfile>;
+  limits: Limits & { maxTasksPerRun: number };
+}
+
+function omitKeys<T extends object>(record: T, keys: readonly string[]): T {
+  return Object.fromEntries(Object.entries(record).filter(([key]) => !keys.includes(key))) as T;
+}
+
+function withoutRetired(set: LegacySet): OmtConfig {
+  const profiles: Record<string, ProfileConfig> = {};
+  for (const [name, { workflow, limits, ...profile }] of Object.entries(set.profiles)) {
+    const result: ProfileConfig = profile;
+    if (workflow !== undefined) {
+      const { build, ...groups } = workflow;
+      result.workflow = build === undefined ? groups : { ...groups, build: omitKeys(build, RETIRED_BUILD_KEYS) as Partial<Workflow["build"]> };
+    }
+    if (limits !== undefined) result.limits = omitKeys(limits, RETIRED_LIMIT_KEYS);
+    profiles[name] = result;
+  }
+  return {
+    ...set,
+    profiles,
+    roles: omitKeys(set.roles, RETIRED_ROLES),
+    limits: omitKeys(set.limits, RETIRED_LIMIT_KEYS),
+  };
+}
+
 // A set never changes after a release. A change to the defaults goes into a new set with a later name.
-const SET_2026_10: OmtConfig = {
+const SET_2026_10: LegacySet = {
   version: 1,
   defaults: "2026-10",
   profile: "normal",
@@ -211,7 +254,7 @@ const SET_2026_10: OmtConfig = {
   },
 };
 
-const SET_2026_11: OmtConfig = {
+const SET_2026_11: LegacySet = {
   ...SET_2026_10,
   defaults: "2026-11",
   profiles: {
@@ -239,12 +282,52 @@ const SET_2026_11: OmtConfig = {
   })),
 };
 
+// The main thread builds; one review child and one QA child check the work.
+const SET_2026_12: OmtConfig = (() => {
+  const base = withoutRetired(SET_2026_11);
+  return {
+    ...base,
+    defaults: "2026-12",
+    profiles: {
+      ...base.profiles,
+      prototype: {
+        ...base.profiles.prototype!,
+        description: "Build a prototype with fewer reviews and no failure proofs.",
+      },
+    },
+    roles: {
+      ...base.roles,
+      // The reviewer fixes local findings itself, so review and oracle can edit.
+      review: {
+        ...base.roles.review!,
+        description: "Review a diff against its brief, fix local findings in the changed files, and report the rest by severity. Runs on the family that did not make the change.",
+        access: "edit",
+        interactionMode: "default",
+      },
+      oracle: {
+        ...base.roles.oracle!,
+        description: "Attack the finished change from the family other than the main implementer's, fix local findings, and report the rest before it counts as done.",
+        access: "edit",
+        interactionMode: "default",
+      },
+      qa: editRole(
+        "Run the given check commands and device flows, and return each exit code with its log and screenshots. Edits nothing.",
+        "test",
+        "test",
+        // A Codex child cannot reach the local device daemon, so the Claude rungs come first.
+        [rung("claudeAgent", HAIKU, "medium"), rung("claudeAgent", SONNET, "low"), rung("codex", SOL, "low")],
+      ),
+    },
+  };
+})();
+
 export const DEFAULT_SETS: Readonly<Record<string, OmtConfig>> = {
-  "2026-10": SET_2026_10,
-  "2026-11": SET_2026_11,
+  "2026-10": withoutRetired(SET_2026_10),
+  "2026-11": withoutRetired(SET_2026_11),
+  "2026-12": SET_2026_12,
 };
 
-export const LATEST_DEFAULT_SET = "2026-11";
+export const LATEST_DEFAULT_SET = "2026-12";
 export const DEFAULT_SET_NAME_RE = /^\d{4}-\d{2}(-[a-z0-9]+)?$/;
 
 export function defaultSetNames(): string[] {

@@ -32,7 +32,6 @@ export interface RoleConfig {
 
 export interface Limits {
   maxParallel: number;
-  maxTasksPerRun: number;
   maxDepth: number;
   maxReviewRounds: number;
 }
@@ -47,12 +46,9 @@ export interface Workflow {
   };
   build: {
     review: "every-round" | "first-round" | "off";
-    verify: "heavy" | "every-unit";
     qa: "planned" | "off";
     failureProofs: "on" | "off";
     oracle: "heavy" | "always" | "off";
-    checkpoint: "none" | "layer" | "unit";
-    stallMinutes: number;
   };
   review: {
     reviewers: "auto" | number;
@@ -286,10 +282,9 @@ export interface LedgerStats {
   dispatched: number; // entries with status "dispatched"
   active: number; // dispatched entries that no terminal entry closes (see ledger closes())
   terminal: number; // entries with a terminal status: every status except "dispatched"
-  limits: { maxParallel: number; maxTasksPerRun: number };
+  limits: { maxParallel: number };
   planMaxParallel?: number; // the plan header max-parallel; set only when the plan has one
-  planMaxTasks?: number; // the plan header max-tasks; set only when the plan has one
-  canDispatch: boolean; // active < maxParallel && dispatched < maxTasksPerRun
+  canDispatch: boolean; // active < maxParallel
 }
 
 export type T3DriverStatus = "enabled" | "disabled" | "unknown";

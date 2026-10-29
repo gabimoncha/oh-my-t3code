@@ -37,8 +37,8 @@ test("formatRolesTable matches the section 5.3 layout", () => {
     [
       "ROLE         STATUS      TARGET                                         ACCESS     MODE     CROSS",
       "execute      resolved    claudeAgent/claude-opus-5-5 effort=medium      edit       default  no",
-      "review       resolved    codex/gpt-6-astra reasoningEffort=high         read-only  plan     yes",
-      "oracle       unavailable -                                              read-only  plan     yes",
+      "review       resolved    codex/gpt-6-astra reasoningEffort=high         edit       default  yes",
+      "oracle       unavailable -                                              edit       default  yes",
       "  rung 1 grok/grok-build: provider grok cannot run child tasks: Provider instance is disabled.; Provider executable is not installed.",
       "",
       "verified against orchestrator_capabilities",
@@ -51,8 +51,8 @@ test("formatRolesTable shows skipped rungs and the chosen rung's notes, not late
   const config: OmtConfig = {
     ...DEFAULT_CONFIG,
     roles: {
-      deep: {
-        ...DEFAULT_CONFIG.roles.deep!,
+      execute: {
+        ...DEFAULT_CONFIG.roles.execute!,
         chain: [
           { driver: "grok", model: "grok-build" },
           { driver: "codex", model: "gpt-6-luna", effort: "max" },
@@ -62,7 +62,7 @@ test("formatRolesTable shows skipped rungs and the chosen rung's notes, not late
     },
   };
   const lines = formatRolesTable(resolveAll(config, caps())).split("\n");
-  assert.equal(lines[1], "deep         resolved    codex/gpt-6-luna reasoningEffort=xhigh         edit       default  no");
+  assert.equal(lines[1], "execute      resolved    codex/gpt-6-luna reasoningEffort=xhigh         edit       default  no");
   assert.deepEqual(lines.slice(2, 4), [
     "  rung 1 grok/grok-build: provider grok cannot run child tasks: Provider instance is disabled.; Provider executable is not installed.",
     "  rung 2 codex/gpt-6-luna: effort max mapped to xhigh for option reasoningEffort",
@@ -93,7 +93,7 @@ test("formatRolesTable widens columns and prints the unverified footer", () => {
   );
   assert.equal(
     longLines[1],
-    "a-very-long-role-name  resolved    claudeAgent/claude-opus-5-5 contextWindow=1m fastMode=true  read-only  plan     yes",
+    "a-very-long-role-name  resolved    claudeAgent/claude-opus-5-5 contextWindow=1m fastMode=true  edit       default  yes",
   );
 });
 

@@ -278,7 +278,7 @@ test("pickWorker with --unit takes the provider of the unit's last worker entry"
   const entries = [
     entry({ unit: "U1", provider: "claudeAgent" }),
     entry({ unit: "U2", provider: "claudeAgent" }),
-    entry({ unit: "U1", provider: "codex", role: "deep", round: 3 }),
+    entry({ unit: "U1", provider: "codex", role: "ui", round: 3 }),
     entry({ unit: "U1", provider: "claudeAgent", role: "review" }),
     entry({ unit: "U1", provider: "claudeAgent", status: "completed" }),
   ];

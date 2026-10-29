@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "bun:test";
 import { run as uninstall } from "../../src/commands/uninstall.ts";
@@ -230,4 +230,69 @@ test("U5 missing managed shim skips the recorded project", async () => {
   assert.equal(syncHasChanges(entries), false);
   await applySync(f.ctx, entries);
   assert.equal(existsSync(projectShimPath(ctx.cwd)), false);
+});
+
+test("update removes a managed project skill that the bundle no longer ships, with its link and record", async () => {
+  const f = fixture();
+  writeFile(join(f.packageRoot, "skills", "beta", "SKILL.md"), "Beta.\n");
+  const ctx = await project(f.ctx, join(f.root, "retired"));
+  const skill = join(ctx.cwd, ".agents/skills/beta");
+  const link = join(ctx.cwd, ".claude/skills/beta");
+  assert.ok(existsSync(join(skill, "SKILL.md")) && existsSync(link));
+  rmSync(join(f.packageRoot, "skills", "beta"), { recursive: true });
+
+  const entries = await planSync(ctx, channel(ctx), options);
+  assert.equal(syncHasChanges(entries), true);
+  assert.match(renderSyncPlan(entries), /^ {2}remove {3}beta {2}\(no longer shipped\)$/m);
+  assert.match(renderSyncPlan(entries), new RegExp(`^ {2}remove {3}${link} -> `, "m"));
+  assert.ok(existsSync(skill), "planning writes nothing");
+  const results = await applySync(ctx, entries);
+  assert.ok(results[0]?.changed.includes("beta"));
+  assert.equal(existsSync(skill), false);
+  assert.throws(() => lstatSync(link));
+  assert.ok(existsSync(join(ctx.cwd, ".agents/skills/alpha/SKILL.md")));
+  const manifest = await readManifest(projectManifestPath(ctx.cwd));
+  assert.deepEqual(manifest?.skills, ["alpha"]);
+  assert.equal(manifest?.links.some((entry) => entry.path === link), false);
+});
+
+test("update keeps a user folder that replaced a retired skill, and an edited retired skill", async () => {
+  const f = fixture();
+  writeFile(join(f.packageRoot, "skills", "beta", "SKILL.md"), "Beta.\n");
+  writeFile(join(f.packageRoot, "skills", "gamma", "SKILL.md"), "Gamma.\n");
+  const ctx = await project(f.ctx, join(f.root, "kept"));
+  const beta = join(ctx.cwd, ".agents/skills/beta");
+  rmSync(beta, { recursive: true });
+  writeFile(join(beta, "SKILL.md"), "Owner beta.\n");
+  const gamma = join(ctx.cwd, ".agents/skills/gamma/SKILL.md");
+  writeFile(gamma, "Edited gamma.\n");
+  rmSync(join(f.packageRoot, "skills", "beta"), { recursive: true });
+  rmSync(join(f.packageRoot, "skills", "gamma"), { recursive: true });
+
+  const entries = await planSync(ctx, channel(ctx), options);
+  assert.deepEqual(entries[0]?.result.kept, [
+    { name: "gamma", reason: "locally modified; no longer shipped; omt install --force backs it up and removes it" },
+  ]);
+  await applySync(ctx, entries);
+  assert.equal(readFileSync(join(beta, "SKILL.md"), "utf8"), "Owner beta.\n");
+  assert.equal(readFileSync(gamma, "utf8"), "Edited gamma.\n");
+  assert.ok(existsSync(join(ctx.cwd, ".claude/skills/gamma")), "the link to a kept skill stays");
+  assert.deepEqual((await readManifest(projectManifestPath(ctx.cwd)))?.skills, ["alpha", "gamma"]);
+});
+
+test("update in user scope removes a retired managed skill and its links", async () => {
+  const f = fixture();
+  writeFile(join(f.packageRoot, "skills", "beta", "SKILL.md"), "Beta.\n");
+  const targets = ["agents", "claude"] as ("agents" | "claude")[];
+  await applyInstall(await buildInstallPlan(f.ctx, { targets, hooks: false, force: false }), f.ctx.now());
+  const skill = join(f.ctx.homedir, ".agents/skills/beta");
+  const link = join(f.ctx.homedir, ".claude/skills/beta");
+  assert.ok(existsSync(skill) && existsSync(link));
+  rmSync(join(f.packageRoot, "skills", "beta"), { recursive: true });
+
+  const plan = await buildInstallPlan(f.ctx, { targets, hooks: false, force: false, sync: true });
+  assert.equal(plan.skills.find((step) => step.name === "beta")?.action, "remove");
+  await applyInstall(plan, f.ctx.now());
+  assert.equal(existsSync(skill), false);
+  assert.throws(() => lstatSync(link));
 });

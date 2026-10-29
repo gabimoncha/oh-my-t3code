@@ -17,7 +17,7 @@ import { findManagedCommands, parseSettings } from "./claudeHook.ts";
 import { resolveReal } from "./fsops.ts";
 import { classifyLink, planLinks } from "./links.ts";
 import type { Manifest } from "./manifest.ts";
-import { loadScopeManifest, scopePaths } from "./plan.ts";
+import { loadScopeManifest, retiredSkills, scopePaths } from "./plan.ts";
 import type { InstallScope, ScopePaths } from "./plan.ts";
 import {
   excludeBlockLines,
@@ -123,7 +123,7 @@ function installHint(ctx: CliContext, paths: ScopePaths, flags = ""): string {
   return `${cliCommand(ctx)} install --project${flags}`;
 }
 
-async function checkSkills(ctx: CliContext, paths: ScopePaths, bundled: BundledSkill[]): Promise<DoctorCheck> {
+async function checkSkills(ctx: CliContext, paths: ScopePaths, bundled: BundledSkill[], loaded: ScopeManifest): Promise<DoctorCheck> {
   const root = paths.agentsRoot;
   if (bundled.length === 0) {
     return check("skills", "FAIL", `the omt CLI has no bundled skills in ${join(ctx.packageRoot, "skills")}; reinstall omt`);
@@ -136,6 +136,9 @@ async function checkSkills(ctx: CliContext, paths: ScopePaths, bundled: BundledS
     else if (result.action === "conflict") {
       (result.reason === "locally modified" ? groups.modified : groups.unmanaged)?.push(skill.name);
     }
+  }
+  if ("manifest" in loaded) {
+    groups["no longer shipped"] = await retiredSkills(root, loaded.manifest, bundled.map((skill) => skill.name));
   }
   const problems = Object.entries(groups)
     .filter(([, names]) => names.length > 0)
@@ -427,8 +430,6 @@ export async function runDoctor(
     checkDefaults(loadedConfig),
     ...(daily === undefined ? [] : [checkUpdate(daily)]),
     checkHarnesses(loadedConfig),
-    await checkSkills(ctx, paths, bundled),
-    await checkLinks(ctx, paths, names),
   ];
   let loaded: ScopeManifest;
   try {
@@ -436,6 +437,7 @@ export async function runDoctor(
   } catch (error) {
     loaded = { error };
   }
+  checks.push(await checkSkills(ctx, paths, bundled, loaded), await checkLinks(ctx, paths, names));
   checks.push(await checkHooks(ctx, paths, loaded));
   if (scope === "project") {
     checks.push(

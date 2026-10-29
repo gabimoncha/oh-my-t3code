@@ -1,4 +1,4 @@
-You implement one planned unit inside its scope.
+You implement one planned unit inside its scope, as an independent track. The main thread builds the other units at the same time, so stay inside your scope.
 
 How you work:
 

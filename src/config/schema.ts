@@ -1,5 +1,5 @@
 import { EFFORT_LADDER } from "../types.ts";
-import { DEFAULT_SETS, LATEST_DEFAULT_SET } from "./defaultSets.ts";
+import { DEFAULT_SETS, LATEST_DEFAULT_SET, RETIRED_BUILD_KEYS, RETIRED_LIMIT_KEYS } from "./defaultSets.ts";
 import { SCHEMA_URL } from "./starter.ts";
 import {
   ACCESS_VALUES,
@@ -26,7 +26,13 @@ function limit(name: keyof typeof LIMIT_RANGES, description: string) {
   return { type: "integer", minimum, maximum, description };
 }
 
-function workflowGroup(rules: (typeof WORKFLOW_RULES)[keyof typeof WORKFLOW_RULES]) {
+const RETIRED = { deprecated: true, description: "No longer used. omt ignores this key." };
+
+function retired(keys: readonly string[]) {
+  return Object.fromEntries(keys.map((key) => [key, RETIRED]));
+}
+
+function workflowGroup(rules: (typeof WORKFLOW_RULES)[keyof typeof WORKFLOW_RULES], retiredKeys: readonly string[] = []) {
   const properties = Object.fromEntries(Object.entries(rules).map(([key, rule]) => {
     if ("values" in rule) return [key, { enum: [...rule.values] }];
     if ("items" in rule) return [key, { type: "array", items: { enum: [...rule.items] } }];
@@ -34,7 +40,7 @@ function workflowGroup(rules: (typeof WORKFLOW_RULES)[keyof typeof WORKFLOW_RULE
     const integer = { type: "integer", minimum: rule.minimum, maximum: rule.maximum };
     return [key, "auto" in rule ? { oneOf: [{ const: "auto" }, integer] } : integer];
   }));
-  return { type: "object", additionalProperties: false, properties };
+  return { type: "object", additionalProperties: false, properties: { ...properties, ...retired(retiredKeys) } };
 }
 
 export const CONFIG_SCHEMA = {
@@ -77,15 +83,12 @@ export const CONFIG_SCHEMA = {
       additionalProperties: false,
       properties: {
         maxParallel: limit("maxParallel", "Most child tasks that run at the same time."),
-        maxTasksPerRun: limit("maxTasksPerRun", "Most child tasks in one run."),
         maxDepth: limit("maxDepth", "Most levels of delegation below the main thread."),
-        maxReviewRounds: limit("maxReviewRounds", "Most review rounds for one unit."),
+        maxReviewRounds: limit("maxReviewRounds", "Most review rounds for one change."),
+        ...retired(RETIRED_LIMIT_KEYS),
       },
     },
-    visuals: {
-      deprecated: true,
-      description: "No longer used. omt ignores this key.",
-    },
+    visuals: RETIRED,
     update: {
       enum: [...UPDATE_VALUES],
       description: "Check for a new omt once a day in omt install and omt doctor (asks the npm registry). apply also applies a found update. Read only from the user config. Default off.",
@@ -163,7 +166,7 @@ export const CONFIG_SCHEMA = {
       properties: {
         plan: workflowGroup(WORKFLOW_RULES.plan),
         design: workflowGroup(WORKFLOW_RULES.design),
-        build: workflowGroup(WORKFLOW_RULES.build),
+        build: workflowGroup(WORKFLOW_RULES.build, RETIRED_BUILD_KEYS),
         review: workflowGroup(WORKFLOW_RULES.review),
         git: workflowGroup(WORKFLOW_RULES.git),
       },

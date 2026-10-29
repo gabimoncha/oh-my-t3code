@@ -201,7 +201,7 @@ async function planHere(ctx: CliContext, scope: "user" | "project"): Promise<Ins
 }
 
 function planned(base: SyncEntry, plan: InstallPlan): SyncEntry {
-  const changed = plan.skills.filter((step) => step.action === "create" || step.action === "update" || step.action === "replace");
+  const changed = plan.skills.filter((step) => step.action === "create" || step.action === "update" || step.action === "replace" || step.action === "remove");
   const kept = plan.skills.filter((step) => step.action === "keep");
   return {
     ...base,

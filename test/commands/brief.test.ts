@@ -49,7 +49,7 @@ test("brief --json holds exactly the delegate_task fields, without clientRequest
   assert.deepEqual(Object.keys(output.delegateTask).sort(), [...DELEGATE_TASK_FIELDS].sort());
   assert.equal(output.delegateTask.mode, "async");
   assert.equal(output.delegateTask.role, "review");
-  assert.equal(output.delegateTask.interactionMode, "plan");
+  assert.equal(output.delegateTask.interactionMode, "default");
   assert.equal(output.delegateTask.runtimeMode, "inherit");
   assert.equal(output.delegateTask.title, "review: Check the diff.");
   assert.deepEqual(output.delegateTask.target, { providerInstanceId: "codex", model: "gpt-6-astra", options: { reasoningEffort: "high" } });
@@ -167,9 +167,8 @@ test("brief --max-depth overrides the config max depth, and a deeper --depth is 
   assert.equal(tooDeep.code, 2);
   assert.match(tooDeep.ctx.err(), /^hint: .*--max-depth/m);
 
-  const deviceChild = await project.runOk(["brief", "verify", "--task", "x", "--depth", "2"]);
-  assert.match(deviceChild.ctx.out(), /depth=2\/2/);
-  assert.equal((await project.run(["brief", "verify", "--task", "x", "--depth", "3"])).code, 2);
+  const qaTooDeep = await project.run(["brief", "qa", "--task", "x", "--depth", "2"]);
+  assert.equal(qaTooDeep.code, 2);
 
   for (const bad of ["4", "-1", "x"]) {
     assert.equal((await project.run(["brief", "execute", "--task", "x", "--max-depth", bad])).code, 2, bad);
@@ -181,7 +180,7 @@ test("brief adds the evidence line for edit roles only", async () => {
   const edit = await project.runOk(["brief", "execute", "--task", "x"]);
   const line = `- Evidence: save command output and logs under ${join(project.cwd, ".omt", "evidence")}/.`;
   assert.ok(edit.ctx.out().split("\n").includes(line), edit.ctx.out());
-  const readOnly = await project.runOk(["brief", "review", "--task", "x"]);
+  const readOnly = await project.runOk(["brief", "explore", "--task", "x"]);
   assert.doesNotMatch(readOnly.ctx.out(), /Evidence:/);
 });
 

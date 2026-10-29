@@ -31,8 +31,7 @@ Subcommands:
   list              print the entries
   stats             print dispatched, active, and terminal counts, the limits,
                     and whether another task can be dispatched; with --plan,
-                    a max-parallel limit in the plan header lowers max parallel,
-                    and a max-tasks key replaces max tasks per run
+                    a max-parallel limit in the plan header lowers max parallel
   request-id        print the canonical clientRequestId
 
 Options for add:
@@ -96,7 +95,7 @@ async function add(ctx: CliContext, root: string, values: Values) {
     throw usageError("ledger add --status dispatched needs --task-id or --unit");
   }
   if (status === "dispatched" && values["task-id"] === undefined) {
-    ctx.stderr("warning: this dispatched entry has no --task-id; the stall check and result matching need it\n");
+    ctx.stderr("warning: this dispatched entry has no --task-id; result matching needs it\n");
   }
   const optional: Partial<LedgerEntry> = {
     plan: values.plan,
@@ -144,14 +143,9 @@ function formatLedgerList(entries: LedgerEntry[]): string {
 
 function effectiveLimits(limits: Limits, plan: PlanStatus | undefined) {
   const planMaxParallel = plan?.maxParallel;
-  const planMaxTasks = plan?.maxTasks;
   return {
-    limits: {
-      maxParallel: Math.min(limits.maxParallel, planMaxParallel ?? limits.maxParallel),
-      maxTasksPerRun: planMaxTasks ?? limits.maxTasksPerRun,
-    },
+    limits: { maxParallel: Math.min(limits.maxParallel, planMaxParallel ?? limits.maxParallel) },
     planMaxParallel,
-    planMaxTasks,
   };
 }
 
@@ -165,9 +159,6 @@ function formatLedgerStats(result: LedgerStats, limits: Limits, profile: string)
     result.planMaxParallel === undefined
       ? `max parallel: ${result.limits.maxParallel}`
       : `max parallel: ${result.limits.maxParallel} (plan ${result.planMaxParallel}, config ${limits.maxParallel})`,
-    result.planMaxTasks === undefined
-      ? `max tasks per run: ${result.limits.maxTasksPerRun}`
-      : `max tasks per run: ${result.limits.maxTasksPerRun} (plan ${result.planMaxTasks}, config ${limits.maxTasksPerRun})`,
     `can dispatch: ${result.canDispatch ? "yes" : "no"}`,
   ];
   return lines.map((line) => `${line}\n`).join("");
@@ -185,10 +176,9 @@ async function stats(ctx: CliContext, root: string, values: Values) {
   const markdown = values.plan === undefined ? undefined : await readFileIfExists(planPath(root, values.plan));
   const plan = markdown === undefined ? undefined : parsePlan(markdown);
   const { config, profile } = await loadEffectiveConfigReporting(ctx, { planProfile: plan?.profile });
-  const { limits, planMaxParallel, planMaxTasks } = effectiveLimits(config.limits, plan);
+  const { limits, planMaxParallel } = effectiveLimits(config.limits, plan);
   const result = ledgerStats(await load(ctx, root, undefined), limits, values.plan);
   if (planMaxParallel !== undefined) result.planMaxParallel = planMaxParallel;
-  if (planMaxTasks !== undefined) result.planMaxTasks = planMaxTasks;
   ctx.stdout(values.json ? formatJson(result) : formatLedgerStats(result, config.limits, profile.name));
   return 0;
 }

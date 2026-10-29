@@ -77,16 +77,15 @@ The CLI lives in src/.
 # Constraints
 
 ${EDIT_SCOPED}
-- Delegation: you are at depth 2 of 2. Do all work yourself. Start no subagents and no delegated tasks, except \`verify\` tasks for device checks (see Devices). For device checks, pass --plan auth to omt brief.
-- Children: after you read a child's result, settle the child with the T3 \`t3_thread_organize\` tool, with \`action: "settle"\` and the child's \`childThreadId\`, never the \`taskId\`. Skip a child that still runs or waits for an answer. Settle nothing when \`git rev-parse --git-dir --git-common-dir\` prints two different paths, because then you work in a git worktree. A settle error is not a failure of your task.
+- Delegation: you are at depth 2 of 2. Do all work yourself. Start no subagents and no delegated tasks.
 - CLI: Run omt as omt.
 - Tests: write no new test file and no new test case, and do not prove that tests can fail. Update an existing test only when your change breaks it, and say so under NOTES.
 - You do not see the parent conversation. This brief is your full context. If you need something that is missing, say so in your final message.
 - Other agents may edit other files in this repository at the same time. Leave changes outside your scope alone. Do not commit, push, or create branches.
 - Processes: do not run \`pkill\`, \`killall\`, or another kill by name, because it can stop your own run. Stop only a process that you started, by its PID. Give each command that can run long a time limit, for example \`timeout 900 <command>\`. Close each device or browser session that you or your script opens on every exit path, for example \`trap '<close command>' EXIT\`.
-- Shared files: never break and restore files in the shared checkout, for example to prove that a test can fail. The qa role makes that proof in a private copy.
-- Shared builds: run a command that the task wraps in \`omt lock run\` exactly as written. Retry a failed build or test only when the file is outside your scope and outside the task's named code under test. The file is the one where the error occurs, such as a file with a compile or load error, also when a test in your scope loads it. Wait 60 seconds and run the command once more. When it fails there again, report the command, the outside-scope file, and the message as another unit's state. For a failure in your scope or the named code under test, follow your result block. For \`test\` results, return \`VERDICT: NOT VERIFIED\` for that failure. When \`omt lock run\` exits 75, report the command, the lock name, and its message. Leave the lock to the conductor. For both reports: in \`work\` results, keep the \`STATUS\` that your own work earns and put the report under \`OPEN\`. For \`test\` results, including \`verify\` and \`qa\`, return \`VERDICT: INCONCLUSIVE\` and put the report under \`FAILURES\`. For other results, put the report under \`NOTES\`, or before the result block when it has no \`NOTES\`.
-- Devices: do not drive a device, Simulator UI, browser, or computer yourself (\`agent-device\`, \`agent-browser\`, computer use, UI flows); only the verify role does that, on a cheap model. For each device check, build a brief with \`omt brief verify --depth 3 --plan auth --json\` that gives the steps and the expected result, pass its \`delegateTask\` object to \`delegate_task\` with \`mode: "wait"\` (keep its routed target), and report its result. This delegation is allowed at any depth.
+- Shared files: never break and restore files in the shared checkout, for example to prove that a test can fail. The main thread makes that proof in a private copy.
+- Shared builds: run a command that the task wraps in \`omt lock run\` exactly as written. Retry a failed build or test only when the file is outside your scope and outside the task's named code under test. The file is the one where the error occurs, such as a file with a compile or load error, also when a test in your scope loads it. Wait 60 seconds and run the command once more. When it fails there again, report the command, the outside-scope file, and the message as another unit's state. For a failure in your scope or the named code under test, follow your result block. For \`test\` results, return \`VERDICT: NOT VERIFIED\` for that failure. When \`omt lock run\` exits 75, report the command, the lock name, and its message. Leave the lock to the main thread. For both reports: in \`work\` results, keep the \`STATUS\` that your own work earns and put the report under \`OPEN\`. For \`test\` results, including \`qa\`, return \`VERDICT: INCONCLUSIVE\` and put the report under \`FAILURES\`. For other results, put the report under \`NOTES\`, or before the result block when it has no \`NOTES\`.
+- Devices: do not drive a device, Simulator UI, browser, or computer yourself (\`agent-device\`, \`agent-browser\`, computer use, UI flows); only the qa role does that. List each device check with its steps and expected result under \`OPEN\` or \`NOTES\`, or before your result block when it has neither; the main thread sends it to the qa task.
 
 # Done when
 
@@ -142,26 +141,30 @@ test("renderBrief picks the delegation line from depth and maxDepth", () => {
     assert.match(
       at,
       new RegExp(
-        `^- Delegation: you are at depth ${depth} of 3\\. Do all work yourself\\. Start no subagents and no delegated tasks, except \`verify\` tasks for device checks \\(see Devices\\)\\.$`,
+        `^- Delegation: you are at depth ${depth} of 3\\. Do all work yourself\\. Start no subagents and no delegated tasks\\.$`,
         "m",
       ),
     );
   }
 });
 
-test("renderBrief gives every role except verify the device line, and allows verify children at max depth", () => {
-  const deep = renderBrief(input({ role: "deep", depth: 1, maxDepth: 1 }), PERSONA, CONTRACT);
-  assert.match(deep, /^- Devices: do not drive a device, Simulator UI, browser, or computer yourself .* This delegation is allowed at any depth\.$/m);
-  assert.match(deep, /^- Delegation: you are at depth 1 of 1\. .*except `verify` tasks for device checks \(see Devices\)\.$/m);
-  const reviewer = renderBrief(input({ role: "review", interactionMode: "plan", access: "read-only", depth: 1, maxDepth: 2 }), PERSONA, CONTRACT);
-  assert.match(reviewer, /^- Devices: .* You run in plan mode and cannot start a `verify` task, so list each device check /m);
-  const reviewerAtMax = renderBrief(input({ role: "review", interactionMode: "plan", access: "read-only", depth: 1, maxDepth: 1 }), PERSONA, CONTRACT);
-  assert.match(reviewerAtMax, /^- Delegation: you are at depth 1 of 1\. Do all work yourself\. Start no subagents and no delegated tasks\.$/m);
-  const raised = renderBrief(input({ role: "deep", depth: 2, maxDepth: 2, configuredMaxDepth: 1 }), PERSONA, CONTRACT);
-  assert.match(raised, /build a brief with `omt brief verify --depth 3 --max-depth 2 --json` that/);
-  const tester = renderBrief(input({ role: "verify", depth: 2, maxDepth: 2 }), PERSONA, CONTRACT);
-  assert.doesNotMatch(tester, /- Devices:/);
-  assert.match(tester, /^- Delegation: you are at depth 2 of 2\. Do all work yourself\. Start no subagents and no delegated tasks\.$/m);
+test("renderBrief gives every role except qa the device hand-off line, and qa an edit-nothing access line", () => {
+  const DEVICES = "- Devices: do not drive a device, Simulator UI, browser, or computer yourself (`agent-device`, `agent-browser`, computer use, UI flows); only the qa role does that. List each device check with its steps and expected result under `OPEN` or `NOTES`, or before your result block when it has neither; the main thread sends it to the qa task.";
+  for (const fields of [
+    { role: "execute", depth: 1, maxDepth: 1 },
+    { role: "ui", depth: 1, maxDepth: 2 },
+    { role: "review", interactionMode: "plan", access: "read-only", depth: 1, maxDepth: 2 },
+  ] as const) {
+    const text = renderBrief(input(fields), PERSONA, CONTRACT);
+    assert.ok(text.split("\n").includes(DEVICES), fields.role);
+    assert.doesNotMatch(text, /omt brief verify|`verify` task/, fields.role);
+  }
+  const atMax = renderBrief(input({ role: "execute", depth: 1, maxDepth: 1 }), PERSONA, CONTRACT);
+  assert.match(atMax, /^- Delegation: you are at depth 1 of 1\. Do all work yourself\. Start no subagents and no delegated tasks\.$/m);
+  const qa = renderBrief(input({ role: "qa", scope: ["src/"], depth: 1, maxDepth: 1 }), PERSONA, CONTRACT);
+  assert.doesNotMatch(qa, /- Devices:/);
+  assert.match(qa, /^- Access: edit no files in the repository\. Write only command output, logs, and screenshots under the Evidence directory\.$/m);
+  assert.match(qa, /^- Delegation: you are at depth 1 of 1\. Do all work yourself\. Start no subagents and no delegated tasks\.$/m);
 });
 
 test("renderBrief names --max-depth when it differs from the configured max depth", () => {
@@ -184,10 +187,8 @@ test("renderBrief preserves plan and explicit profile flags for child briefs", (
       const maxDepthFlag = configuredMaxDepth === 2 ? "" : " --max-depth 2";
       const text = renderBrief(input({ ...fields, configuredMaxDepth }), PERSONA, CONTRACT);
       assert.ok(text.split("\n").includes(`- Delegation: you are at depth 1 of 2. You may delegate with the T3 delegate_task tool. For each child, pass ${selection} --depth 2${maxDepthFlag} to omt brief.`));
-      assert.ok(text.includes(`build a brief with \`omt brief verify --depth 2 ${selection}${maxDepthFlag} --json\` that`));
       const atMax = renderBrief(input({ ...fields, depth: 2, configuredMaxDepth }), PERSONA, CONTRACT);
-      assert.ok(atMax.split("\n").includes(`- Delegation: you are at depth 2 of 2. Do all work yourself. Start no subagents and no delegated tasks, except \`verify\` tasks for device checks (see Devices). For device checks, pass ${selection} to omt brief.`));
-      assert.ok(atMax.includes(`build a brief with \`omt brief verify --depth 3 ${selection}${maxDepthFlag} --json\` that`));
+      assert.ok(atMax.split("\n").includes("- Delegation: you are at depth 2 of 2. Do all work yourself. Start no subagents and no delegated tasks."));
     }
   }
 });
@@ -207,8 +208,7 @@ test("renderBrief adds the children line only when the child may start children"
   const lines = (fields: Parameters<typeof input>[0]) => renderBrief(input(fields), PERSONA, CONTRACT).split("\n");
   for (const fields of [
     { role: "execute", depth: 1, maxDepth: 2 },
-    { role: "execute", depth: 2, maxDepth: 2 },
-    { role: "verify", depth: 1, maxDepth: 2 },
+    { role: "qa", depth: 1, maxDepth: 2 },
     { role: "explore", access: "read-only", interactionMode: "plan", depth: 1, maxDepth: 2 },
   ] as const) {
     const text = lines(fields);
@@ -216,7 +216,8 @@ test("renderBrief adds the children line only when the child may start children"
     assert.equal(text[text.indexOf(CHILDREN) + 1], "- CLI: Run omt as omt.", JSON.stringify(fields));
   }
   for (const fields of [
-    { role: "verify", depth: 2, maxDepth: 2 },
+    { role: "execute", depth: 2, maxDepth: 2 },
+    { role: "qa", depth: 2, maxDepth: 2 },
     { role: "explore", access: "read-only", interactionMode: "plan", depth: 2, maxDepth: 2 },
   ] as const) {
     assert.ok(!lines(fields).includes(CHILDREN), JSON.stringify(fields));
@@ -287,17 +288,17 @@ test("loadResultContract reads and trims the contract for a result kind", async 
 });
 
 test("renderBrief gives every role its test policy, CLI, and shared-build rules", () => {
-  for (const role of ["execute", "quick", "deep", "ui", "writing", "design", "qa", "verify", "review", "oracle", "plan-review", "guardrail", "explore", "research", "plan", "custom"]) {
+  for (const role of ["execute", "ui", "writing", "design", "qa", "review", "oracle", "plan-review", "guardrail", "explore", "research", "plan", "custom"]) {
     const text = renderBrief(input({ role, cliCommand: "/project/.omt/bin/omt" }), PERSONA, CONTRACT);
     assert.match(text, /^- CLI: Run omt as \/project\/\.omt\/bin\/omt\.$/m);
     const tests = text.split("\n").find((line) => line.startsWith("- Tests:"));
     assert.ok(tests, role);
-    if (["execute", "quick", "deep", "ui", "writing"].includes(role)) {
+    if (["execute", "ui", "writing"].includes(role)) {
       assert.match(tests, /write no new test file and no new test case/);
       assert.match(tests, /do not prove that tests can fail/);
       assert.match(tests, /Update an existing test only when your change breaks it, and say so under NOTES\./);
     } else if (role === "qa") {
-      assert.equal(tests, "- Tests: write only the test lines in the task, top-down; failureProofs: on");
+      assert.equal(tests, "- Tests: write no tests and no failure proofs. Run the commands in Verify and the task's device flows, and report each command with its exit code and log path.");
     } else if (role === "review" || role === "oracle") {
       assert.equal(tests, "- Tests: a missing test is a finding only when the plan or the task names that test.");
     } else {
@@ -311,13 +312,12 @@ test("renderBrief gives every role its test policy, CLI, and shared-build rules"
     assert.match(text, /For a failure in your scope or the named code under test, follow your result block\./);
     assert.match(text, /For `test` results, return `VERDICT: NOT VERIFIED` for that failure\./);
     assert.match(text, /When `omt lock run` exits 75, report the command, the lock name, and its message\./);
-    assert.match(text, /Leave the lock to the conductor\./);
+    assert.match(text, /Leave the lock to the main thread\./);
     assert.match(text, /For both reports: in `work` results, keep the `STATUS` that your own work earns and put the report under `OPEN`\./);
-    assert.match(text, /For `test` results, including `verify` and `qa`, return `VERDICT: INCONCLUSIVE` and put the report under `FAILURES`\./);
+    assert.match(text, /For `test` results, including `qa`, return `VERDICT: INCONCLUSIVE` and put the report under `FAILURES`\./);
     assert.match(text, /For other results, put the report under `NOTES`, or before the result block when it has no `NOTES`\./);
-    assert.match(text, /The qa role makes that proof in a private copy\./);
+    assert.match(text, /The main thread makes that proof in a private copy\./);
   }
-  assert.match(renderBrief(input({ role: "qa", failureProofs: "off" }), PERSONA, CONTRACT), /^- Tests: .*failureProofs: off$/m);
 });
 
 test("brief, roles, and route apply configured, plan, and explicit profiles, including model fast settings", async () => {
@@ -371,19 +371,19 @@ test("brief, roles, and route apply configured, plan, and explicit profiles, inc
   assert.match(missing.ctx.err(), /plan "review-x" not found at .*review-x\.md/);
 });
 
-test("brief child commands keep profile maxDepth and verify routing", async () => {
+test("brief child commands keep profile maxDepth and qa routing", async () => {
   const project = makeProject();
   project.projectConfig(JSON.stringify({
     version: 1,
     profiles: {
       deepp: {
-        description: "Allow two worker levels and use Codex for device checks.",
+        description: "Allow two worker levels and use Codex for checks.",
         limits: { maxDepth: 2 },
-        roles: { verify: { chain: [{ provider: "codex", driver: "codex", model: "gpt-6.1-sol", effort: "low" }] } },
+        roles: { qa: { chain: [{ provider: "codex", driver: "codex", model: "gpt-6.1-sol", effort: "low" }] } },
         models: { "gpt-6.1-sol": { fast: false } },
       },
       override: {
-        description: "Use fast mode for device checks.",
+        description: "Use fast mode for checks.",
         extends: "deepp",
         models: { "gpt-6.1-sol": { fast: true } },
       },
@@ -399,17 +399,24 @@ test("brief child commands keep profile maxDepth and verify routing", async () =
     const delegation = parent.ctx.out().split("\n").find((line) => line.startsWith("- Delegation:")) ?? "";
     const childFlags = /For each child, pass (.+) to omt brief\./.exec(delegation)?.[1];
     assert.ok(childFlags, delegation);
-    const child = await project.runOk(["brief", "execute", "--task", "Check the flow.", ...childFlags.split(" ")]);
-    assert.match(child.ctx.out(), /depth=2\/2/);
-    const device = /build a brief with `omt (brief verify[^`]+)` that/.exec(child.ctx.out())?.[1];
-    assert.ok(device, child.ctx.out());
-    const verify = await project.runOk([...device.split(" "), "--task", "Check the device flow."]);
-    const output = JSON.parse(verify.ctx.out()) as BriefJsonOutput;
-    assert.match(output.delegateTask.task, /depth=3\/3/);
+    const child = await project.runOk(["brief", "qa", "--task", "Check the flow.", ...childFlags.split(" "), "--json"]);
+    const output = JSON.parse(child.ctx.out()) as BriefJsonOutput;
+    assert.match(output.delegateTask.task, /depth=2\/2/);
     assert.deepEqual(output.delegateTask.target, {
       providerInstanceId: "codex", model: "gpt-6.1-sol",
       options: { reasoningEffort: "low", ...(fast ? { serviceTier: "priority" } : {}) },
     });
+  }
+  const deeper = await project.run(["brief", "qa", "--task", "x", "--plan", "dp", "--depth", "3"]);
+  assert.equal(deeper.code, 2);
+});
+
+test("brief fails for the retired verify, quick, and deep roles like any unknown role", async () => {
+  const project = makeProject();
+  for (const role of ["verify", "quick", "deep"]) {
+    const result = await project.run(["brief", role, "--task", "x"]);
+    assert.equal(result.code, 1, role);
+    assert.match(result.ctx.err(), new RegExp(`unknown role ${role}; known roles: `), role);
   }
 });
 
@@ -427,12 +434,12 @@ test("fast role settings map Opus and print unsupported model notes through each
     assert.ok(output.notes.includes(`rung 2: ${sonnetNote}`));
     assert.deepEqual(output.fallbacks[0]?.options, { effort: "low" });
   }
-  const table = await project.runOk(["roles", "--role", "verify", "--capabilities", LIVE_CAPS_FILE, "--json"]);
-  assert.equal((JSON.parse(table.ctx.out()) as RolesReport).roles.verify?.delegateTask?.target.model, "claude-haiku-5-5");
-  project.projectConfig(JSON.stringify({ version: 1, roles: { verify: { fast: true } } }));
-  const unsupported = await project.runOk(["roles", "--role", "verify", "--capabilities", LIVE_CAPS_FILE]);
+  const table = await project.runOk(["roles", "--role", "qa", "--capabilities", LIVE_CAPS_FILE, "--json"]);
+  assert.equal((JSON.parse(table.ctx.out()) as RolesReport).roles.qa?.delegateTask?.target.model, "claude-haiku-5-5");
+  project.projectConfig(JSON.stringify({ version: 1, roles: { qa: { fast: true } } }));
+  const unsupported = await project.runOk(["roles", "--role", "qa", "--capabilities", LIVE_CAPS_FILE]);
   assert.match(unsupported.ctx.out(), /rung 1 claudeAgent\/claude-haiku-5-5: fast mode is not offered/);
-  const fallback = await project.runOk(["route", "verify", "--capabilities", CAPS_FILE]);
+  const fallback = await project.runOk(["route", "qa", "--capabilities", CAPS_FILE]);
   assert.equal((JSON.parse(fallback.ctx.out()) as RouteOutput).delegateTask?.target.model, "claude-sonnet-5-5");
   project.projectConfig(JSON.stringify({ version: 1, roles: {
     execute: { fast: true, chain: [{ driver: "claudeAgent", model: "claude-opus-5-5", options: { fastMode: false } }] },
@@ -464,9 +471,9 @@ test("brief --save writes the full brief and returns a short task and complete l
   assert.deepEqual({ ...output.delegateTask, task: text }, full.delegateTask);
   assert.deepEqual(output.fallbacks, full.fallbacks);
   assert.match(text, new RegExp(`^- CLI: Run omt as ${command.replaceAll(".", "\\.")}\\.$`, "m"));
-  assert.match(text, /^- Tests: .*failureProofs: off$/m);
+  assert.match(text, /^- Tests: write no tests and no failure proofs\./m);
   assert.equal(output.ledger?.dispatched,
-    `${command} ledger add --plan p --unit U4 --role qa --round 2 --attempt 3 --status dispatched --task-id <taskId> --client-request-id ${id} --provider codex --model gpt-6.1-sol`);
+    `${command} ledger add --plan p --unit U4 --role qa --round 2 --attempt 3 --status dispatched --task-id <taskId> --client-request-id ${id} --provider claudeAgent --model claude-haiku-5-5`);
   const recorded = await project.runOk(["ledger", "add", ...output.ledger.dispatched.split(" ledger add ")[1]!.replace("<taskId>", "task-u4").split(" ")]);
   assert.equal((JSON.parse(recorded.ctx.out()) as { clientRequestId: string }).clientRequestId, id);
   assert.equal(existsSync(join(project.cwd, ".omt", "evidence", "briefs", `.${id}.md.tmp`)), false);

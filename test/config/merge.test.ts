@@ -50,12 +50,12 @@ test("a field-only override keeps the old chain", () => {
 test("a layer keeps, sets, or overrides crossFamily on an existing role", () => {
   const { config } = mergeLayer(
     DEFAULT_CONFIG,
-    { roles: { review: { crossFamily: false }, verify: { crossFamily: true }, oracle: { description: "Gate." } } },
+    { roles: { review: { crossFamily: false }, qa: { crossFamily: true }, oracle: { description: "Gate." } } },
     "src",
   );
   assert.equal(config.roles.review?.crossFamily, false);
   assert.deepEqual(config.roles.review?.chain, DEFAULT_CONFIG.roles.review?.chain);
-  assert.equal(config.roles.verify?.crossFamily, true);
+  assert.equal(config.roles.qa?.crossFamily, true);
   assert.equal(config.roles.oracle?.crossFamily, true);
   const second = mergeLayer(config, { roles: { review: { crossFamily: true } } }, "project");
   assert.equal(second.config.roles.review?.crossFamily, true);

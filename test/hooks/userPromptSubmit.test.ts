@@ -88,15 +88,15 @@ test("an unclosed fence hides the rest of the prompt", () => {
   assert.equal(detectUltrawork("```\nx\n```\nulw"), true);
 });
 
-test("ultraworkContext points at omt-ulw step 1, the full loop, and evidence, within 1000 characters", () => {
+test("ultraworkContext gives the build contract: omt-ulw banner first, the main thread builds, one review and one QA child, done with evidence", () => {
   const text = ultraworkContext();
   assert.ok(text.length <= 1000);
   assert.match(text, /ultrawork is on/);
-  assert.match(text, /omt-ulw/);
-  assert.match(text, /step 1/);
-  assert.match(text, /evidence/);
-  assert.match(text, /full loop even for a small task/);
-  assert.match(text, /edit no code/);
+  assert.match(text, /Load the omt-ulw skill .* the banner first, then step 0 and step 1\./);
+  assert.match(text, /You explore, ask question batches, plan, and build in this thread\./);
+  assert.match(text, /One review child and one QA child check the work\./);
+  assert.match(text, /report done only after the checks ran and passed, and quote their output/);
+  assert.doesNotMatch(text, /full loop|edit no code|Children make every product edit/);
 });
 
 test("the hook prints one JSON line on a match", async () => {

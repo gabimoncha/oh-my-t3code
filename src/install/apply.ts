@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { chmod, readdir, rename, rm, rmdir, symlink } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { starterConfig } from "../config/starter.ts";
 import { errorMessage, OmtError } from "../util/errors.ts";
 import { copyDir, ensureDir, hashDir, pathExists, readFileIfExists, writeFileAtomic } from "../util/fs.ts";
@@ -9,7 +9,7 @@ import type { HookChange } from "./claudeHook.ts";
 import { movePath, newBackupDir, projectWriteTarget, writeTargetFor } from "./fsops.ts";
 import { mergeManifest, writeManifest } from "./manifest.ts";
 import type { Manifest, ManifestFile, ManifestHook } from "./manifest.ts";
-import { replaceableSteps, sha256 } from "./plan.ts";
+import { removesRetired, replaceableSteps, sha256 } from "./plan.ts";
 import type { FileStep, HookStep, InstallPlan, PlanAction, SkillStep, UninstallPlan } from "./plan.ts";
 import { BACKUPS_GITIGNORE } from "./project.ts";
 import { PACKAGE_NAME, writeMarker } from "./skills.ts";
@@ -164,6 +164,60 @@ async function removePath(path: string, options: { recursive?: boolean } = {}): 
   }
 }
 
+// Moves a skill out of the skills directory, then deletes it, so a partial delete never leaves a
+// half-removed skill that agents would load. With `hash`, the folder must still have it after the move;
+// else it goes back, so an edit saved after the plan stays.
+async function removeSkillDir(path: string, hash?: string): Promise<void> {
+  const old = scratchPath(dirname(path), "old");
+  try {
+    await rename(path, old);
+  } catch (error) {
+    throw new OmtError("remove", `cannot move ${path} out of the skills directory: ${errorMessage(error)}`, {
+      hint: "fix the permissions, then run the command again",
+      cause: error,
+    });
+  }
+  if (hash !== undefined && (await hashDir(old).catch(() => undefined)) !== hash) {
+    if (!(await pathExists(path))) await rename(old, path);
+    throw new OmtError("file_changed", `${path} changed after the plan was made; it was kept, and nothing more was written`, {
+      hint: "run the command again",
+    });
+  }
+  await removeScratch(old);
+}
+
+// Removes the links to the retired skills, then the skills. A `replace` skill goes to the backups.
+async function removeRetired(plan: InstallPlan, backupDir: () => Promise<string>, result: ApplyResult): Promise<void> {
+  for (const link of plan.links) {
+    if (!removesRetired(link)) continue;
+    await removePath(link.path);
+    result.changed.push(link.path);
+  }
+  for (const step of plan.skills) {
+    if (!removesRetired(step)) continue;
+    if (step.action === "replace") {
+      const backup = join(await backupDir(), "agents", step.name);
+      await movePath(step.path, backup);
+      result.backups.push(backup);
+    } else {
+      await removeSkillDir(step.path, step.installedHash);
+    }
+    result.changed.push(step.path);
+  }
+}
+
+// The record after a run that removed retired skills: the merge keeps every name of the previous
+// manifest, so the names and links of skills that this plan no longer keeps go here.
+function pruneRetired(manifest: Manifest, plan: InstallPlan): Manifest {
+  const kept = new Set(plan.skills.filter((step) => !removesRetired(step)).map((step) => step.name));
+  const removedLinks = new Set(plan.links.filter(removesRetired).map((link) => link.path));
+  return {
+    ...manifest,
+    skills: manifest.skills.filter((name) => kept.has(name)),
+    links: manifest.links.filter((link) => !removedLinks.has(link.path) && kept.has(basename(link.path))),
+  };
+}
+
 // Returns the created files that this run wrote, with the hash of what it wrote.
 async function applyProjectInstall(
   plan: InstallPlan,
@@ -258,9 +312,11 @@ function installManifest(plan: InstallPlan, now: Date, fields: Pick<Manifest, "c
     skillsRoot: plan.agentsRoot,
     // A project manifest lists only what an install owns; `project.existing` lists the rest.
     skills: plan.skills
+      .filter((step) => !removesRetired(step))
       .filter((step) => owns(plan, step.action, ownedSkills.has(step.name), plan.project?.existing.skills.includes(step.name) === true))
       .map((step) => step.name),
     links: plan.links
+      .filter((link) => !removesRetired(link))
       .filter((link) => owns(plan, link.action, ownedLinks.has(link.path), plan.project?.existing.links.includes(link.path) === true))
       .map((link) => ({ path: link.path, target: link.target })),
     ...fields,
@@ -343,8 +399,10 @@ export async function applyInstall(plan: InstallPlan, now: Date): Promise<ApplyR
   const skipHookBackup = skipsHookBackup(plan);
   await beginProjectInstall(plan, now, hookCreated, starter, await plannedBackupsIgnore(plan, skipHookBackup));
   await removeScratchDirs(plan.scratch, result);
+  await removeRetired(plan, backupDir, result);
 
   for (const step of plan.skills) {
+    if (step.retired === true) continue;
     if (step.action === "replace") {
       const backup = join(await backupDir(), "agents", step.name);
       await movePath(step.path, backup);
@@ -357,6 +415,7 @@ export async function applyInstall(plan: InstallPlan, now: Date): Promise<ApplyR
   }
 
   for (const link of plan.links) {
+    if (link.retired === true) continue;
     if (link.action === "replace") {
       const backup = join(await backupDir(), link.root, link.name);
       await movePath(link.path, backup);
@@ -392,7 +451,7 @@ export async function applyInstall(plan: InstallPlan, now: Date): Promise<ApplyR
     backups: result.backups,
     project: plan.project === undefined ? undefined : projectRecord(plan, [...createdFiles, ...createdIgnores], await existing(plan.project.missingDirs)),
   });
-  await writeManifest(plan.manifestPath, mergeManifest(plan.previous, manifest));
+  await writeManifest(plan.manifestPath, pruneRetired(mergeManifest(plan.previous, manifest), plan));
   return result;
 }
 
@@ -422,17 +481,7 @@ export async function applyUninstall(plan: UninstallPlan, now: Date): Promise<Ap
       result.changed.push(skill.path);
       continue;
     }
-    // Move out first so a partial delete never leaves a half-removed skill that agents would load.
-    const old = scratchPath(dirname(skill.path), "old");
-    try {
-      await rename(skill.path, old);
-    } catch (error) {
-      throw new OmtError("remove", `cannot move ${skill.path} out of the skills directory: ${errorMessage(error)}`, {
-        hint: "fix the permissions, then run the command again",
-        cause: error,
-      });
-    }
-    await removeScratch(old);
+    await removeSkillDir(skill.path);
     result.changed.push(skill.path);
   }
   for (const hook of plan.hooks) await writeHook(hook, backupDir, result, false, plan.project?.root);
