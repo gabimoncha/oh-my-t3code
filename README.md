@@ -146,7 +146,7 @@ The [walkthrough](docs/walkthrough.md) follows two real runs on this repository,
 
 ## Limits
 
-- This is version 0.3. The config format and the CLI output can change.
+- This is version 0.4. The config format and the CLI output can change.
 - A run has no task budget. At most 6 child tasks run at the same time by default (`limits.maxParallel`).
 - The `ulw` keyword works only in Claude Code. In Codex, type `$omt-ulw`.
 - `omt-swarm` needs a thread in `full-access` runtime mode and `default` interaction mode.
