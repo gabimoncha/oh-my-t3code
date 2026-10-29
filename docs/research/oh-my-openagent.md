@@ -733,6 +733,8 @@ This section is recommendation, not fact. T3 capabilities are taken from the T3 
 | 18 | Claude Code compatibility layer | Providers load their own config | **Does not fit** |
 | 19 | Memory, computer use, thread gateway, telemetry | Out of scope | **Does not fit** |
 
+Note, 2026-10-28: the workflow fold rejects option B of rank 6 for omt: no flow uses a `schedule_task` heartbeat, and omt-loop was removed. For rank 9, the fold removed the per-run task budget (`limits.maxTasksPerRun`) and kept `maxParallel` and `maxDepth`. See [the workflow fold design](../design/workflow-fold.md).
+
 ### 13.3 Design notes to carry over
 
 - Fail closed on identity. OmO never continues a run when it cannot prove which session owns it (`ulw-loop/index.ts:222-227`). oh-my-t3code state should key on the T3 thread id.

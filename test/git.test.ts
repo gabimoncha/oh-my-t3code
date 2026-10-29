@@ -21,6 +21,7 @@ function project() {
       defaultBranch: string | null;
       value: string | null;
       reason: string;
+      maxPrFiles: number | null;
     };
   };
   return { root, cwd, git, env, config, check };
@@ -102,4 +103,26 @@ test("git merge outside a repo uses the merge value", async () => {
   assert.equal(result.value, "auto");
   assert.equal(result.branch, null);
   assert.equal(result.defaultBranch, null);
+});
+
+test("git check prints the PR file limit of the profile", async () => {
+  const p = project();
+  p.git(["checkout", "-q", "-b", "feat/x"]);
+  p.git(["remote", "add", "origin", "git@github.com:alice/app.git"]);
+  assert.equal((await p.check("pr", p.cwd, "--user", "alice")).maxPrFiles, 100);
+  p.config({ profiles: { normal: { workflow: { git: { maxPrFiles: 0 } } } } });
+  assert.equal((await p.check("pr", p.cwd, "--user", "alice")).maxPrFiles, 0);
+  p.config({ defaults: "2026-11" });
+  assert.equal((await p.check("pr", p.cwd, "--user", "alice")).maxPrFiles, null);
+});
+
+test("git check asks when maxPrFiles is out of range", async () => {
+  const p = project();
+  p.git(["checkout", "-q", "-b", "feat/x"]);
+  p.git(["remote", "add", "origin", "git@github.com:alice/app.git"]);
+  p.config({ profiles: { normal: { workflow: { git: { maxPrFiles: 10001 } } } } });
+  const ctx = fakeContext({ root: p.root, cwd: p.cwd, env: p.env, argv: ["check", "pr", "--user", "alice", "--json"] });
+  assert.equal(await run(ctx), 0);
+  assert.match(ctx.err(), /maxPrFiles: must be an integer from 0 to 10000, got 10001/);
+  assert.equal(JSON.parse(ctx.out()).decision, "ask");
 });

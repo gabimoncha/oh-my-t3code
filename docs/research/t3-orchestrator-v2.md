@@ -579,6 +579,8 @@ This section is design advice. It is separate from the facts above.
 7. Treat `parent_not_active`, `provider_unavailable`, and `model_unavailable` as recoverable. Fall back to another model or provider listed in the capabilities.
 8. Use `t3_thread_read` with `view: "activity"` and `afterPosition` to inspect a stuck child without acknowledging it. Use `t3_thread_wait` when only status is needed.
 
+Note, 2026-10-28: the workflow fold rejects recommendations 2 and 6 for omt. The main thread waits for children inside its turn, with `mode: "wait"` or with `t3_thread_wait`, and no flow uses a heartbeat. See [the workflow fold design](../design/workflow-fold.md).
+
 ## 4. Open questions
 
 - Does acknowledgment of a terminal result through `task_status` cancel a wake message that is already queued but not yet started? The acknowledge command handler at `apps/server/src/orchestration-v2/Orchestrator.ts:1860-2030` was not traced in full.

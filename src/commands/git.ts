@@ -17,7 +17,8 @@ policy for the action: auto (act with no question), ask (ask the owner
 first), or off (do not act). Only the user's own repos and PRs get auto:
 each origin URL is on --host and its owner is --user or is in
 workflow.git.owners, each push URL names the fetch URL's repo, and the
-PR author, when given, is --user.
+PR author, when given, is --user. --json also prints maxPrFiles, the most
+changed files in one PR (0 means no limit, null means unset).
 
 Options:
   --user <login>       the user's GitHub login on --host
@@ -33,7 +34,7 @@ const ACTIONS = ["commit", "push", "pr", "merge"] as const;
 type Action = (typeof ACTIONS)[number];
 
 type Decision = "auto" | "ask" | "off";
-type PolicyKey = Exclude<keyof GitPolicy, "owners">;
+type PolicyKey = Exclude<keyof GitPolicy, "owners" | "maxPrFiles">;
 
 function keyFor(action: Action, branch: string | undefined, defaultBranch: string | undefined): PolicyKey | null {
   if (action === "merge") return "merge";
@@ -83,6 +84,7 @@ export const run: CommandRun = async (ctx) => {
   const loginHost = values.host ?? "github.com";
   const prAuthor = values["pr-author"];
   const on = state.branch === undefined ? "" : ` on branch ${state.branch}`;
+  let maxPrFiles: number | null = null;
   const print = (output: { decision: Decision; key: PolicyKey | null; value: string | null; reason: string }) => {
     const full = {
       action,
@@ -97,6 +99,7 @@ export const run: CommandRun = async (ctx) => {
       key: output.key,
       value: output.value,
       reason: output.reason,
+      maxPrFiles,
     };
     ctx.stdout(values.json === true ? formatJson(full) : `${full.decision}: ${full.reason}\n`);
     return 0;
@@ -106,6 +109,7 @@ export const run: CommandRun = async (ctx) => {
     return print({ decision: "ask", key: null, value: null, reason: `config error: ${loaded.message}; fix the config first` });
   }
   const { config, profile, issues } = loaded;
+  maxPrFiles = profile.workflow.git?.maxPrFiles ?? null;
   const configError = [...issues, ...profile.issues].find((issue) => issue.severity === "error");
   const key = keyFor(action, state.branch, state.defaultBranch);
   const value = key === null ? null : profile.workflow.git?.[key] ?? null;

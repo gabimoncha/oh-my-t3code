@@ -73,6 +73,7 @@ export const WORKFLOW_RULES = {
     defaultBranch: { values: ["ask", "auto"] },
     merge: { values: ["ask", "auto"] },
     owners: { strings: GIT_OWNER_PATTERN },
+    maxPrFiles: { minimum: 0, maximum: 10000 },
   },
 } as const satisfies Record<keyof Workflow, Record<string, WorkflowRule>>;
 

@@ -12,8 +12,8 @@ A role names a kind of work. The config maps each role to a chain of rungs (prov
 | `plan-review` | read-only | review | Checking a plan for gaps before any unit runs. Cross-family. Pass the plan author's provider with `--against`. |
 | `grill` | read-only | grill | Testing a goal before it has a plan: edge cases, open questions, and options. Cross-family. One child per grill, with the main thread's family in `--against`. |
 | `execute` | edit | work | One large planned unit with a disjoint scope, built as an independent track while the main thread builds the rest. |
-| `review` | read-only | review | One review round of a diff against its brief. Fixes local findings when its access allows edits, and reports the rest. Cross-family. Pass the author's family with `--against`. |
-| `oracle` | read-only | review | The final gate. Attack the finished change from the family other than the main implementer's. Fixes local findings when its access allows edits. Cross-family. |
+| `review` | edit from set 2026-12; read-only in 2026-10 and 2026-11 | review | One review round of a diff against its brief. Fixes local findings when its access allows edits, and reports the rest. Cross-family. Pass the author's family with `--against`. |
+| `oracle` | edit from set 2026-12; read-only in 2026-10 and 2026-11 | review | The final gate. Attack the finished change from the family other than the main implementer's. Fixes local findings when its access allows edits. Cross-family. |
 | `qa` | edit | test | Running the given check commands and device flows for a verdict with exit codes, logs, and screenshots. Edits nothing and writes no tests. |
 | `guardrail` | read-only | guardrail | Turning review findings into deterministic checks and rule fixes. Proposes changes and edits no files. |
 | `writing` | edit | work | Documentation and other prose. |
@@ -41,6 +41,8 @@ ELECTRON_RUN_AS_NODE=1 "$T3_ACP_MCP_NODE" ${T3_ACP_MCP_ENTRYPOINT:+"$T3_ACP_MCP_
 ## Resolve by hand
 
 When neither `omt` nor `.omt/bin/omt` is found (see [The CLI](delegation.md#the-cli)), use the default chains below, or the chains in `.omt/config.jsonc` and `~/.config/oh-my-t3code/config.jsonc` when they exist (the project file wins).
+
+Use the access and interaction mode of the selected default set. In sets 2026-10 and 2026-11, `review` and `oracle` are read-only and run in `plan` interaction mode.
 
 | Role | Rung 1 | Rung 2 | Rung 3 |
 | --- | --- | --- | --- |
@@ -95,6 +97,7 @@ A role with `crossFamily: true` reviews from the family other than the worker's.
 - `--against <provider|driver>` names the worker. A provider instance id, in `--against` or in a rung without a `driver`, maps to its driver through `--capabilities`, or through a configured rung that names both the provider and the driver. When no rung is in the worker's family, a note says so and the configured order applies.
 - `--against auto` reads the worker from `.omt/ledger.jsonl` and needs `--plan`. With `--unit`, when that unit has a work or plan dispatch, the worker is the provider of its last one. When the unit has none, or `--unit` is missing, the worker is the provider that most units of the plan ran on.
 - The CLI tries the rungs outside the worker's family first. When none can run, the worker's family reviews, and a note says so.
+- A workflow that requires the other family checks each target before dispatch and stops instead of using that fallback: `omt-ulw`, the pre-merge `omt-swarm` review, `omt-plan` with `two-families`, and the `omt-grill` second opinion.
 - Without `--against`, the configured order applies.
 - On a role without `crossFamily`, `--against` has no effect.
 

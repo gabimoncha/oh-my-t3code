@@ -39,7 +39,7 @@ test("the presets store a full normal workflow and sparse prototype and PR overr
       reviewers: "auto", families: "one", oracle: "on", fixLoop: "offer", ci: "check", verify: "off",
       tests: "off", guardrails: "off", crap: "off",
     },
-    git: { branchCommits: "auto", pullRequests: "auto", defaultBranch: "ask", merge: "ask", owners: [] },
+    git: { branchCommits: "auto", pullRequests: "auto", defaultBranch: "ask", merge: "ask", owners: [], maxPrFiles: 100 },
   });
   assert.equal(prototype.extends, "normal");
   assert.deepEqual(prototype.limits, { maxReviewRounds: 2 });

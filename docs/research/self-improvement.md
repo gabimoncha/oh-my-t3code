@@ -2,6 +2,8 @@
 
 Snapshot: prime-agent clone at commit `2ed8356` ("feed the tray context usage off the attach snapshot (#3334)"). deepseek-harness clone at commit `5badb15` ("Merge pull request #5648 from deepseek-harness/worktree/release-dsh-0.2.1-alpha.1"). Both from `git -C <clone> log --oneline -1`. Research date: 2026-10-07. I read both clones as data. I ran no script, build, or installer from them.
 
+> Note, 2026-10-28: the workflow fold changed omt after this research. omt-ulw is now a main-thread build flow. The main thread builds and fixes, one review child and one QA child check, and the main thread waits for children inside its turn. omt-loop, the stall heartbeat, per-unit dispatch, and the task budget (`limits.maxTasksPerRun`) were removed, and omt-review was renamed omt-code-review. Skill step numbers and `omt:` line cites below refer to the skills before that change. See [the workflow fold design](../design/workflow-fold.md).
+
 ## Path conventions
 
 - `pa:` is the root of a clone of https://github.com/PrimeIntellect-ai/prime-agent at commit `2ed8356`.
@@ -355,7 +357,7 @@ A lesson is additive. The existing `.omt/roles/<role>.md` override replaces a wh
 | `omt-retro` skill (user-invoked) | Any time, over one plan or `--since <days>` | 1 child per batch |
 | Scheduled retro | Only when the user asks. A weekly `schedule_task` bound to one thread runs `omt-retro --since 7d` | 1 child per week |
 
-The scheduled retro uses the existing `omt-loop` pattern for `schedule_task` (`skills/omt-loop/SKILL.md:32-47`). Each firing only proposes. It never accepts.
+The scheduled retro uses the existing `omt-loop` pattern for `schedule_task` (`skills/omt-loop/SKILL.md:32-47`). (omt-loop was removed on 2026-10-28; see [the workflow fold design](../design/workflow-fold.md).) Each firing only proposes. It never accepts.
 
 #### The retro procedure (skill text, judgment)
 
@@ -508,7 +510,7 @@ New path helpers in `src/paths.ts`: `lessonsPath(root)`, `userLessonsPath(env, h
   - Step 3 reads the active plan lessons and applies them.
   - Step 4 saves the round-1 plan snapshot before it fixes blockers, and records plan-review results with `--result-file`.
   - New step 6 Retro.
-- **`omt-review`.** Reviewer personas and the merged findings use the tagged finding line.
+- **`omt-code-review`.** Reviewer personas and the merged findings use the tagged finding line.
 - **Personas.** `roles/review.md`, `roles/oracle.md`, and `roles/plan-review.md` add one line on the tag.
 - **New skill `omt-retro` (user-invoked).** Cross-plan retros, routing suggestions, retirement proposals, skill proposals, and the opt-in weekly schedule.
 - **Router `omt`.** Lists `omt-retro`.

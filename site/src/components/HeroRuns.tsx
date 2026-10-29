@@ -15,14 +15,14 @@ const RUNS: { id: Run; skill: string; label: string; goal: string; note: string 
     skill: "omt-ulw",
     label: "One goal, one change",
     goal: "ulw add OAuth to the API",
-    note: "Three units. Codex reviews Claude's work, and Claude reviews Codex's work. A review that requests changes sends the unit back for a fix, and the second pass shows in yellow.",
+    note: "The agent plans and builds three units in its own thread. A Codex child reviews Claude's change, and a QA child runs the checks. A finding goes back for a fix, and the second pass shows in yellow.",
   },
   {
     id: "swarm",
     skill: "omt-swarm",
-    label: "One pull request per track",
-    goal: "omt-swarm split the API",
-    note: "Three independent tracks. Each runs in its own T3 worktree thread, at its own speed, and ends in its own pull request. The tracks never merge.",
+    label: "One plan, many tracks",
+    goal: "omt-swarm build the API plan",
+    note: "Three tracks from one plan. Each builds and checks in its own T3 worktree thread, at its own speed. Then one review, one merge, one QA run, and one pull request.",
   },
 ];
 

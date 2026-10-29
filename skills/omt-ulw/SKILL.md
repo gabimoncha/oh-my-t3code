@@ -28,7 +28,7 @@ The shared T3 rules are in [delegation.md](../omt/references/delegation.md); rea
 - Read only the part of a child's evidence that your next action needs: the exit codes and the last lines of a QA log, or the hunks of a reviewer's fix diff.
 - On a T3 failure code, follow the table in [delegation.md](../omt/references/delegation.md#failure-codes).
 - Tick plan items only with `omt plan mark <slug> <id> <done|open|blocked>`.
-- After a context reset, read the plan (`omt plan status <slug>`), the ledger (`omt ledger list --plan <slug>`), and the profile (step 3) before you act.
+- After a context reset, read the plan (`omt plan status <slug>`), the ledger (`omt ledger list --plan <slug>`), and the profile (step 2) before you act.
 - Ask each owner question once. Later status messages do not repeat open questions.
 
 ## Steps
@@ -51,6 +51,12 @@ Done when: the message is a goal, or `omt-research` has the question.
 
 ### 2. Explore
 
+Pick the plan slug before the first brief. It matches `^[a-z0-9][a-z0-9-]{0,63}$`. Keep this slug for the whole run.
+
+Read the profile. When the plan file exists, run `omt profile show --plan <slug> --json`. Before the plan exists, run `omt profile show --json`, or `omt profile show <name> --json` for `ulw --profile <name>`. Keep the effective `profile`, `workflow`, `limits`, `roles`, and `models`. Run `omt roles --plan <slug>` for the targets. Before the plan file exists, pass the run's `--profile <name>` to every `omt brief`, `omt roles`, and `omt route` command. [The CLI](../omt/references/delegation.md#the-cli) says where to find the CLI. Without it, resolve the profile from config and use [roles.md](../omt/references/roles.md#resolve-by-hand).
+
+Before each explore dispatch, run `omt ledger stats --plan <slug>`. When the plan file exists, use `can dispatch`. Otherwise compare `active` with the selected profile's `limits.maxParallel`.
+
 Read the code that the goal touches yourself. Send only broad reads to 1 to `maxParallel` read-only `explore` children, one narrow question each, in parallel. Use `--plan <slug> --unit E<k> --round 1 --attempt 1 --title "explore E<k>: <question>"`. Dispatch them with `mode: "async"`, record each dispatch, and wait for them in this turn.
 
 Done when: you can name the files and functions that the change touches, each with a `path:line` citation.
@@ -63,7 +69,7 @@ Write down the objective in one sentence, the done conditions, the tier, and the
 - Tier LIGHT: one or two units, one area of code, no design decision left. Tier HEAVY: anything else.
 - The slug matches `^[a-z0-9][a-z0-9-]{0,63}$`, for example `http-retry`. Explore briefs and `omt ledger stats` need it before the plan file exists.
 
-Read the profile. When the plan file exists, run `omt profile show --plan <slug> --json`. Before the plan exists, run `omt profile show --json`, or `omt profile show <name> --json` for `ulw --profile <name>`. Keep the effective `profile`, `workflow`, `limits`, `roles`, and `models`. Run `omt roles --plan <slug>` for the targets. Before the plan file exists, pass the run's `--profile <name>` to every `omt brief`, `omt roles`, and `omt route` command. [The CLI](../omt/references/delegation.md#the-cli) says where to find the CLI. Without it, resolve the profile from config and use [roles.md](../omt/references/roles.md#resolve-by-hand).
+Use the slug and profile selected in step 2.
 
 When the owner switches the plan's profile with `omt plan profile <slug> <name>`, read the profile again and use the new values for the remaining steps.
 
@@ -114,7 +120,7 @@ Build the units in the order of the `ready:` line of `omt plan status <slug>`. F
 
 A `ui` unit follows its design spec. When your `modelSelection` is a Claude Opus model, build it yourself. Otherwise send it to a `ui` child as an independent track (below). When `ui` cannot run, stop and tell the user. Do not fall back to `execute` or to another family.
 
-Independent track: a large unit with a scope that no other open unit touches may go to an `execute` child, or to a `ui` child for a `ui` unit. Build its brief with `omt brief <role> --task-file - --title "<role> <unit>: <short unit title>" --scope ... --done ... --verify ... --plan <slug> --unit <id> --round 1 --attempt 1 --save --json`. Dispatch only while `omt ledger stats --plan <slug>` reports `can dispatch: yes`. Dispatch it with `mode: "async"`, run its printed `ledger.dispatched` line, and build the other units while it runs. Then wait for it ([delegation.md](../omt/references/delegation.md#waiting)), record the result, and settle the child ([delegation.md](../omt/references/delegation.md#releasing-children)). Check its `DONE` claim as [results.md](../omt/references/results.md#a-claim-is-not-evidence) says, and run its verify command yourself before you mark the unit done.
+Independent track: a large unit with a scope that no other open unit touches may go to an `execute` child, or to a `ui` child for a `ui` unit. Build its brief with `omt brief <role> --task-file - --title "<role> <unit>: <short unit title>" --scope ... --done ... --verify ... --plan <slug> --unit <id> --round 1 --attempt 1 --save --json`. Dispatch only while `omt ledger stats --plan <slug>` reports `can dispatch: yes`. Dispatch it with `mode: "async"`, run its printed `ledger.dispatched` line, and build the other units while it runs. Then wait for it ([delegation.md](../omt/references/delegation.md#waiting)), record the result, and settle the child ([delegation.md](../omt/references/delegation.md#releasing-children)). Check its `DONE` claim as [results.md](../omt/references/results.md#a-claim-is-not-evidence) says, and run its verify command yourself. Then write its planned tests and make its failure proofs with items 3 and 4 above. Run those planned tests and the verify command again. Both must pass before you mark the unit done.
 
 Run each shared build or test command as [delegation.md](../omt/references/delegation.md#shared-builds) says.
 
@@ -135,6 +141,8 @@ The task tells the reviewer to run `git status --porcelain -- <scope paths>` and
 Before you dispatch the review, stage your work with `git add -A -- <scope paths>`. The reviewer's fixes then stay unstaged, so step 9 can read them apart from your work.
 
 Build the brief with `omt brief <review|oracle> --task-file - --context-file <file> --scope <path> ... --title "<role>: <slug>" --plan <slug> --unit <REVIEW|F2> --round <n> --attempt 1 --against <your family> --save --json`. `<your family>` is the driver from step 0, such as `claudeAgent` or `codex`, so that the reviewer runs on the other family. From round 2, pass every prior finding with its response in `--prior-file`. Dispatch it with `mode: "wait"` and record the dispatch and the result.
+
+Before each dispatch or fallback, check the target's family with [roles.md](../omt/references/roles.md#cross-family-roles). When it is your family, stop and report that no reviewer from the other family can run. The CLI can return a same-family fallback even with `--against`.
 
 Review and QA never run at the same time, because the reviewer edits files.
 
@@ -169,7 +177,7 @@ Done when: the QA result is recorded and every check passed, or step 11 has the 
 
 ### 11. Fix failed checks
 
-For each failed check, find the cause in the last lines of its log, fix it yourself, and run the check yourself. Then dispatch QA again for only the failed checks, with the next `--round`. A busy lock or a failure in a file outside the run's scope follows [delegation.md](../omt/references/delegation.md#shared-builds).
+For each failed check, find the cause in the last lines of its log, fix it yourself, and run the check yourself. Then dispatch QA again for only the failed checks, with the next `--round`. After a check passes, mark its `D` and `F` items done as in step 10. A busy lock or a failure in a file outside the run's scope follows [delegation.md](../omt/references/delegation.md#shared-builds).
 
 Run at most 2 QA re-runs. When a check still fails after the second re-run, stop: run the settle sweep ([delegation.md](../omt/references/delegation.md#releasing-children)) and ask the owner, with each failed command, its exit code, and its log path.
 

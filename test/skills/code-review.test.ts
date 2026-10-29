@@ -365,7 +365,7 @@ test("omt-code-review pins PR 11. Offers", () => {
   assert.match(text, /Ask the owner and wait for yes on the exact test lines\./);
   assert.match(text, /The `qa` role edits nothing and writes no tests, so a `qa` child never writes them\./);
   assert.match(text, /After yes, write only the approved tests yourself in the main thread\./);
-  assert.match(text, /For a large set, such as more than 3 test files, send the approved lines to one `execute` child in this checkout instead: `--unit FIX`, an explicit scope of the test files, and `mode: "wait"`\./);
+  assert.doesNotMatch(text, /send the approved lines to one `execute` child/);
   assert.match(text, /Then dispatch one `qa` child with `mode: "wait"` to run the new tests and return each exit code with its log\./);
   assert.match(text, /Name the PR's changed paths, excluding `docs\/design\/`, as the code under test in the `qa` task\./);
   assert.match(text, /With `review\.tests: off`, offer no tests\./);

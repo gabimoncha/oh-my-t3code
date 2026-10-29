@@ -481,6 +481,11 @@
                 "type": "string",
                 "pattern": "^[A-Za-z0-9][A-Za-z0-9-]{0,38}$"
               }
+            },
+            "maxPrFiles": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10000
             }
           }
         }

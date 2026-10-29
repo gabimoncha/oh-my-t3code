@@ -71,6 +71,15 @@ test("the skill tour moves the pointer by itself and stops on a click", async ({
   await page.goto("/");
   const tour = page.locator(".skill-tour");
   const rows = page.getByRole("tab").filter({ has: page.locator(".skill-name") });
+  await expect(rows.locator(".skill-name code")).toHaveText([
+    "omt-ulw",
+    "omt-plan",
+    "omt-design",
+    "omt-code-review",
+    "omt-research",
+    "omt-swarm",
+    "omt",
+  ]);
   await tour.scrollIntoViewIfNeeded();
   await expect(tour).toHaveAttribute("data-play", "");
   await expect(rows.nth(0)).toHaveAttribute("aria-selected", "true");

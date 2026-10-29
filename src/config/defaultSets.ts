@@ -290,6 +290,14 @@ const SET_2026_12: OmtConfig = (() => {
     defaults: "2026-12",
     profiles: {
       ...base.profiles,
+      normal: {
+        ...base.profiles.normal!,
+        workflow: {
+          ...base.profiles.normal!.workflow,
+          // omt defaults to 100, the file limit of a CodeRabbit review on its free plan for open-source repos, as of 2026-10.
+          git: { ...base.profiles.normal!.workflow?.git, maxPrFiles: 100 },
+        },
+      },
       prototype: {
         ...base.profiles.prototype!,
         description: "Build a prototype with fewer reviews and no failure proofs.",

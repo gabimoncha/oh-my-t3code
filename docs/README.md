@@ -8,11 +8,12 @@ Start with the page that fits your task. The [project README](../README.md) has 
 | [releasing.md](releasing.md) | You are the owner, and you publish a new version to npm and GitHub. |
 | [agents/quickstart.md](agents/quickstart.md) | You are a coding agent, and your user asked you to evaluate, install, or use omt. |
 | [configuration.md](configuration.md) | You change the models of a role, add a custom role or profile, or set fast mode. |
-| [workflows.md](workflows.md) | You want to know how a pull request review runs, how omt adds tests, or how parallel workers share builds. |
+| [workflows.md](workflows.md) | You want to know how a build, a plan, a parallel swarm, or a pull request review runs, how omt adds tests, or how parallel workers share builds. |
 | [commands.md](commands.md) | You look up an `omt` command. |
-| [walkthrough.md](walkthrough.md) | You want to see two real runs: the plan, the tasks by role, the reviews, and the result. |
+| [walkthrough.md](walkthrough.md) | You want to see two real runs from before the workflow fold: the plan, the tasks by role, the reviews, and the result. |
 | [spec.md](spec.md) | You change the code, the skills, or the tests. The spec is the contract for all three. |
 | [design.md](design.md) | You want to know why each part of omt exists, and what is out of scope. |
+| [design/](design/) | You want the design of one change, such as the [workflow fold](design/workflow-fold.md) that moved the build into the main thread. |
 | [architecture.html](architecture.html) | You want the architecture with diagrams. Open the file in a browser. It is one self-contained page. |
 | [research/](research/) | You want background. See the next section. |
 

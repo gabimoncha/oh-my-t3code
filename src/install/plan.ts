@@ -6,6 +6,7 @@ import {
   configDir,
   evidenceDir,
   findProjectRoot,
+  isWithin,
   ledgerPath,
   manifestPath,
   omtDir,
@@ -22,13 +23,13 @@ import {
 import { loadConfig } from "../config/load.ts";
 import type { Capabilities, CliContext, HarnessReport } from "../types.ts";
 import { usageError } from "../util/errors.ts";
-import { errorCode, hashDir, isSymlink, pathExists, readFileIfExists, realOrSelf } from "../util/fs.ts";
+import { errorCode, hashDir, isSymlink, lstatIfExists, pathExists, readFileIfExists, realOrSelf } from "../util/fs.ts";
 import { plural } from "../util/output.ts";
 import { hookCommand, planHookInstall, planHookRemoval, shimHookCommand } from "./claudeHook.ts";
 import type { HookChange } from "./claudeHook.ts";
 import { projectWriteTarget, resolveReal } from "./fsops.ts";
 import { allDetected, DEFAULT_HARNESSES, detectHarnesses, formatHarnessLine, formatHarnessValue, harnessEffects } from "./harness.ts";
-import { planLinks } from "./links.ts";
+import { classifyLink, planLinks } from "./links.ts";
 import type { LinkRoot, LinkRootName, SkippedRoot } from "./links.ts";
 import { manifestText, readManifest, rebaseManifest } from "./manifest.ts";
 import type { Manifest, ManifestExcludeFile, ManifestExisting, ManifestFile } from "./manifest.ts";
@@ -404,12 +405,18 @@ function existingPaths(plan: InstallPlan): ManifestExisting {
   const keeps = (action: PlanAction, wasExisting: boolean, owned: boolean) =>
     (action === "unchanged" || action === "update") && (wasExisting || !owned);
   return {
-    skills: plan.skills
-      .filter((step) => keeps(step.action, existing?.skills.includes(step.name) === true, ownedSkills.has(step.name)))
-      .map((step) => step.name),
-    links: plan.links
-      .filter((link) => keeps(link.action, existing?.links.includes(link.path) === true, ownedLinks.has(link.path)))
-      .map((link) => link.path),
+    skills: [
+      ...(existing?.skills ?? []).filter((name) => !plan.skills.some((step) => step.name === name)),
+      ...plan.skills
+        .filter((step) => keeps(step.action, existing?.skills.includes(step.name) === true, ownedSkills.has(step.name)))
+        .map((step) => step.name),
+    ],
+    links: [
+      ...(existing?.links ?? []).filter((path) => !plan.links.some((link) => link.path === path)),
+      ...plan.links
+        .filter((link) => keeps(link.action, existing?.links.includes(link.path) === true, ownedLinks.has(link.path)))
+        .map((link) => link.path),
+    ],
   };
 }
 
@@ -661,14 +668,16 @@ export function removesRetired(step: { retired?: boolean; action: PlanAction }):
 }
 
 // The names of the skills that an earlier install of this scope wrote and that the bundle no longer
-// ships. A skill counts only when the manifest lists it and its folder holds the omt marker, the check
-// that the uninstall makes. A folder in place before a project install stays the user's.
+// ships. Ownership is tied to the recorded root. Missing folders still count so install can remove
+// their recorded dangling links. A folder in place before a project install stays the user's.
 export async function retiredSkills(agentsRoot: string, manifest: Manifest | undefined, shipped: readonly string[]): Promise<string[]> {
+  if (manifest === undefined || manifest.skillsRoot === "" || await resolveReal(manifest.skillsRoot) !== await resolveReal(agentsRoot)) return [];
   const existing = manifest?.project?.existing?.skills ?? [];
   const names: string[] = [];
   for (const name of manifest?.skills ?? []) {
     if (shipped.includes(name) || existing.includes(name) || name !== basename(name) || name === "." || name === "..") continue;
-    if (await isManagedDir(join(agentsRoot, name))) names.push(name);
+    const path = join(agentsRoot, name);
+    if (await isManagedDir(path) || await lstatIfExists(path) === undefined) names.push(name);
   }
   return names;
 }
@@ -681,8 +690,9 @@ async function planRetired(paths: ScopePaths, manifest: Manifest | undefined, bu
   const linkRoots = Object.entries(paths.linkRoots) as [LinkRootName, string][];
   for (const name of names) {
     const path = join(paths.agentsRoot, name);
+    const missing = await lstatIfExists(path) === undefined;
     const step: SkillStep = { name, source: "", path, sourceHash: "", action: "remove", reason: "no longer shipped", retired: true };
-    if (await isLocallyModified(path)) {
+    if (!missing && await isLocallyModified(path)) {
       step.action = "conflict";
       step.reason = "locally modified";
     } else {
@@ -690,14 +700,18 @@ async function planRetired(paths: ScopePaths, manifest: Manifest | undefined, bu
       if (hash !== undefined) step.installedHash = hash;
     }
     skills.push(step);
-    const real = await nativeRealOrSelf(path);
+    const candidates = linkRoots.map(([root, dir]) => ({ root, path: join(dir, name) }));
+    for (const link of manifest?.links ?? []) {
+      if (basename(link.path) !== name || (paths.root !== undefined && !isWithin(paths.root, link.path))) continue;
+      candidates.push({ root: "claude", path: link.path });
+    }
     const seen = new Set<string>();
-    for (const [root, dir] of linkRoots) {
-      const linkPath = join(dir, name);
-      const key = join(await resolveReal(dir), name);
+    for (const { root, path: linkPath } of candidates) {
+      const key = join(await resolveReal(dirname(linkPath)), name);
       if (seen.has(key) || existingLinks.includes(linkPath)) continue;
       seen.add(key);
-      if ((await managedLinkTarget(linkPath)) !== real) continue;
+      if (missing && !manifest?.links.some((link) => link.path === linkPath)) continue;
+      if ((await classifyLink(linkPath, path)).action !== "unchanged") continue;
       links.push({ root, name, path: linkPath, target: await readlink(linkPath), action: "remove", reason: "no longer shipped", retired: true });
     }
   }

@@ -37,25 +37,25 @@ const STEPS: Step[] = [
     title: "Plan",
     station: "st8-08-night.svg",
     role: { src: "role-plans-night.svg", alt: "" },
-    body: "The agent writes a plan in .omt/plans/ and splits it into units.",
+    body: "The agent asks its questions, then writes a plan in .omt/plans/.",
   },
   {
-    title: "Delegate",
+    title: "Build",
     station: "st8-16-night.svg",
     role: { src: "role-runs-night.svg", alt: "" },
-    body: "Each unit goes to a model as a T3 child task.",
+    body: "The agent builds the change unit by unit in its own thread.",
   },
   {
     title: "Review",
     station: "st8-x32-night.svg",
     role: { src: "role-reviews-night.svg", alt: "" },
-    body: "Codex reviews Claude's work, and Claude reviews Codex's work.",
+    body: "A child task on the other model family reviews the change.",
   },
   {
-    title: "Verify and report",
+    title: "Test and report",
     station: "st8-48-night.svg",
     role: { src: "role-verifies-night.svg", alt: "" },
-    body: "A final review checks the whole change.",
+    body: "A QA child task runs every check, and the agent reports with evidence.",
   },
 ];
 
@@ -137,9 +137,9 @@ function Hero() {
         <br /> Get back reviewed work.
       </h1>
       <p className="lead">
-        oh-my-t3code adds plans, roles, task briefs, and review loops to the agents that you run in T3 Code. The agent
-        splits the goal into units, sends each unit to a model as a T3 child task, and then reviews and verifies the
-        result.
+        oh-my-t3code adds plans, roles, task briefs, and reviews to the agents that you run in T3 Code. The agent plans
+        and builds the change in its own thread. Then two T3 child tasks check it: a model of the other family reviews
+        it, and a QA task runs the checks.
       </p>
       <div className="hero-actions">
         <CommandPlate command="npx omt3" />
@@ -227,7 +227,7 @@ function HowItWorks() {
 
 // The verdict marks get the class of their label, so that both light up together: the first red X
 // is "request changes", the second is "block", and the green check is "approve". A yellow line goes
-// on the edge from Delegated to In review, for the second pass after a request for changes.
+// on the edge from Built to In review, for the second pass after a request for changes.
 function inlineChart(svg: string, secondPass: string): string {
   let red = 0;
   return svg
@@ -244,8 +244,8 @@ const STATE_CHART = inlineChart(stateSvg, "M160 112 L280 112");
 const STATE_CHART_MOBILE = inlineChart(stateMobileSvg, "M120 104 L120 200");
 
 // Two trips through the chart, one after the other, as offsets along a path. In the first, the
-// review requests changes: the unit stops at Delegated, In review, Delegated again, In review again,
-// and Verified, and ends at Done. In the second, the review blocks the unit: it stops at Delegated
+// review requests changes: the change stops at Built, In review, Built again, In review again,
+// and Tested, and ends at Done. In the second, the review blocks the change: it stops at Built
 // and In review, and ends at Blocked.
 type Trip = { path: string; stops: number[] };
 
@@ -292,17 +292,17 @@ function Units({ trips }: { trips: { fixed: Trip; blocked: Trip } }) {
 function States() {
   const chart = useInView<HTMLElement>();
   return (
-    <section className="section-tight split wrap" aria-label="The states of one unit, and the two parts of omt">
+    <section className="section-tight split wrap" aria-label="The states of one change, and the two parts of omt">
       <div className="col-even">
-        <h3>The states of one unit</h3>
+        <h3>The states of one change</h3>
         <figure className="chart" ref={chart}>
           <div className="chart-desktop" aria-hidden="true">
             <div className="chart-art" dangerouslySetInnerHTML={{ __html: STATE_CHART }} />
             <Units trips={STATE_TRIPS.desktop} />
             <span className="st-label tiny center" style={{ left: 0, top: 138, width: 80 }}>Planned</span>
-            <span className="st-label tiny center" style={{ left: 120, top: 138, width: 80 }}>Delegated</span>
+            <span className="st-label tiny center" style={{ left: 120, top: 138, width: 80 }}>Built</span>
             <span className="st-label tiny right" style={{ left: 176, top: 140, width: 90 }}>In review</span>
-            <span className="st-label tiny center" style={{ left: 360, top: 138, width: 80 }}>Verified</span>
+            <span className="st-label tiny center" style={{ left: 360, top: 138, width: 80 }}>Tested</span>
             <span className="st-label tiny center" style={{ left: 480, top: 138, width: 80 }}>Done</span>
             <span className="verdict closed request" style={{ left: 163, top: 46, width: 130 }}>request changes</span>
             <span className="verdict open approve" style={{ left: 332.2, top: 82, width: 70 }}>approve</span>
@@ -313,9 +313,9 @@ function States() {
             <div className="chart-art" dangerouslySetInnerHTML={{ __html: STATE_CHART_MOBILE }} />
             <Units trips={STATE_TRIPS.mobile} />
             <span className="st-label tiny" style={{ left: 150, top: 14 }}>Planned</span>
-            <span className="st-label tiny" style={{ left: 150, top: 94 }}>Delegated</span>
+            <span className="st-label tiny" style={{ left: 150, top: 94 }}>Built</span>
             <span className="st-label tiny" style={{ left: 150, top: 166 }}>In review</span>
-            <span className="st-label tiny" style={{ left: 150, top: 286 }}>Verified</span>
+            <span className="st-label tiny" style={{ left: 150, top: 286 }}>Tested</span>
             <span className="st-label tiny" style={{ left: 150, top: 366 }}>Done</span>
             <span className="verdict closed request" style={{ left: 18.4, top: 126, width: 70 }}>request</span>
             <span className="verdict closed request" style={{ left: 18.4, top: 146, width: 70 }}>changes</span>
@@ -324,17 +324,17 @@ function States() {
             <span className="st-label tiny" style={{ left: 256, top: 246, width: 80 }}>Blocked</span>
           </div>
           <ul className="sr-only">
-            <li>Planned, then delegated, then in review.</li>
-            <li>In review, approve: the unit is verified, then done.</li>
-            <li>In review, request changes: the unit goes back to delegated for a fix, and is reviewed again.</li>
-            <li>In review, block: the unit is blocked until the plan changes.</li>
+            <li>Planned, then built, then in review.</li>
+            <li>In review, approve: the change is tested, then done.</li>
+            <li>In review, request changes: the change goes back to built for a fix, and is reviewed again.</li>
+            <li>In review, block: the change is blocked until the plan changes.</li>
           </ul>
-          <figcaption className="muted">A review can send a unit back for a fix, or block it until the plan changes.</figcaption>
+          <figcaption className="muted">A review can send the change back for a fix, or block it until the plan changes.</figcaption>
         </figure>
       </div>
       <div className="col-narrow two-parts">
         <h3>Two parts</h3>
-        <p>The skills tell the agent how to plan, delegate, review, and verify.</p>
+        <p>The skills tell the agent how to plan, build, review, and test.</p>
         <p>The omt CLI does the fixed steps: the config, the model for each role, the task briefs, and the ledger.</p>
         <p className="muted">No runtime dependencies, no telemetry, and network calls only when you update.</p>
       </div>
@@ -415,8 +415,8 @@ function WhoItIsFor() {
               has that tool.
             </li>
             <li>
-              You want a quick edit with no plan and no review. omt runs its full loop also for small tasks, and each
-              unit costs about 5 child tasks.
+              You want a quick edit with no plan and no review. omt plans, reviews, and tests even a small task, with
+              at least 2 child tasks.
             </li>
             <li>You want a hosted service or a scheduler that runs in the background. omt has neither.</li>
           </ul>

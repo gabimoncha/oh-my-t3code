@@ -19,11 +19,21 @@ test("omt-swarm splits the plan into tracks with disjoint scopes and does not bu
   assert.match(swarm(), /You do not build\./);
 });
 
+test("omt-swarm approves and commits the design before the split, and tracks only cite it", () => {
+  const split = section(swarm(), "### 2. Split");
+  assert.match(split, /Run the `omt-ulw` step 6 design check in the main thread before the split\./);
+  assert.match(split, /If `omt-design` is required, run it and get the owner's approval\./);
+  assert.match(split, /Commit the approved design spec .* before you record `<base>`, so the spec is in `<base>`\./);
+  assert.match(split, /Tracks only cite the approved spec\. A track does not run `omt-design`\./);
+  const launch = section(swarm(), "### 3. Launch");
+  assert.match(launch, /Cite the approved design spec in `<base>`\. Do not run `omt-design`\. The main thread completed the step 6 design check before the split\./);
+});
+
 test("omt-swarm launches each track with t3_thread_launch to run omt-ulw steps 7 to 12 with no push and no PR", () => {
   const text = section(swarm(), "### 3. Launch");
   assert.match(text, /t3_thread_launch/);
   assert.match(text, /"type": "worktree", "baseRef": "<base>", "branch": "omt\/<slug>\/<track>"/);
-  assert.match(text, /Run steps 7 to 12 of the `omt-ulw` skill for the units of plan `<slug>-<track>` only\./);
+  assert.match(text, /Then run steps 7 to 12 of the `omt-ulw` skill for the units of plan `<slug>-<track>` only\./);
   assert.match(text, /Do not push\. Do not open a PR\. The main thread owns the PR\./);
   assert.match(text, /--role swarm --round 1 --attempt 1 --status dispatched --note <threadId>/);
 });

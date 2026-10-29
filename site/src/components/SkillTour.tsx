@@ -10,49 +10,40 @@ const AGENT_SKILLS: Skill[] = [
     name: "omt-ulw",
     note: "You want a task built, fixed, or shipped from start to end. The ulw and ultrawork keywords start it.",
     shows:
-      "The agent plans the units, sends each one to a model, and reviews and verifies each one. A review that requests changes sends the unit back for a fix.",
+      "The agent asks its questions, plans, and builds the change in its own thread. Then one review child fixes small findings and reports the rest, and one QA child runs the checks.",
   },
   {
     name: "omt-plan",
     note: "You want a reviewed plan before any code changes.",
     shows:
-      "The agent explores the code and writes a plan. A model of the other family reviews it until no blocker is left. The plan goes to .omt/plans/.",
+      "The agent explores the code, asks its questions in batches, and writes a plan. One model of the other family reviews it, for at most 2 rounds. The plan goes to .omt/plans/.",
   },
   {
     name: "omt-design",
     note: "You want designs or mockups before UI work.",
     shows:
-      "A designer makes some variants of each screen. You pick one and steer it until you approve it. Then the agent writes the design spec.",
+      "Opus draws some variants of each screen. You pick one and steer it until you approve it. Then the agent writes the design spec.",
   },
   {
-    name: "omt-review",
+    name: "omt-code-review",
     note: "You want a review of uncommitted changes, a branch, a commit, or a pull request.",
-    shows: "The agent splits the files among reviewers, merges their findings, and runs an oracle pass before it reports.",
+    shows:
+      "A small diff gets 1 reviewer. A large diff gets up to 4 reviewers and 1 oracle. The agent merges their findings and makes the fixes that you approve.",
   },
   {
     name: "omt-research",
     note: "You need an answer with sources from the repository, library docs, or the web.",
     shows:
-      "The agent splits the question, searches the repository, library docs, and the web at the same time, and writes an answer with sources.",
-  },
-  {
-    name: "omt-show",
-    note: "You want to see a plan or a status as a page with flowcharts and tables.",
-    shows: "The agent turns a plan or a status into a page with flowcharts and tables, and shows it in the T3 thread.",
+      "The agent answers a narrow question itself. For a broad one, it searches the repository, library docs, and the web at the same time, checks each claim, and writes an answer with sources.",
   },
 ];
 
 const NAMED_SKILLS: Skill[] = [
   {
     name: "omt-swarm",
-    note: "You have independent tracks, and each needs its own worktree thread and pull request.",
+    note: "You have a plan with independent tracks, and each needs its own worktree thread.",
     shows:
-      "Each track runs omt-ulw in its own T3 worktree thread, at its own speed, and ends in its own pull request. The tracks never merge.",
-  },
-  {
-    name: "omt-loop",
-    note: "Work must continue across turns until a check passes.",
-    shows: "The work continues turn after turn. After each turn, a check runs. When the check passes, the loop stops.",
+      "Each track builds and checks in its own T3 worktree thread. Then one review covers all tracks, the tracks merge, one QA run checks the result, and one pull request ships it.",
   },
   {
     name: "omt",
@@ -66,7 +57,7 @@ const ALL = [...AGENT_SKILLS, ...NAMED_SKILLS];
 // After a picture ends, the tour holds the last frame for this long, then goes to the next skill.
 const HOLD = 2200;
 
-// The agent starts the first six by itself; you start the last three by name. A pointer goes down
+// The agent starts the first five by itself; you start the last two by name. A pointer goes down
 // the list of skills, and the picture of each skill plays next to it. A click or
 // the arrow keys select a skill and stop the tour. Out of view, the tour pauses.
 export function SkillTour() {
