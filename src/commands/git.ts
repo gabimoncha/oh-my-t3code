@@ -156,7 +156,7 @@ export const run: CommandRun = async (ctx) => {
     reason = `the PR is by ${prAuthor}`;
   } else if (key !== null && value === null) {
     decision = "ask";
-    reason = `workflow.git.${key} is not set in profile "${profile.name}" with default set ${config.defaults}`;
+    reason = `workflow.git.${key} is not set in profile "${profile.name}"`;
   } else if (action === "merge") {
     decision = value as Decision;
     reason = `workflow.git.merge is "${String(value)}" in profile "${profile.name}"`;

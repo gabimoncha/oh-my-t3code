@@ -9,7 +9,7 @@ const LAYERS = ["defaults", "user", "project", "profile"];
 const LAYER_NUM = { defaults: 1, user: 2, project: 3, profile: 4 };
 const LETTER = { defaults: "D", user: "U", project: "P", profile: "F" };
 const FILES = ["user", "project"];
-const ROOT_ONLY = new Set(["defaults", "profile", "harnesses", "profiles"]);
+const ROOT_ONLY = new Set(["profile", "harnesses", "profiles"]);
 const PING_MS = 5000;
 
 const app = {
@@ -38,7 +38,6 @@ const app = {
   fileDrafts: {},
   issuesOpen: false,
   activeRow: null,
-  defaultsPreview: null,
   live: [],
   keyPaths: new Map(),
 };
@@ -107,7 +106,7 @@ function shortLabel(source) {
 
 function sourceLabel(source) {
   if (!source) return "";
-  if (source.kind === "defaults") return `defaults ${source.set}`;
+  if (source.kind === "defaults") return "defaults";
   if (source.kind === "profile") return `profile ${source.profile} (${shortLabel(source.declaredIn)})`;
   return source.kind;
 }
@@ -443,10 +442,10 @@ function harnessStack() {
   if (stack.winner) return stack;
   return {
     path: ["harnesses"],
-    rows: { defaults: { source: { kind: "defaults", set: app.explain.defaults.set }, value: undefined, state: "win" } },
+    rows: { defaults: { source: { kind: "defaults" }, value: undefined, state: "win" } },
     winner: "defaults",
     value: undefined,
-    source: { kind: "defaults", set: app.explain.defaults.set },
+    source: { kind: "defaults" },
     otherProfiles: [],
     noKey: true,
   };
@@ -855,7 +854,7 @@ function pipeline() {
       lines);
   };
   const source = state.defaults.source;
-  const pinned = source === "latest" ? "latest" : `pinned in ${(state.files.find((entry) => entry.path === source) || { kind: source }).kind}`;
+  const accepted = source === "current" ? "from this release" : "last accepted configuration";
   const keysOf = (kind) => app.explain.root.filter((entry) => entry.source.kind === kind).length;
   const fileCard = (kind) => {
     const entry = file(kind);
@@ -876,7 +875,7 @@ function pipeline() {
   const profileSub = [preset ? "preset" : `from ${declared ? shortLabel(declared.source) : "defaults"}`];
   if (ext) profileSub.push(`extends ${ext}`);
   return h("div", { class: "pipeline" },
-    card("defaults", "defaults", [h("div", { class: "pcard-val", text: state.defaults.selected }), h("div", { class: "pcard-sub", text: pinned })], { cls: "c-defaults" }),
+    card("defaults", "defaults", [h("div", { class: "pcard-val", text: "active defaults" }), h("div", { class: "pcard-sub", text: accepted })], { cls: "c-defaults" }),
     h("span", { class: "arrow", text: "→" }),
     fileCard("user"),
     h("span", { class: "arrow", text: "→" }),
@@ -1070,12 +1069,12 @@ function treeModel() {
     rootRows.push(leafRow({ path: ["harnesses"] }, 1, "harnesses", harness.noKey ? { stack: harness, value: "every driver (no key)" } : { stack: harness }));
   }
   for (const entry of leaves("models")) if (matches(entry.path)) rootRows.push(leafRow(entry, 1, dotted(entry.path)));
-  for (const path of [["defaults"], ["profile"]]) {
+  for (const path of [["profile"]]) {
     const entry = app.rootMap.get(pk(path));
     if (entry && matches(path)) rootRows.push(leafRow(entry, 1, path[0], { value: JSON.stringify(entry.value) }));
   }
   if (!filter || rootRows.length > 0) {
-    rows.push({ kind: "group", id: "g:root", group: "root", label: "harnesses · models · defaults", count: "", action: "edit", actionHash: "#/root" });
+    rows.push({ kind: "group", id: "g:root", group: "root", label: "harnesses · models · profile", count: "", action: "edit", actionHash: "#/root" });
     if (filter || app.open.has("root")) rows.push(...rootRows);
   }
   return rows;
@@ -1380,7 +1379,6 @@ function valueKind(path) {
   if (rel[0] === "roles" && rel[2] === "chain") return { type: "chain" };
   if (rel[0] === "roles" && ["access", "result", "t3Role", "interactionMode", "runtimeMode"].includes(last)) return { type: "enum", values: vocab[last] };
   if (["fast", "crossFamily", "plan"].includes(last)) return { type: "bool" };
-  if (path[0] === "defaults") return { type: "enum", values: ["latest", ...app.state.defaults.sets] };
   if (path[0] === "profile") return { type: "enum", values: app.state.profiles };
   if (last === "extends") return { type: "enum", values: app.state.profiles.filter((item) => item !== path[1]) };
   if (path[0] === "harnesses") return { type: "list" };
@@ -2486,23 +2484,6 @@ function rootScreen() {
       props.right ? h("span", { class: "jright muted", text: props.right }) : null);
   };
 
-  // defaults
-  const defaultsOwn = own(["defaults"]);
-  const defaultsSel = defaultsOwn.edited ? (defaultsOwn.edit.remove ? "latest" : defaultsOwn.value) : defaultsOwn.value || app.state.defaults.selected;
-  const defaultsEntry = app.rootMap.get(pk(["defaults"]));
-  const defaultsCtl = select(["latest", ...app.state.defaults.sets].map((item) => ({ value: item, label: item === "latest" ? "latest" : `"${item}"` })), defaultsSel, (value) => {
-    if (value === "latest") {
-      if (fileValue(kind, ["defaults"]) !== undefined) enqueue(kind, ["defaults"], { remove: true }, seen);
-      else unqueue(kind, ["defaults"]);
-    } else if (value === fileValue(kind, ["defaults"])) unqueue(kind, ["defaults"]);
-    else enqueue(kind, ["defaults"], { value }, seen);
-    scheduleDefaultsPreview();
-    render();
-  }, { label: "defaults", disabled, fk: "root:defaults", dashed: !defaultsOwn.set && !defaultsOwn.edited });
-  const defaultsHint = defaultsOwn.edited
-    ? h("span", { class: "warn-text", text: `new in ${kind} · was ${app.state.defaults.selected} from ${defaultsEntry ? shortLabel(defaultsEntry.source) : "latest"}` })
-    : defaultsOwn.set ? null : h("span", { class: "muted", text: `inherited from ${defaultsEntry ? shortLabel(defaultsEntry.source) : "latest"}` });
-
   // profile
   const profileOwn = own(["profile"]);
   const profileEntry = app.rootMap.get(pk(["profile"]));
@@ -2664,7 +2645,6 @@ function rootScreen() {
       h("span", { class: "muted", text: `edit in ${kind} · root paths of ${f.path}` })),
     !usable(kind) ? h("p", { class: "warn-text", text: `Edit in ${kind} is off: ${absent(kind) ? "the file does not exist" : "the file does not parse"}.` }) : null,
     h("div", { class: "jpunct", text: "{" }),
-    row("defaults", ["defaults"], defaultsCtl, defaultsHint, { right: `sets: latest · ${app.state.defaults.sets.join(" · ")}` }),
     row("profile", ["profile"], profileCtl, h("span", { class: "muted", text: profileHint })),
     h("div", { class: "jrow" }, h("span", { class: `jkey${fileSets(kind, ["limits"]) ? "" : " muted"}`, text: '"limits": {' })),
     limitRows,
@@ -2680,61 +2660,10 @@ function rootScreen() {
   return h("section", { class: "screen-root" }, h("div", { class: "root-main" }, blockedCard(), content), previewPanel());
 }
 
-let previewTimer;
-
-function scheduleDefaultsPreview() {
-  clearTimeout(previewTimer);
-  const kind = app.editIn;
-  if (!queued(kind, ["defaults"])) {
-    app.defaultsPreview = null;
-    return;
-  }
-  // The slot records its request body, so that previewPanel starts a new preview when the queue changes before the
-  // response arrives, and the dropped response does not leave the panel on "checking…".
-  const slot = app.defaultsPreview = { file: kind, status: "loading", gen: app.gen, body: bodyOf(requestFor(kind)) };
-  previewTimer = setTimeout(async () => {
-    const request = requestFor(kind);
-    slot.body = bodyOf(request);
-    const current = () => app.defaultsPreview === slot && slot.gen === app.gen && bodyOf(requestFor(kind)) === bodyOf(request);
-    let next;
-    try {
-      next = { file: kind, status: "ok", gen: slot.gen, body: bodyOf(request), result: await api("api/preview", request) };
-    } catch (error) {
-      if (!current()) return;
-      handleEditError(kind, error);
-      next = { file: kind, status: "error", gen: slot.gen, body: bodyOf(request), message: error.message };
-    }
-    if (!current()) return;
-    app.defaultsPreview = next;
-    render();
-  }, 300);
-}
-
 function previewPanel() {
-  const kind = app.editIn;
-  const edit = queued(kind, ["defaults"]);
-  const panel = h("aside", { class: "preview", "data-scroll": "preview" });
-  if (!edit) {
-    panel.append(h("div", { class: "meta-caps", text: "PREVIEW" }), h("p", { class: "muted", text: "Pick another default set to see what changes." }));
-    return panel;
-  }
-  const to = edit.remove ? app.state.defaults.latest : edit.value;
-  panel.append(h("div", { class: "meta-caps" }, "PREVIEW · ", h("span", { class: "lc", text: `defaults ${app.state.defaults.selected} -> ${to}` })));
-  const preview = app.defaultsPreview;
-  if (!preview || preview.file !== kind || preview.gen !== app.gen || preview.body !== bodyOf(requestFor(kind))) {
-    scheduleDefaultsPreview();
-    panel.append(h("p", { class: "muted", text: "checking…" }));
-    return panel;
-  }
-  if (preview.status === "loading") panel.append(h("p", { class: "muted", text: "checking…" }));
-  else if (preview.status === "error") panel.append(h("p", { class: "err", text: `✕ ${preview.message}` }));
-  else {
-    const changes = preview.result.defaultsChanges || [];
-    if (changes.length === 0) panel.append(h("p", { class: "muted", text: "No value changes between the two sets." }));
-    panel.append(...defaultsChangeLines(changes));
-    panel.append(h("hr", { class: "dashed" }), h("p", { class: "prose", text: 'Lines that end with "overridden by" change nothing for you, because a file sets that value.' }));
-  }
-  return panel;
+  return h("aside", { class: "preview", "data-scroll": "preview" },
+    h("div", { class: "meta-caps", text: "DEFAULTS" }),
+    h("p", { class: "prose", text: "Run omt doctor or omt update to review and accept current defaults. Your overrides stay in these config files." }));
 }
 
 // ---------- s6 review ----------
@@ -2844,7 +2773,6 @@ async function writeFile(kind) {
     app.bases[kind] = queueCount(kind) ? file(kind).hash : null;
     app.toast = { text: `✓ wrote ${plural(request.edits.length, "edit")} to ${kind}` };
     setTimeout(() => { app.toast = null; render(); }, 4000);
-    app.defaultsPreview = null;
     if (app.review) {
       delete app.review.previews[kind];
       settleReview();
@@ -2858,13 +2786,6 @@ async function writeFile(kind) {
     app.writing = null;
   }
   render();
-}
-
-function defaultsChangeLines(changes) {
-  return changes.map((change) => h("p", {
-    class: `pv-line${change.overriddenBy ? " muted" : ""}`,
-    text: `${change.path}: ${change.from} -> ${change.to}${change.overriddenBy ? ` (overridden by ${change.overriddenBy})` : ""}`,
-  }));
 }
 
 function diffHunks(diff, edits) {
@@ -2933,12 +2854,6 @@ function renderReview() {
   const warnings = result ? result.issues.filter((issue) => issue.severity === "warning" && issueSource(issue.source) === kind) : [];
   const known = new Set(allIssues().map((issue) => pk([issue.source, issue.path, issue.message])));
   const newWarnings = warnings.filter((issue) => !known.has(pk([issue.source, issue.path, issue.message])));
-  const defaultsEdit = edits.find((edit) => edit.path.length === 1 && edit.path[0] === "defaults");
-  const changes = result && defaultsEdit ? result.defaultsChanges || [] : null;
-  const defaultsBlock = changes ? h("div", { class: "rdefaults" },
-    h("div", { class: "meta-caps" }, "DEFAULTS · ", h("span", { class: "lc", text: `${app.state.defaults.selected} -> ${defaultsEdit.remove ? app.state.defaults.latest : defaultsEdit.value}` })),
-    changes.length ? defaultsChangeLines(changes) : h("p", { class: "muted", text: "No value changes between the two sets." }),
-    changes.length ? h("p", { class: "prose muted", text: 'Lines that end with "overridden by" change nothing for you, because a file sets that value.' }) : null) : null;
   const check = h("div", { class: "rcheck", "aria-live": "polite" }, h("div", { class: "meta-caps", text: "CHECK" }),
     !result ? h("p", { class: "muted", text: preview && preview.status === "error" ? `✕ ${preview.message}` : "checking…" })
       : newErrors.length === 0 ? h("p", { class: "ok", text: "✓ no new errors (validateLayer + merge)" })
@@ -2966,7 +2881,7 @@ function renderReview() {
   const panel = h("div", { class: "review", role: "dialog", "aria-modal": "true", "aria-label": "Review changes" },
     h("div", { class: "rtabs", role: "tablist" }, h("span", { class: "rtitle", text: "REVIEW" }), tabs, h("span", { class: "spacer" }), h("span", { class: "muted small", text: "esc to close" })),
     h("div", { class: "rbody" },
-      h("div", { class: "redits", "data-scroll": "redits" }, h("div", { class: "meta-caps" }, "EDITS → ", h("span", { class: "lc", text: file(kind).path })), editBlocks, defaultsBlock, check),
+      h("div", { class: "redits", "data-scroll": "redits" }, h("div", { class: "meta-caps" }, "EDITS → ", h("span", { class: "lc", text: file(kind).path })), editBlocks, check),
       h("div", { class: "rdiff", "data-scroll": "rdiff" }, diffEl)),
     conflict,
     h("div", { class: "rfoot" }, h("span", { class: "muted small", text: 'The write stops with "changed on disk" if another tool edited the file after the page read it.' }),

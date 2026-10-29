@@ -13,7 +13,6 @@ test("config explain reports default, user, project, and profile sources in text
   mkdirSync(join(project, ".git"), { recursive: true });
   writeFile(userPath, JSON.stringify({
     version: 1,
-    defaults: "2026-10",
     profile: "fast-proto",
     limits: { maxReviewRounds: 7 },
     profiles: {
@@ -33,12 +32,12 @@ test("config explain reports default, user, project, and profile sources in text
   const lines = text.stdout.split("\n");
   assert.ok(lines.includes(`user: ${userPath}`));
   assert.ok(lines.includes(`project: ${projectPath}`));
-  assert.ok(lines.includes(`defaults: 2026-10 (${userPath})`));
+  assert.ok(lines.includes("defaults: current"));
   assert.ok(lines.includes("profile: fast-proto (config)"));
   const rootLines = lines.slice(lines.indexOf("root:") + 1, lines.indexOf("effective:"));
   const effectiveLines = lines.slice(lines.indexOf("effective:") + 1);
   for (const line of [
-    "limits.maxDepth  1  defaults 2026-10",
+    "limits.maxDepth  1  defaults",
     "limits.maxReviewRounds  7  user",
     "limits.maxParallel  4  project",
   ]) {
@@ -53,10 +52,10 @@ test("config explain reports default, user, project, and profile sources in text
   assert.equal(json.code, 0, json.stderr);
   assert.equal(json.stderr, "");
   const report = JSON.parse(json.stdout) as ExplainReport;
-  assert.deepEqual(report.defaults, { set: "2026-10", source: userPath });
+  assert.deepEqual(report.defaults, { source: "current" });
   assert.deepEqual(report.profile, { name: "fast-proto", source: "argument" });
   for (const [entries, path, value, source] of [
-    [report.root, ["limits", "maxDepth"], 1, { kind: "defaults", set: "2026-10" }],
+    [report.root, ["limits", "maxDepth"], 1, { kind: "defaults" }],
     [report.root, ["limits", "maxReviewRounds"], 7, { kind: "user", path: userPath }],
     [report.root, ["limits", "maxParallel"], 4, { kind: "project", path: projectPath }],
     [report.effective, ["limits", "maxParallel"], 2, {

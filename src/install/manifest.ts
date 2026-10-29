@@ -1,3 +1,5 @@
+import { parseDefaultsSnapshot } from "../config/defaultsState.ts";
+import type { DefaultsSnapshot } from "../config/defaultsState.ts";
 import { basename, dirname, join, relative, sep } from "node:path";
 import { isWithin, omtDir, projectClaudeSettingsPath, projectConfigPath, projectInstallDirs, projectShimPath, projectSkillRoots } from "../paths.ts";
 import { OmtError } from "../util/errors.ts";
@@ -51,6 +53,7 @@ export interface ManifestProject {
 }
 
 export interface Manifest {
+  acceptedDefaults?: DefaultsSnapshot;
   scope?: "user" | "project"; // absent means user
   root?: string; // project root, project scope only
   package: string;
@@ -130,6 +133,7 @@ export async function readManifest(path: string): Promise<Manifest | undefined> 
     package: typeof value.package === "string" ? value.package : PACKAGE_NAME,
     version: typeof value.version === "string" ? value.version : "",
     installedAt: typeof value.installedAt === "string" ? value.installedAt : "",
+    ...(value.acceptedDefaults === undefined ? {} : { acceptedDefaults: parseDefaultsSnapshot(JSON.stringify(value.acceptedDefaults), path) }),
     skillsRoot: typeof value.skillsRoot === "string" ? value.skillsRoot : "",
     skills: strings(value.skills),
     links,
@@ -187,6 +191,7 @@ export function mergeManifest(previous: Manifest | undefined, next: Manifest): M
         };
   return {
     ...next,
+    ...(previous.acceptedDefaults === undefined ? {} : { acceptedDefaults: previous.acceptedDefaults }),
     skills: unique([...previous.skills, ...next.skills], (name) => name).sort(),
     links: unique([...previous.links, ...next.links], (link) => link.path),
     ...(config === undefined ? {} : { config }),

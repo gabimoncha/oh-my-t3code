@@ -2,7 +2,7 @@ import { test } from "bun:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { RETIRED_BUILD_KEYS, RETIRED_LIMIT_KEYS } from "../../src/config/defaultSets.ts";
+import { RETIRED_BUILD_KEYS, RETIRED_LIMIT_KEYS } from "../../src/config/defaults.ts";
 import { CONFIG_SCHEMA } from "../../src/config/schema.ts";
 import {
   LIMIT_KEYS,

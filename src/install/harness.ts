@@ -2,7 +2,8 @@ import { constants } from "node:fs";
 import { access, stat } from "node:fs/promises";
 import { delimiter, join } from "node:path";
 import { t3SettingsPath } from "../paths.ts";
-import type { Capabilities, HarnessReport, HarnessStatus, T3DriverStatus } from "../types.ts";
+import { DEFAULT_CONFIG } from "../config/defaults.ts";
+import type { Capabilities, HarnessReport, HarnessStatus, RoleConfig, T3DriverStatus } from "../types.ts";
 import { readFileIfExists } from "../util/fs.ts";
 import { isRecord } from "../util/json.ts";
 
@@ -120,9 +121,13 @@ export function allDetected(report: HarnessReport): boolean {
 }
 
 // The effect of a harnesses value on the default roles, one line each.
-export function harnessEffects(harnesses: readonly string[]): string[] {
+export function harnessEffects(harnesses: readonly string[], roles: Record<string, RoleConfig> = DEFAULT_CONFIG.roles): string[] {
   const effects: string[] = [];
-  if (!harnesses.includes("claudeAgent")) effects.push("design and ui: unavailable without claudeAgent");
+  const unavailable = ["design", "ui"].filter((name) => {
+    const role = roles[name];
+    return role !== undefined && !role.chain.some((entry) => harnesses.includes(entry.driver ?? entry.provider ?? ""));
+  });
+  if (unavailable.length > 0) effects.push(`${unavailable.join(" and ")}: unavailable with the detected harnesses`);
   if (DEFAULT_HARNESSES.filter((driver) => harnesses.includes(driver)).length === 1) {
     effects.push("cross-family review: the same family reviews");
   }

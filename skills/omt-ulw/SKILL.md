@@ -18,7 +18,7 @@ The user typed ulw to get the build flow. Run the full flow for every task, howe
 - Done means a check that can fail ran and passed. A child's claim is not done ([results.md](../omt/references/results.md)).
 - Record every child dispatch and every result in the ledger.
 
-The shared T3 rules are in [delegation.md](../omt/references/delegation.md); read it before your first dispatch. T3 tools appear here by base name; your harness may prefix them, for example `mcp__t3-code__delegate_task`.
+The shared T3 rules are in [delegation.md](../omt/references/delegation.md). Read it before your first dispatch. T3 tools appear here by base name, and your harness may prefix them, for example `mcp__t3-code__delegate_task`.
 
 ## Rules
 
@@ -94,7 +94,7 @@ For a run with `--profile <name>`, pass it to plan creation or to `omt-plan`. Af
 
 Each unit has a role, a scope, a done condition, a verify command, and its dependencies. The role of a unit that you build is `main`. A unit that reads outside data, such as recordings, files, or API responses, has a done condition on an input shaped like real data, also in a LIGHT plan. Every done condition from step 3 maps to a unit or a final check.
 
-A unit that implements a design or changes UI has the role `ui`, also in a LIGHT plan. Each `ui` unit cites the design spec.
+A unit that implements a design or changes UI has the role `ui`, also in a LIGHT plan. When an approved design spec exists, cite it in the unit's task and scope. Without one, use the task requirements and [UI implementation](../omt/references/frontend-design.md#ui-implementation). Plan an `omt-design` step only when the user requests a design pass first.
 
 Keep an `F2` oracle item only when `build.oracle` requires the oracle for the run's tier: `heavy` for HEAVY only, `always` for both tiers, `off` for neither. After plan creation and after a profile switch, edit the plan file's `## Final verification` list, also in a LIGHT plan. When an `F2` oracle item is required but missing, add `- [ ] F2. The oracle role approves the whole change.`. When no oracle is required, remove the `F2` oracle line.
 
@@ -102,9 +102,9 @@ Done when: `omt plan status <slug>` shows every unit, and (HEAVY) the owner appr
 
 ### 6. Design check
 
-When the plan asks for an `omt-design` step that has not run, run the `omt-design` skill with the plan slug first. Build no `ui` unit until it returns an approved spec. Every path into step 7 runs this check, also the hand-off from `omt-plan`.
+When the plan includes a requested design pass that has not run, run the `omt-design` skill with the plan slug first. Wait for the owner's approval of that spec before you build the affected UI units. Without a requested design pass, build the UI directly from the task requirements. Every path into step 7 runs this check, also the hand-off from `omt-plan`.
 
-Done when: every `ui` unit cites an approved design spec, or the plan has no `ui` unit.
+Done when: each UI unit has an approved design spec or the task requirements for direct implementation, or the plan has no UI unit.
 
 ### 7. Build
 
@@ -118,7 +118,7 @@ Build the units in the order of the `ready:` line of `omt plan status <slug>`. F
 4. With `build.failureProofs: on`, prove that each new test fails without the change, in a private copy of the working tree. Create the copy with `copy=$(mktemp -d "${TMPDIR:-/tmp}/omt-proof.XXXXXX") && git ls-files -co --exclude-standard -z | tar --null -T - -cf - | tar -x -C "$copy"`. Link its dependencies, for example `ln -s "$PWD/node_modules" "$copy/node_modules"`. In the copy, break the behavior that the test asserts in the code under test, run only that test, and see it fail. Delete the copy on every exit path, for example with `trap 'rm -rf "$copy"' EXIT`. Never break or restore files in the shared checkout. With `build.failureProofs: off`, skip the proofs.
 5. Run `omt plan mark <slug> <unit> done`.
 
-A `ui` unit follows its design spec. When your `modelSelection` is a Claude Opus model, build it yourself. Otherwise send it to a `ui` child as an independent track (below). When `ui` cannot run, stop and tell the user. Do not fall back to `execute` or to another family.
+A `ui` unit follows its approved design spec when one exists. Otherwise follow [UI implementation](../omt/references/frontend-design.md#ui-implementation), with `frontend-design` when available. When your `modelSelection` is a Claude Opus model, build it yourself. Otherwise send it to a `ui` child as an independent track (below). Try the configured `ui` fallbacks when T3 refuses a target. When every configured `ui` target fails, stop and tell the user. Do not switch to `execute`.
 
 Independent track: a large unit with a scope that no other open unit touches may go to an `execute` child, or to a `ui` child for a `ui` unit. Build its brief with `omt brief <role> --task-file - --title "<role> <unit>: <short unit title>" --scope ... --done ... --verify ... --plan <slug> --unit <id> --round 1 --attempt 1 --save --json`. Dispatch only while `omt ledger stats --plan <slug>` reports `can dispatch: yes`. Dispatch it with `mode: "async"`, run its printed `ledger.dispatched` line, and build the other units while it runs. Then wait for it ([delegation.md](../omt/references/delegation.md#waiting)), record the result, and settle the child ([delegation.md](../omt/references/delegation.md#releasing-children)). Check its `DONE` claim as [results.md](../omt/references/results.md#a-claim-is-not-evidence) says, and run its verify command yourself. Then write its planned tests and make its failure proofs with items 3 and 4 above. Run those planned tests and the verify command again. Both must pass before you mark the unit done.
 

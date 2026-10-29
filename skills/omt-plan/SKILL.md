@@ -5,9 +5,9 @@ description: Plan before code in T3 Code. Use when the user asks for a plan, a s
 
 # Plan
 
-You write a plan that the main thread can build from without a design decision, and you get it reviewed. You plan only, also when `omt-ulw` calls this skill. You change no code in this skill.
+You write a plan that the main thread can build from without another owner decision, and you get it reviewed. You plan only, also when `omt-ulw` calls this skill. You change no code in this skill.
 
-You explore, ask, and write the plan yourself. Children only read broad areas (`explore`) and review the plan (`plan-review`). The T3 rules are in [delegation.md](../omt/references/delegation.md); T3 tools appear by base name and your harness may prefix them, for example `mcp__t3-code__delegate_task`.
+You explore, ask, and write the plan yourself. Children only read broad areas (`explore`) and review the plan (`plan-review`). The T3 rules are in [delegation.md](../omt/references/delegation.md). T3 tools appear by base name and your harness may prefix them, for example `mcp__t3-code__delegate_task`.
 
 ## Rules
 
@@ -89,7 +89,7 @@ Read the effective profile again with the step 1 command before you fill `## Tes
 - Map each grill edge case with `State: accepted` or `State: changed`. A changed edge case uses the user's handling and test layer from the grill file. A `dropped` edge case gets no line and no done condition. A `pending` edge case gets no line until the owner answers it.
 - Each mapped grill edge case with `Test: integration` or `Test: unit` becomes a `## Tests` line of that layer, with `Reason: grill edge case GE<k>`. When that layer is outside `plan.testLayers`, put the line in the step 2 batch for owner approval, as any other line outside. A grill edge case never becomes an e2e line. A mapped edge case with `Test: none`, and every mapped edge case when `build.qa` is `off`, goes into the done condition of the unit that owns its handling.
 - Write each `## Tests` line as `- <layer> <unit>: <flow or case>. File: <path>. Reason: <why>.` An empty `## Tests` section means no new tests.
-- When units build or change UI and no spec for that UI exists under `docs/design/`, plan an `omt-design` step before those units. UI units cite the spec (`docs/design/<slug>.md`) and use the `ui` role.
+- UI units use the `ui` role. When an approved design spec exists, cite it in the unit. Plan an `omt-design` step only when the user requests a design pass first. Otherwise plan direct UI implementation from the task requirements, by [UI implementation](../omt/references/frontend-design.md#ui-implementation). A missing design spec or design tool does not block a UI unit.
 - Name each shared resource in the plan, such as a build folder, a generated project, a simulator, or a dev-server port. Write each verify command that uses shared build state as `omt lock run <resource> -- <command>`. Use the same `<resource>` for commands that share that state.
 - Check for a lock tool with `command -v flock || command -v lockf`. When neither tool exists, run `omt plan limit <slug> 1` for a plan with shared build state and say why.
 - When a command leaves processes running after it exits, run that command outside `omt lock`. When a unit uses that command, run `omt plan limit <slug> 1` for the whole plan and say why in the plan.

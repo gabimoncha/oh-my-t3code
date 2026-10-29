@@ -34,7 +34,7 @@ Run each command through `mise exec --` (or in a shell where mise is active), so
 - `tsconfig.json` sets `strict`, `noUncheckedIndexedAccess`, `verbatimModuleSyntax`, and `erasableSyntaxOnly`, and `tsrs` enforces them.
 - Format with 2-space indentation, double quotes, semicolons, and trailing commas in multi-line literals.
 - Write a comment only for a reason that the code cannot show.
-- Import shared types from `src/types.ts`. Throw `OmtError` from `src/util/errors.ts` for expected failures; use exit code 2 for usage errors.
+- Import shared types from `src/types.ts`. Throw `OmtError` from `src/util/errors.ts` for expected failures. Use exit code 2 for usage errors.
 - Write files atomically with the helpers in `src/util/fs.ts`.
 
 ## Dependencies

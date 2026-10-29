@@ -1,4 +1,5 @@
-import { defaultSet, formatValue } from "../config/defaultSets.ts";
+import { activeDefaults } from "../config/defaultsState.ts";
+import { DEFAULT_CONFIG, formatValue } from "../config/defaults.ts";
 import { startConfigEditor } from "../config/editor/server.ts";
 import { explainConfig, sourceLabel } from "../config/explain.ts";
 import type { ExplainEntry } from "../config/explain.ts";
@@ -21,7 +22,7 @@ export const usage = `Usage: omt config [show | explain | path | validate | init
 
 Subcommands:
   show              print the merged config as JSON before profile selection (default)
-  explain           print the layer that sets each value: a default set, the user
+  explain           print the layer that sets each value: defaults, the user
                     or project config, or a profile and the file that declares it
   edit              with --web: edit the user and project config in a browser; a
                     local server on 127.0.0.1 runs until Ctrl-C or the tab closes
@@ -34,7 +35,7 @@ Options:
   --profile <name>  with explain: explain this profile instead of the selected one
   --web             with edit: start the editor and open it in the default browser
   --no-open         with edit: print the editor URL and open no browser
-  --defaults        with show: print the selected default set
+  --defaults        with show: print the installed release's current defaults
   --force           with init: overwrite an existing file
   -h, --help        print this help
 `;
@@ -43,7 +44,7 @@ const SUBCOMMANDS = ["show", "explain", "edit", "path", "validate", "init"];
 
 async function show(ctx: CliContext, defaults: boolean): Promise<number> {
   const loaded = await loadConfigReporting(ctx);
-  ctx.stdout(formatJson(defaults ? defaultSet(loaded.config.defaults) : loaded.config));
+  ctx.stdout(formatJson(defaults ? DEFAULT_CONFIG : loaded.config));
   return 0;
 }
 
@@ -59,7 +60,7 @@ function formatEntries(entries: ExplainEntry[]): string {
 
 async function explain(ctx: CliContext, profile: string | undefined, json: boolean): Promise<number> {
   const layers = await readConfigLayers(ctx);
-  const loaded = mergeConfigLayers(layers);
+  const loaded = mergeConfigLayers(layers, await activeDefaults(ctx));
   for (const issue of loaded.issues) ctx.stderr(formatIssue(issue));
   const report = explainConfig(layers, loaded, profile);
   if (json) {
@@ -68,7 +69,7 @@ async function explain(ctx: CliContext, profile: string | undefined, json: boole
   }
   const out: string[] = [];
   for (const layer of layers) out.push(`${layer.kind}: ${layer.path}\n`);
-  out.push(`defaults: ${report.defaults.set} (${report.defaults.source})\n`);
+  out.push(`defaults: ${report.defaults.source}\n`);
   out.push(`profile: ${report.profile.name} (${report.profile.source})\n`);
   out.push("root:\n", formatEntries(report.root));
   if (report.removed.length > 0) {

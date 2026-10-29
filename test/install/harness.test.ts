@@ -30,8 +30,8 @@ test("e2e U3: Codex-only install", () => {
   const roles = f.cli(["roles"]);
   assert.equal(roles.code, 0, roles.stderr);
   assert.equal(roles.stderr, "");
-  assert.match(roles.stdout, /^design\s+unavailable\s+-\s/m);
-  assert.match(roles.stdout, /^ui\s+unavailable\s+-\s/m);
+  assert.match(roles.stdout, /^design\s+\S+\s+codex\/gpt-6-astra reasoningEffort=high/m);
+  assert.match(roles.stdout, /^ui\s+\S+\s+codex\/gpt-6\.1-sol reasoningEffort=high/m);
   assert.match(roles.stdout, /^writing\s+\S+\s+codex\//m);
 });
 
@@ -62,4 +62,22 @@ test("e2e U3: detect and write flow", () => {
   assert.equal(roles.code, 0, roles.stderr);
   assert.equal(roles.stderr, "");
   assert.match(roles.stdout, /^writing\s+\S+\s+claudeAgent\//m);
+});
+
+
+test("detect and doctor keep Codex-only UI support with a retired defaults pin", () => {
+  const f = codexOnlyMachine();
+  writeFile(f.config, JSON.stringify({ harnesses: ["codex"] }));
+  const latest = f.cli(["detect"]);
+  assert.equal(latest.code, 0, latest.stderr);
+  assert.doesNotMatch(latest.stdout, /design and ui: unavailable/);
+  const latestDoctor = f.cli(["doctor"]);
+  assert.doesNotMatch(latestDoctor.stdout, /design and ui.*unavailable/);
+
+  writeFile(f.config, JSON.stringify({ defaults: "2026-12", harnesses: ["codex"] }));
+  const pinned = f.cli(["detect"]);
+  assert.equal(pinned.code, 0, pinned.stderr);
+  assert.doesNotMatch(pinned.stdout, /design and ui: unavailable/);
+  const pinnedDoctor = f.cli(["doctor"]);
+  assert.doesNotMatch(pinnedDoctor.stdout, /design and ui: unavailable/);
 });

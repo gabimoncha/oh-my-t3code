@@ -2,48 +2,35 @@ import { test } from "bun:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { DEFAULT_CONFIG } from "../src/config/defaults.ts";
-import { LATEST_DEFAULT_SET } from "../src/config/defaultSets.ts";
 import { loadConfig } from "../src/config/load.ts";
 import { PROJECT_STARTER_CONFIG, USER_STARTER_CONFIG } from "../src/config/starter.ts";
 import { EFFORT_LADDER } from "../src/types.ts";
 import { fakeContext, tempDir, writeFile } from "./helpers.ts";
 
-test("a config pinned to 2026-10 has no grill role and the latest set has its exact cross-family chain", async () => {
-  const ctx = fakeContext({ root: tempDir("omt-grill-defaults-") });
-  const configPath = join(ctx.cwd, ".omt", "config.jsonc");
-  writeFile(configPath, JSON.stringify({ defaults: "2026-10" }));
-  const pinned = await loadConfig(ctx);
-  assert.deepEqual(pinned.issues, []);
-  assert.equal(pinned.config.defaults, "2026-10");
-  assert.equal(Object.hasOwn(pinned.config.roles, "grill"), false);
-
-  writeFile(configPath, "{}");
-  const latest = await loadConfig(ctx);
-  assert.deepEqual(latest.issues, []);
-  assert.equal(latest.config.defaults, LATEST_DEFAULT_SET);
-  const grill = latest.config.roles.grill;
-  assert.ok(grill);
-  assert.equal(grill.crossFamily, true);
-  assert.deepEqual(grill.chain, [
-    { provider: "codex", driver: "codex", model: "gpt-6-astra", effort: "high" },
-    { provider: "claudeAgent", driver: "claudeAgent", model: "claude-opus-5-5", effort: "high" },
-  ]);
+test("a retired date pin loads with a warning and uses the current defaults", async () => {
+  const ctx = fakeContext({ root: tempDir("omt-retired-defaults-") });
+  writeFile(join(ctx.cwd, ".omt", "config.jsonc"), JSON.stringify({ defaults: "2026-10" }));
+  const loaded = await loadConfig(ctx);
+  assert.deepEqual(loaded.config, DEFAULT_CONFIG);
+  assert.equal(loaded.issues.length, 1);
+  assert.equal(loaded.issues[0]?.severity, "warning");
+  assert.match(loaded.issues[0]?.message ?? "", /no longer used/);
 });
 
 const EXPECTED: Record<string, [access: string, result: string, t3Role: string, mode: string, crossFamily: boolean, chain: string[]]> = {
-  explore: ["read-only", "research", "research", "plan", false, ["codex/gpt-6-luna/low", "claudeAgent/claude-sonnet-5-5/low"]],
-  research: ["read-only", "research", "research", "plan", false, ["codex/gpt-6.1-sol/low", "claudeAgent/claude-opus-5-5/low"]],
-  plan: ["edit", "plan", "design", "default", false, ["claudeAgent/claude-opus-5-5/xhigh", "codex/gpt-6-astra/xhigh"]],
-  "plan-review": ["read-only", "review", "review", "plan", true, ["codex/gpt-6-astra/high", "claudeAgent/claude-opus-5-5/high"]],
-  grill: ["read-only", "grill", "review", "plan", true, ["codex/gpt-6-astra/high", "claudeAgent/claude-opus-5-5/high"]],
-  execute: ["edit", "work", "implementation", "default", false, ["claudeAgent/claude-opus-5-5/medium", "codex/gpt-6.1-sol/xhigh"]],
-  review: ["edit", "review", "review", "default", true, ["codex/gpt-6-astra/high", "claudeAgent/claude-opus-5-5/high"]],
-  oracle: ["edit", "review", "review", "default", true, ["codex/gpt-6-astra/high", "claudeAgent/claude-opus-5-5/high"]],
-  qa: ["edit", "test", "test", "default", false, ["claudeAgent/claude-haiku-5-5/medium", "claudeAgent/claude-sonnet-5-5/low", "codex/gpt-6.1-sol/low"]],
+  explore: ["read-only", "research", "research", "plan", false, ["codex/gpt-6.1-terra/low", "claudeAgent/claude-haiku-5-5/medium"]],
+  research: ["read-only", "research", "research", "plan", false, ["codex/gpt-6.1-sol/low", "claudeAgent/claude-sonnet-5-5/medium"]],
+  plan: ["edit", "plan", "design", "default", false, ["claudeAgent/claude-opus-5-5/medium", "codex/gpt-6-astra/high"]],
+  "plan-review": ["read-only", "review", "review", "plan", true, ["codex/gpt-6-astra/medium", "claudeAgent/claude-opus-5-5/medium"]],
+  grill: ["read-only", "grill", "review", "plan", true, ["codex/gpt-6-astra/medium", "claudeAgent/claude-opus-5-5/medium"]],
+  execute: ["edit", "work", "implementation", "default", false, ["claudeAgent/claude-opus-5-5/low", "codex/gpt-6.1-sol/high"]],
+  review: ["edit", "review", "review", "default", true, ["codex/gpt-6-astra/medium", "claudeAgent/claude-opus-5-5/medium"]],
+  oracle: ["edit", "review", "review", "default", true, ["codex/gpt-6-astra/medium", "claudeAgent/claude-opus-5-5/medium"]],
+  qa: ["edit", "test", "test", "default", false, ["codex/gpt-6.1-sol/medium", "claudeAgent/claude-sonnet-5-5/low"]],
   guardrail: ["read-only", "guardrail", "review", "plan", false, ["claudeAgent/claude-opus-5-5/high", "codex/gpt-6-astra/high"]],
-  writing: ["edit", "work", "implementation", "default", false, ["claudeAgent/claude-opus-5-5/high", "codex/gpt-6-astra/medium"]],
-  design: ["edit", "work", "design", "default", false, ["claudeAgent/claude-opus-5-5/high"]],
-  ui: ["edit", "work", "implementation", "default", false, ["claudeAgent/claude-opus-5-5/medium"]],
+  writing: ["edit", "work", "implementation", "default", false, ["claudeAgent/claude-opus-5-5/medium", "codex/gpt-6-astra/medium"]],
+  design: ["edit", "work", "design", "default", false, ["claudeAgent/claude-opus-5-5/medium", "codex/gpt-6-astra/high"]],
+  ui: ["edit", "work", "implementation", "default", false, ["claudeAgent/claude-opus-5-5/low", "codex/gpt-6.1-sol/high"]],
 };
 
 test("the defaults hold the 13 roles with the planned values", () => {
@@ -87,36 +74,13 @@ test("the default chains and crossFamily flags match the plan exactly", () => {
   assert.match(DEFAULT_CONFIG.roles.review?.description ?? "", /family that did not make the change/);
 });
 
-test("the design and ui roles run only on Opus, with no fallback", () => {
-  assert.deepEqual(DEFAULT_CONFIG.roles.design, {
-    description: "Design screens and flows in Paper, and write a design spec that UI units cite.",
-    access: "edit",
-    result: "work",
-    t3Role: "design",
-    interactionMode: "default",
-    runtimeMode: "inherit",
-    crossFamily: false,
-    chain: [{ provider: "claudeAgent", driver: "claudeAgent", model: "claude-opus-5-5", effort: "high" }],
-  });
-  assert.deepEqual(DEFAULT_CONFIG.roles.ui, {
-    description: "Implement one UI unit from its design spec, inside its scope.",
-    access: "edit",
-    result: "work",
-    t3Role: "implementation",
-    interactionMode: "default",
-    runtimeMode: "inherit",
-    crossFamily: false,
-    chain: [{ provider: "claudeAgent", driver: "claudeAgent", model: "claude-opus-5-5", effort: "medium" }],
-  });
-});
 
 test("the default limits match the plan", () => {
   assert.deepEqual(DEFAULT_CONFIG.limits, { maxParallel: 6, maxDepth: 1, maxReviewRounds: 4 });
   assert.equal(DEFAULT_CONFIG.version, 1);
 });
 
-test("set 2026-12 drops the retired build keys, the task budget, and the verify, quick, and deep roles", () => {
-  assert.equal(LATEST_DEFAULT_SET, "2026-12");
+test("the latest set keeps the retired build keys, task budget, and roles removed", () => {
   for (const name of ["verify", "quick", "deep"]) assert.equal(Object.hasOwn(DEFAULT_CONFIG.roles, name), false, name);
   for (const [name, profile] of Object.entries(DEFAULT_CONFIG.profiles)) {
     const build = profile.workflow?.build ?? {};
@@ -125,24 +89,6 @@ test("set 2026-12 drops the retired build keys, the task budget, and the verify,
   assert.deepEqual(DEFAULT_CONFIG.profiles.normal?.workflow?.build, { review: "every-round", qa: "planned", failureProofs: "on", oracle: "heavy" });
   assert.match(DEFAULT_CONFIG.roles.qa?.description ?? "", /device flows/);
   assert.match(DEFAULT_CONFIG.roles.qa?.description ?? "", /Edits nothing/);
-});
-
-test("the older sets 2026-10 and 2026-11 still load, without the retired keys and roles, and with no warning", async () => {
-  const ctx = fakeContext({ root: tempDir("omt-old-sets-") });
-  const configPath = join(ctx.cwd, ".omt", "config.jsonc");
-  for (const set of ["2026-10", "2026-11"]) {
-    writeFile(configPath, JSON.stringify({ defaults: set }));
-    const loaded = await loadConfig(ctx);
-    assert.deepEqual(loaded.issues, [], set);
-    assert.equal(loaded.config.defaults, set);
-    assert.deepEqual(loaded.config.limits, { maxParallel: 6, maxDepth: 1, maxReviewRounds: 4 }, set);
-    for (const name of ["verify", "quick", "deep"]) assert.equal(Object.hasOwn(loaded.config.roles, name), false, `${set} ${name}`);
-    assert.ok(loaded.config.roles.qa, set);
-    for (const profile of Object.values(loaded.config.profiles)) {
-      const build = profile.workflow?.build ?? {};
-      for (const key of ["verify", "checkpoint", "stallMinutes"]) assert.equal(Object.hasOwn(build, key), false, `${set} ${key}`);
-    }
-  }
 });
 
 // A minimal JSONC reader for this test only; src/config/jsonc.ts is the real one.
@@ -176,8 +122,8 @@ function stripJsonc(text: string): string {
 for (const [name, text] of Object.entries({ USER_STARTER_CONFIG, PROJECT_STARTER_CONFIG })) {
   test(`${name} parses as JSONC and is sparse`, () => {
     const parsed = JSON.parse(stripJsonc(text)) as Record<string, unknown>;
-    assert.deepEqual(Object.keys(parsed).sort(), ["$schema", "defaults", "limits", "roles", "version"]);
-    assert.equal(parsed.defaults, LATEST_DEFAULT_SET);
+    assert.deepEqual(Object.keys(parsed).sort(), ["$schema", "limits", "roles", "version"]);
+    assert.equal(Object.hasOwn(parsed, "defaults"), false);
     assert.equal(parsed.$schema, "https://raw.githubusercontent.com/gabimoncha/oh-my-t3code/main/schema/omt.schema.json");
     assert.equal(parsed.version, 1);
     assert.deepEqual(parsed.roles, {});

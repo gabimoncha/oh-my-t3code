@@ -4,7 +4,7 @@ Read this page when your user asks you to evaluate, install, or use oh-my-t3code
 
 ## What omt is
 
-omt is a set of skills and a small CLI for agents that run in [T3 Code](https://t3.codes). A T3 thread that runs an omt skill becomes the main thread: it reads the code, asks the user its open questions, writes a plan, and builds the change itself. Then one role-routed T3 child task from the other model family reviews the change, and one child task runs every check. The CLI has no runtime dependencies. The CLI sends no telemetry. It contacts the npm registry only when you run `omt update`, or once a day in `omt install` and `omt doctor` after you set `update` in the user config. `omt update` runs the package manager or mise command of the channel that installed omt.
+omt is a set of skills and a small CLI for agents that run in [T3 Code](https://t3.codes). A T3 thread that runs an omt skill becomes the main thread: it reads the code, asks the user its open questions, writes a plan, and builds the change itself. Then one role-routed T3 child task from the other model family reviews the change, and one child task runs every check. The CLI has no runtime dependencies and sends no telemetry. It contacts the npm registry only when you run `omt update`, or once a day in `omt install` and `omt doctor` after you set `update` in the user config. `omt update` runs the package manager or mise command of the channel that installed omt.
 
 ## 1. Check the fit
 
@@ -20,9 +20,9 @@ Check each requirement on the user's machine. Ask the user about the items that 
 
 Tell the user what one provider family costs them:
 
-- With both Claude and GPT, `plan-review`, `review`, and `oracle` come from the other family than the worker. This is cross-family review.
+- With both Claude and GPT, `plan-review`, `review`, and `oracle` come from the family that did not do the work. This is cross-family review.
 - With one family, the same family reviews its own work.
-- The `design` and `ui` roles run only on Claude Opus 5.5 and have no fallback. Without Claude Code, omt cannot do design or UI units.
+- `design` prefers Claude Opus and falls back to Astra. `ui` prefers Claude Opus and falls back to Sol. Older pins keep their chains. A UI unit can implement the task requirements directly, with no design spec or design tool.
 
 The install in step 4 detects which of the two harnesses can run, and fits the new config to them.
 
@@ -122,7 +122,7 @@ First, show the plan and write nothing:
 omt install --project --hooks --dry-run
 ```
 
-Read the `Harnesses` section of the plan to the user. It lists `claudeAgent` and `codex` as `detected` or `not detected`. When one is missing, it shows the `"harnesses"` value that the new config gets and its effect, such as `design and ui: unavailable without claudeAgent`. When a harness is missing that the user expected, stop, and help the user sign in to it or enable it in T3 before you apply the plan.
+Read the `Harnesses` section of the plan to the user. It lists `claudeAgent` and `codex` as `detected` or `not detected`. When one is missing, it shows the `"harnesses"` value that the new config gets and its effect, such as `cross-family review: the same family reviews`. When a harness is missing that the user expected, stop, and help the user sign in to it or enable it in T3 before you apply the plan.
 
 Then apply it. Without a terminal, the install does not ask. It prints `Re-run with --yes to apply.` and changes nothing, so pass `--yes` only after the user agrees with the plan:
 
@@ -143,7 +143,7 @@ Expect these lines, with paths in the user's project:
 ```text
 PASS  runtime    <runtime>
 PASS  config     13 roles
-PASS  defaults   2026-12 (pinned, latest)
+PASS  defaults   current defaults
 PASS  harnesses  claudeAgent, codex
 PASS  skills     10 skills installed in <project>/.agents/skills
 PASS  links      10 links in <project>/.claude/skills
@@ -160,11 +160,11 @@ The `worktree` line is often `WARN` or `INFO` on the first install. The worktree
 
 Without `--hooks`, the `hooks` line is `INFO  hooks      no hook installed; ...`. That is correct for Codex.
 
-An `INFO  harnesses` line, such as `codex only; design and ui are unavailable`, means that the config skips one harness. Tell the user the effect.
+An `INFO  harnesses` line, such as `codex only; cross-family review: the same family reviews`, means that the config skips one harness. Tell the user the effect.
 
 A `WARN  t3` line means doctor found no T3 settings file: `... settings.json does not exist; is T3 Code installed?`. The install itself is fine. Ask the user if T3 Code is installed. If T3 Code keeps its data in another place, set `T3CODE_HOME` to that directory and run doctor again.
 
-A `WARN  skills` line means the installed skills do not match the CLI. Doctor still exits 0, so read the line. Run the install with `--yes` again. If the line says `no longer shipped:`, an old omt left a skill that this version removed, such as `omt-loop`, `omt-review`, or `omt-show`; the install with `--yes` removes it. If the line says `modified:`, the user edited an installed skill. Ask the user before you add `--force`, which backs up the edited skill and installs over it.
+A `WARN  skills` line means the installed skills do not match the CLI. Doctor still exits 0, so read the line. Run the install with `--yes` again. If the line says `no longer shipped:`, an old omt left a skill that this version removed, such as `omt-loop`, `omt-review`, or `omt-show`. The install with `--yes` removes it. If the line says `modified:`, the user edited an installed skill. Ask the user before you add `--force`, which backs up the edited skill and installs over it.
 
 Check: this command prints the `PASS  skills` line:
 
@@ -183,6 +183,12 @@ T3 runs a setup script in each new worktree before the agent starts. Without a s
 3. A `t3.json` file does not activate anything. T3 runs the setup only after the user commits `t3.json`, `.t3/`, and for pnpm `pnpm-workspace.yaml` on the branch that new worktrees start from, and imports Setup in T3 Project Settings. Tell the user these steps. Do not import a setup that the base branch lacks.
 
 Check: the effective T3 setup runs a dependency install, or you told the user that activation is pending and what remains. Report each part that you could not verify as unverified.
+
+### Check the frontend design skill
+
+Follow [Check availability](../../skills/omt/references/frontend-design.md#check-availability) to look for Anthropic's optional `frontend-design` skill in the user's harness. When it is missing, recommend the official skill, and install it only when the user asks. It helps during design and direct UI implementation without a spec. A missing skill does not block setup.
+
+Check: the user knows whether the skill is available and has the recommendation when it is missing.
 
 ## 5. Restart the agent sessions
 
@@ -226,7 +232,7 @@ The user starts two skills by name. An agent does not pick them on its own:
 Two more skills help with omt itself. The agent can start both on its own when the user asks for help or for a change:
 
 - `$omt-help` answers questions such as "what can omt do", "what do I do next", or "which skill do I use", and gives a tour of at most 5 steps. It only reads.
-- `$omt-setup` sets up, configures, or updates omt: the harnesses, the default set, models, roles, profiles, and the worktree setup. It shows each change first and asks before it writes.
+- `$omt-setup` sets up, configures, or updates omt: the harnesses, the defaults, models, roles, profiles, and the worktree setup. It shows each change first and asks before it writes.
 
 Check: the user knows the three first tasks, how to start the two user-started skills, and that `$omt-help` and `$omt-setup` exist.
 
@@ -300,36 +306,13 @@ In these steps, `omt` means the command of the install. With a project install, 
 
    Check: the command prints `PASS  skills     10 skills installed in <folder>`. If it prints nothing, run the doctor command without the pipe, and do the fix that its `skills` line prints.
 
-4. Compare the default sets. `--yes` and `--skills-only` never move the `defaults` pin. For each config file that pins an older set, the command that synced the skills printed `hint: run omt defaults use latest in <dir> to move the pin in <file>`. That command is `omt update --yes` in step 2, the `--skills-only` command of a dev-dependency hint in step 1, or the `--skills-only` command of a manual update. When it printed no such hint, go to the next step.
+4. Review the defaults changes. `omt update` and `--skills-only` show the difference and ask before accepting it. `--yes` also accepts the current defaults, so get approval for that before you pass it.
 
-   Only `omt update` prints the diff before the hint. `--skills-only` prints the hint only. So do these steps for each hint, and run each command in the `<dir>` of the hint. `<dir>` can be another project. Use the `<cli>` and `<scope>` of the config file:
+   To review pending changes separately, run `omt doctor --dry-run` for a user install, or `omt doctor --project --dry-run` in the project root. Show the diff. A line marked `(overridden by <file>)` has no effect because that file sets the value.
 
-   | Config file | `<dir>` | `<cli>` | `<scope>` |
-   | --- | --- | --- | --- |
-   | User config | the home folder | the absolute path of `omt`, such as `<project root>/.omt/bin/omt`. With only a global install, `omt`. | `--user` |
-   | Project config | a project root | `.omt/bin/omt` | `--project` |
+   After approval, run the same doctor command with `--yes` instead of `--dry-run`. Declining keeps the last accepted defaults. An older install without a saved baseline shows the current role choices on its first review.
 
-   `--project` selects the config of the project that holds the current folder, so the `cd` is necessary.
-
-   1. Show the user the dry run:
-
-      ```sh
-      (cd <dir> && <cli> defaults use latest <scope> --dry-run)
-      ```
-
-      Check that the first line is `<file>: defaults <set> -> <latest set>`, with the `<file>` of the hint. If it names another file, stop and show the user both paths. `<set>` is the pinned set.
-
-   2. Show the user the changes from the pinned set to the latest set:
-
-      ```sh
-      (cd <dir> && <cli> defaults diff <set> latest)
-      ```
-
-      A line that ends with `(overridden by <file>)` has no effect, because that config file sets the value.
-
-   3. Ask the user whether to move the pin. Only after the user agrees, run the dry-run command with `--yes` instead of `--dry-run`.
-
-   Check: the user decided for each file. In each folder where a pin moved, `omt config validate` reports no errors. For a project in `<dir>`, run `(cd <dir> && .omt/bin/omt config validate)`.
+   Check: each scope has a user decision, and `omt config validate` reports no errors after acceptance.
 
 5. Tell the user to close the T3 threads of this project and start new ones. A running session keeps the old skills.
 
@@ -393,7 +376,7 @@ The project uninstall does not remove the CLI. To remove it too, use the command
 
 - [Walkthrough](../walkthrough.md): two real omt runs, with their plans, tasks, and reviews.
 - [Install guide](../install.md): every install channel, the global install, every path the install writes, and the uninstall details.
-- [Configure roles and profiles](../configuration.md): the default roles, custom roles and profiles, limits, fast mode, the default set, and the harnesses.
+- [Configure roles and profiles](../configuration.md): the default roles, custom roles and profiles, limits, fast mode, defaults review, and the harnesses.
 - [Commands](../commands.md): every `omt` command.
 - [README](../../README.md): the features, the skills, and the limits.
 

@@ -157,16 +157,17 @@ test("doctor homes check: INFO, PASS, and WARN, and it never writes the T3 setti
 
 test("doctor roles check runs only with --capabilities: PASS, WARN, FAIL", async () => {
   const project = makeProject();
+  project.projectConfig('{ "roles": { "explore": { "chain": [{ "driver": "codex", "model": "gpt-6-luna", "effort": "low" }] } } }');
   assert.equal((await doctor(project)).report.checks.some((c) => c.id === "roles"), false);
   assert.equal((await doctor(project, ["--capabilities", CAPS_FILE])).get("roles").status, "PASS");
 
   const grok = '[{ "driver": "grok", "model": "grok-build" }]';
-  project.projectConfig(`{ "version": 1, "roles": { "oracle": { "chain": ${grok} } } }\n`);
+  project.projectConfig(`{ "version": 1, "roles": { "explore": { "chain": [{ "driver": "codex", "model": "gpt-6-luna", "effort": "low" }] }, "oracle": { "chain": ${grok} } } }\n`);
   const warned = (await doctor(project, ["--capabilities", CAPS_FILE])).get("roles");
   assert.equal(warned.status, "WARN");
   assert.match(warned.message, /unavailable: oracle/);
 
-  project.projectConfig(`{ "version": 1, "roles": { "execute": { "chain": ${grok} } } }\n`);
+  project.projectConfig(`{ "version": 1, "roles": { "explore": { "chain": [{ "driver": "codex", "model": "gpt-6-luna", "effort": "low" }] }, "execute": { "chain": ${grok} } } }\n`);
   const failed = await doctor(project, ["--capabilities", CAPS_FILE]);
   assert.equal(failed.get("roles").status, "FAIL");
   assert.equal(failed.code, 1);

@@ -1,7 +1,7 @@
 import { constants } from "node:fs";
 import { access, realpath, stat } from "node:fs/promises";
 import { delimiter, join } from "node:path";
-import { LATEST_DEFAULT_SET } from "../config/defaultSets.ts";
+import { DEFAULT_CONFIG, diffDefaults } from "../config/defaults.ts";
 import { loadConfig } from "../config/load.ts";
 import { projectShimPath, skillRoots, t3SettingsPath } from "../paths.ts";
 import { resolveAll } from "../routing/resolve.ts";
@@ -30,7 +30,7 @@ import {
   shimPaths,
 } from "./project.ts";
 import { worktreeSummary } from "../worktree/check.ts";
-import { DEFAULT_HARNESSES } from "./harness.ts";
+import { DEFAULT_HARNESSES, harnessEffects } from "./harness.ts";
 import { classifySkill, isManagedDir, listBundledSkills } from "./skills.ts";
 import type { BundledSkill } from "./skills.ts";
 
@@ -49,6 +49,7 @@ export interface DoctorReport {
 
 // Each seam defaults to the real one; tests pass a counting fetch and a fake update flow.
 export interface UpdateCheckSeams {
+  skipUpdate?: boolean;
   fetch?: typeof fetch;
   runUpdate?: typeof runUpdate;
 }
@@ -90,21 +91,19 @@ function checkConfig({ config, issues }: LoadedConfig): DoctorCheck {
 }
 
 // Doctor prints this check, and install prints its INFO message as a note after it applies.
-export function checkDefaults({ config, defaultsSource }: Pick<LoadedConfig, "config" | "defaultsSource">): DoctorCheck {
-  const set = config.defaults;
-  if (defaultsSource === "latest") {
-    return check("defaults", "INFO", `${set} (latest, not pinned); run omt defaults use latest to pin`);
-  }
-  if (set === LATEST_DEFAULT_SET) return check("defaults", "PASS", `${set} (pinned, latest)`);
-  return check("defaults", "INFO", `pinned ${set} from ${defaultsSource}; omt ships ${LATEST_DEFAULT_SET}; run omt defaults diff`);
+export function checkDefaults({ defaults }: Pick<LoadedConfig, "defaults">): DoctorCheck {
+  const changes = diffDefaults(defaults, DEFAULT_CONFIG, []);
+  return changes.length === 0
+    ? check("defaults", "PASS", "current defaults")
+    : check("defaults", "INFO", `${changes.length} changes available; run omt doctor to review`);
 }
 
 export function checkHarnesses({ config }: Pick<LoadedConfig, "config">): DoctorCheck {
   const harnesses = config.harnesses;
   if (harnesses === undefined) return check("harnesses", "PASS", DEFAULT_HARNESSES.join(", "));
   const list = harnesses.join(", ");
-  if (!harnesses.includes("claudeAgent")) return check("harnesses", "INFO", `${list} only; design and ui are unavailable`);
-  if (!harnesses.includes("codex")) return check("harnesses", "INFO", `${list} only; cross-family review uses the same family`);
+  const effects = harnessEffects(harnesses, config.roles);
+  if (effects.length > 0) return check("harnesses", "INFO", `${list} only; ${effects.join("; ")}`);
   return check("harnesses", "PASS", list);
 }
 
@@ -423,7 +422,7 @@ export async function runDoctor(
   const loadedConfig = await loadConfig(ctx);
   const bundled = await listBundledSkills(ctx.packageRoot);
   const names = bundled.map((skill) => skill.name);
-  const daily = await dailyCheck(ctx, { mode: loadedConfig.config.update, ...(seams.fetch === undefined ? {} : { fetch: seams.fetch }) });
+  const daily = seams.skipUpdate === true ? undefined : await dailyCheck(ctx, { mode: loadedConfig.config.update, ...(seams.fetch === undefined ? {} : { fetch: seams.fetch }) });
   const checks = [
     checkRuntime(ctx),
     checkConfig(loadedConfig),

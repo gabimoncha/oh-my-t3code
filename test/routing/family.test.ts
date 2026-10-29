@@ -18,8 +18,8 @@ function capsWithInstances(): Capabilities {
 }
 
 const REVIEW = DEFAULT_CONFIG.roles.review as RoleConfig;
-const CLAUDE_HIGH = { providerInstanceId: "claudeAgent", model: "claude-opus-5-5", options: { effort: "high" } };
-const CODEX_HIGH = { providerInstanceId: "codex", model: "gpt-6-astra", options: { reasoningEffort: "high" } };
+const CLAUDE_MEDIUM = { providerInstanceId: "claudeAgent", model: "claude-opus-5-5", options: { effort: "medium" } };
+const CODEX_MEDIUM = { providerInstanceId: "codex", model: "gpt-6-astra", options: { reasoningEffort: "medium" } };
 
 test("rungFamily is the registered instance's driver kind, else the driver, else the configured driver, else the provider id", () => {
   const c = capsWithInstances();
@@ -98,20 +98,20 @@ test("crossFamilyOrder is a stable partition: other families first, then the wor
 
 test("review against claudeAgent starts on codex, and against codex starts on claudeAgent", () => {
   const againstClaude = resolveRole("review", REVIEW, undefined, { against: "claudeAgent" });
-  assert.deepEqual(againstClaude.delegateTask?.target, CODEX_HIGH);
-  assert.deepEqual(againstClaude.fallbacks, [CLAUDE_HIGH]);
+  assert.deepEqual(againstClaude.delegateTask?.target, CODEX_MEDIUM);
+  assert.deepEqual(againstClaude.fallbacks, [CLAUDE_MEDIUM]);
   assert.deepEqual(againstClaude.notes, ["cross-family: worker family claudeAgent; the configured order applies"]);
 
   const againstCodex = resolveRole("review", REVIEW, undefined, { against: "codex" });
-  assert.deepEqual(againstCodex.delegateTask?.target, CLAUDE_HIGH);
-  assert.deepEqual(againstCodex.fallbacks, [CODEX_HIGH]);
+  assert.deepEqual(againstCodex.delegateTask?.target, CLAUDE_MEDIUM);
+  assert.deepEqual(againstCodex.fallbacks, [CODEX_MEDIUM]);
   assert.deepEqual(againstCodex.attempts.map((a) => a.index), [1, 0]);
   assert.deepEqual(againstCodex.notes, ["cross-family: worker family codex; other families first"]);
 });
 
 test("without --against the configured order applies and no note is added", () => {
   const resolution = resolveRole("review", REVIEW);
-  assert.deepEqual(resolution.delegateTask?.target, CODEX_HIGH);
+  assert.deepEqual(resolution.delegateTask?.target, CODEX_MEDIUM);
   assert.equal(resolution.notes, undefined);
   assert.equal(resolution.crossFamily, true);
   assert.deepEqual(toRouteOutput(resolution).notes, []);
@@ -246,7 +246,7 @@ test("with capabilities, a default rung whose instance is not registered keeps i
   codex.providerInstanceId = "codex-main";
   c.inheritedProviderInstanceId = "claude-main";
   const resolution = resolveRole("review", REVIEW, c, { against: "claude-main" });
-  assert.deepEqual(resolution.delegateTask?.target, { ...CODEX_HIGH, providerInstanceId: "codex-main" });
+  assert.deepEqual(resolution.delegateTask?.target, { ...CODEX_MEDIUM, providerInstanceId: "codex-main" });
   assert.deepEqual(toRouteOutput(resolution).notes, [
     "cross-family: worker family claudeAgent; the configured order applies",
     "rung 1: provider instance codex is not registered; using instance codex-main of driver codex",
@@ -256,7 +256,7 @@ test("with capabilities, a default rung whose instance is not registered keeps i
   codex.canRunChildTask = false;
   codex.constraints = ["Provider instance is disabled."];
   const sameFamily = resolveRole("review", REVIEW, c, { against: "claude-main" });
-  assert.deepEqual(sameFamily.delegateTask?.target, { ...CLAUDE_HIGH, providerInstanceId: "claude-main" });
+  assert.deepEqual(sameFamily.delegateTask?.target, { ...CLAUDE_MEDIUM, providerInstanceId: "claude-main" });
   assert.deepEqual(sameFamily.notes, [
     "cross-family: worker family claudeAgent; the configured order applies",
     "cross-family: no rung outside family claudeAgent is available; the same family reviews",

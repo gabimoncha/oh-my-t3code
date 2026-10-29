@@ -19,14 +19,14 @@ test("omt-swarm splits the plan into tracks with disjoint scopes and does not bu
   assert.match(swarm(), /You do not build\./);
 });
 
-test("omt-swarm approves and commits the design before the split, and tracks only cite it", () => {
+test("omt-swarm approves requested designs before the split and permits tracks without a spec", () => {
   const split = section(swarm(), "### 2. Split");
   assert.match(split, /Run the `omt-ulw` step 6 design check in the main thread before the split\./);
-  assert.match(split, /If `omt-design` is required, run it and get the owner's approval\./);
-  assert.match(split, /Commit the approved design spec .* before you record `<base>`, so the spec is in `<base>`\./);
-  assert.match(split, /Tracks only cite the approved spec\. A track does not run `omt-design`\./);
+  assert.match(split, /If the plan has a requested design pass that has not run, run `omt-design` and get the owner's approval\./);
+  assert.match(split, /When an approved design spec exists, commit it .* before you record `<base>`, so the spec is in `<base>`\./);
+  assert.match(split, /Tracks use that spec or the task requirements\. A track does not run `omt-design`\./);
   const launch = section(swarm(), "### 3. Launch");
-  assert.match(launch, /Cite the approved design spec in `<base>`\. Do not run `omt-design`\. The main thread completed the step 6 design check before the split\./);
+  assert.match(launch, /Cite the approved design spec in `<base>` when one exists\. Otherwise implement the task requirements directly\. Do not run `omt-design`\. The main thread completed the step 6 design check before the split\./);
 });
 
 test("omt-swarm launches each track with t3_thread_launch to run omt-ulw steps 7 to 12 with no push and no PR", () => {

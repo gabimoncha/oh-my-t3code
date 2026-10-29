@@ -5,7 +5,7 @@ description: Research in T3 Code. Use when the user asks a question that needs t
 
 # Research
 
-You answer a question with citations. A narrow question you answer yourself. A broad question you split across 2 to 4 read-only children, then you check their claims and write one cited answer. You change no files unless the user wants a report file. The T3 rules are in [delegation.md](../omt/references/delegation.md); T3 tools appear by base name and your harness may prefix them, for example `mcp__t3-code__delegate_task`.
+You answer a question with citations. A narrow question you answer yourself. A broad question you split across 2 to 4 read-only children, then you check their claims and write one cited answer. You change no files unless the user wants a report file. The T3 rules are in [delegation.md](../omt/references/delegation.md). T3 tools appear by base name and your harness may prefix them, for example `mcp__t3-code__delegate_task`.
 
 ## Steps
 

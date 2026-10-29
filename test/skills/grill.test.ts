@@ -17,13 +17,12 @@ test("omt-grill links to the shared branch check", () => {
   assert.match(mode, /run the \[branch check\]\(\.\.\/omt\/references\/delegation\.md#branch-check\)/);
 });
 
-test("omt-grill stops for a missing grill role and offers omt-setup", () => {
+test("omt-grill checks config overrides for a missing role and offers setup", () => {
   const frame = section(readSkill("omt-grill"), "### 1. ");
   assert.match(frame, /Run `omt roles --role grill --json`/);
-  assert.match(frame, /When it exits 1 with `unknown role grill`[^\n]*Stop\./);
-  assert.match(frame, /Show the output of `omt defaults diff`/);
-  assert.match(frame, /offer the `omt-setup` skill/);
-  assert.match(frame, /Dispatch nothing until the role resolves/);
+  assert.match(frame, /check whether a config override removed the role/);
+  assert.match(frame, /offer `omt-setup` to restore it/);
+  assert.doesNotMatch(frame, /omt defaults/);
 });
 
 test("omt-grill finds the facts first, with GX explore and research units for broad reads", () => {

@@ -1,4 +1,4 @@
-import { defaultSet } from "../config/defaultSets.ts";
+import { DEFAULT_CONFIG } from "../config/defaults.ts";
 import { mergeLayer } from "../config/merge.ts";
 import { PROFILE_CHAIN_MAX } from "../config/validate.ts";
 import type { ConfigIssue, LoadedConfig, OmtConfig, ProfileConfig, Workflow } from "../types.ts";
@@ -52,7 +52,7 @@ export interface ProfileStep {
 // The config before the first chain step: the workflow sits in a temporary profile, so that
 // mergeLayer also merges its groups and keys.
 export function profileBase(config: OmtConfig): OmtConfig {
-  return { ...config, profiles: { normal: structuredClone(defaultSet(config.defaults).profiles.normal!) } };
+  return { ...config, profiles: { normal: structuredClone(config.profiles.normal!) } };
 }
 
 function chainSteps(config: OmtConfig, chain: { name: string; profile: ProfileConfig }[]): ProfileStep[] {
@@ -122,7 +122,7 @@ export function effectiveConfig(loaded: LoadedConfig, options: EffectiveConfigOp
   const profile = resolveProfile(loaded.config, name);
   profile.source = options.profile !== undefined ? "argument"
     : options.planProfile !== undefined ? "plan"
-    : loaded.config.profile !== defaultSet(loaded.config.defaults).profile ? "config" : "default";
+    : loaded.config.profile !== DEFAULT_CONFIG.profile ? "config" : "default";
   return {
     ...loaded,
     config: { ...loaded.config, profile: name, limits: profile.limits, roles: profile.roles, models: profile.models },

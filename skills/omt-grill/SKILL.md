@@ -5,7 +5,7 @@ description: Grill, stress-test, find the edge cases of, or brainstorm a vague g
 
 # Grill
 
-You confront the owner's goal with facts before it has a plan. You find its edge cases, its open questions, and the options, and you get answers from the owner. You write no plan and change no code in this skill. The T3 rules are in [delegation.md](../omt/references/delegation.md); T3 tools appear by base name and your harness may prefix them, for example `mcp__t3-code__delegate_task`.
+You confront the owner's goal with facts before it has a plan. You find its edge cases, its open questions, and the options, and you get answers from the owner. You write no plan and change no code in this skill. The T3 rules are in [delegation.md](../omt/references/delegation.md). T3 tools appear by base name and your harness may prefix them, for example `mcp__t3-code__delegate_task`.
 
 You do the grill yourself. Children only read broad areas (`explore`), read docs or the web (`research`), and give one second opinion (`grill`). Expected cost: 1 `grill` task per grill, plus the explore and research tasks.
 
@@ -39,7 +39,7 @@ Done when: you know your mode and your family, and the branch check is done or r
 
 Use the slug that `omt-plan` passes. Otherwise pick a slug that matches `^[a-z0-9][a-z0-9-]{0,63}$`. The later plan uses the same slug, so grill tasks and plan tasks share one ledger.
 
-Run `omt roles --role grill --json`. When it exits 1 with `unknown role grill`, the config pins a default set that has no `grill` role. Stop. Show the output of `omt defaults diff`, and offer the `omt-setup` skill to move the pin. Dispatch nothing until the role resolves.
+Run `omt roles --role grill --json`. If it exits 1 with `unknown role grill`, check whether a config override removed the role. Show the user the issue and offer `omt-setup` to restore it. Continue the main-thread questions while that decision is pending.
 
 Read the profile:
 

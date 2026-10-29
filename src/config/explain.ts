@@ -1,13 +1,13 @@
-import { effectiveConfig, profileBase, profileSteps } from "../profile/resolve.ts";
+import { effectiveConfig, profileSteps } from "../profile/resolve.ts";
 import type { ProfileSource } from "../profile/resolve.ts";
 import type { LoadedConfig, OmtConfig } from "../types.ts";
 import { isRecord } from "../util/json.ts";
-import { configLeaves } from "./defaultSets.ts";
+import { configLeaves } from "./defaults.ts";
 import { mergeConfigLayers } from "./load.ts";
 import type { ConfigFileLayer, MergeStep } from "./load.ts";
 
 export type ExplainSource =
-  | { kind: "defaults"; set: string }
+  | { kind: "defaults" }
   | { kind: "user" | "project"; path: string }
   | { kind: "profile"; profile: string; declaredIn: ExplainSource };
 
@@ -19,7 +19,7 @@ export interface ExplainEntry {
 }
 
 export interface ExplainReport {
-  defaults: { set: string; source: string };
+  defaults: { source: string };
   profile: { name: string; source: ProfileSource };
   root: ExplainEntry[];
   effective: ExplainEntry[];
@@ -90,11 +90,11 @@ function explainPath(steps: Step[], path: string[]): ExplainEntry {
   };
 }
 
-function fileSource(step: MergeStep, set: string): ExplainSource {
-  return step.kind === "defaults" || step.path === undefined ? { kind: "defaults", set } : { kind: step.kind, path: step.path };
+function fileSource(step: MergeStep): ExplainSource {
+  return step.kind === "defaults" || step.path === undefined ? { kind: "defaults" } : { kind: step.kind, path: step.path };
 }
 
-function removedObjects(steps: MergeStep[], set: string): ExplainReport["removed"] {
+function removedObjects(steps: MergeStep[]): ExplainReport["removed"] {
   const final = steps.at(-1)!.config;
   const removed: ExplainReport["removed"] = [];
   for (const group of ["roles", "profiles"] as const) {
@@ -102,7 +102,7 @@ function removedObjects(steps: MergeStep[], set: string): ExplainReport["removed
     for (const name of names) {
       if (Object.hasOwn(final[group], name)) continue;
       const remover = steps.findLast((step) => valueAt(step.layer, [group, name]) === null);
-      if (remover !== undefined) removed.push({ path: [group, name], source: fileSource(remover, set) });
+      if (remover !== undefined) removed.push({ path: [group, name], source: fileSource(remover) });
     }
   }
   return removed;
@@ -117,11 +117,10 @@ export function explainConfig(
   loaded: LoadedConfig & { steps?: MergeStep[] },
   profile?: string,
 ): ExplainReport {
-  const set = loaded.config.defaults;
-  const defaults: ExplainSource = { kind: "defaults", set };
-  const mergeSteps = loaded.steps ?? mergeConfigLayers(layers).steps;
+  const defaults: ExplainSource = { kind: "defaults" };
+  const mergeSteps = loaded.steps ?? mergeConfigLayers(layers, { config: loaded.defaults, source: loaded.defaultsSource }).steps;
   const rootSteps: Step[] = mergeSteps.map((step) => {
-    const source = fileSource(step, set);
+    const source = fileSource(step);
     return { config: step.config, layer: step.layer, source: () => source };
   });
   const root = configLeaves(loaded.config).map((path) => explainPath(rootSteps, path));
@@ -131,7 +130,7 @@ export function explainConfig(
   const { profile: resolved } = effectiveConfig(loaded, { profile });
   const chain = profileSteps(loaded.config, resolved.name);
   const effectiveSteps: Step[] = [{
-    config: effectiveView(profileBase(loaded.config)),
+    config: { ...effectiveView(loaded.config), workflow: loaded.defaults.profiles.normal?.workflow },
     layer: undefined,
     source: (path) => (path[0] === "workflow" ? defaults : rootSource(path)),
   }];
@@ -150,16 +149,16 @@ export function explainConfig(
   const effective = configLeaves(effectiveSteps.at(-1)!.config).map((path) => explainPath(effectiveSteps, path));
 
   return {
-    defaults: { set, source: loaded.defaultsSource },
+    defaults: { source: loaded.defaultsSource },
     profile: { name: resolved.name, source: resolved.source },
     root,
     effective,
-    removed: removedObjects(mergeSteps, set),
+    removed: removedObjects(mergeSteps),
   };
 }
 
 export function sourceLabel(source: ExplainSource): string {
-  if (source.kind === "defaults") return `defaults ${source.set}`;
+  if (source.kind === "defaults") return "defaults";
   if (source.kind === "profile") return `profile ${source.profile} (${sourceLabel(source.declaredIn)})`;
   return source.kind;
 }

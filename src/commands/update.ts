@@ -11,14 +11,14 @@ Update the omt CLI with the command of the channel that installed it (npm,
 pnpm, or Bun global, or mise), then sync the skills in user scope and in
 each recorded project with the new CLI. A skill that you edited stays as it
 is, and the output names it. Asks the npm registry for the latest version.
-Shows the plan first, then asks to apply it. The defaults pin moves only
-when you answer yes to its own question.
+Shows the plan first, then asks to apply it. Shows default settings changes
+and asks before accepting them. User overrides stay unchanged.
 
 Options:
   --check        ask the registry and print the current version, the latest
                  version, the channel, and its update command; write nothing
   --dry-run      print the plan and write nothing
-  --yes          apply without asking; does not move the defaults pin
+  --yes          apply the update and current defaults without asking
   --skills-only  skip the registry and the CLI update, and sync the skills
                  with the CLI that runs now; no network and no runner
   --project      only the current project: the channel of its shim, and

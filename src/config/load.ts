@@ -4,7 +4,8 @@ import type { ConfigIssue, ConfigLayer, ConfigSource, LoadedConfig, OmtConfig, P
 import { OmtError } from "../util/errors.ts";
 import { readFileIfExists } from "../util/fs.ts";
 import { isRecord } from "../util/json.ts";
-import { defaultSet, LATEST_DEFAULT_SET } from "./defaultSets.ts";
+import { DEFAULT_CONFIG } from "./defaults.ts";
+import { activeDefaults } from "./defaultsState.ts";
 import { parseJsonc } from "./jsonc.ts";
 import { mergeLayer } from "./merge.ts";
 import { validateLayer, validateMergedProfiles } from "./validate.ts";
@@ -57,7 +58,7 @@ export async function readConfigLayers(opts: {
   return layers;
 }
 
-// The config after one merge step: the cloned default set first, then each present file layer.
+// The config after one merge step: the accepted defaults first, then each present file layer.
 export interface MergeStep {
   kind: "defaults" | "user" | "project";
   path?: string;
@@ -70,21 +71,16 @@ export async function loadConfig(opts: {
   env: Record<string, string | undefined>;
   homedir: string;
 }): Promise<LoadedConfig> {
-  const { steps: _steps, ...loaded } = mergeConfigLayers(await readConfigLayers(opts));
+  const { steps: _steps, ...loaded } = mergeConfigLayers(await readConfigLayers(opts), await activeDefaults(opts));
   return loaded;
 }
 
-export function mergeConfigLayers(layers: ConfigFileLayer[]): LoadedConfig & { steps: MergeStep[] } {
-  // The project layer's set wins over the user layer's, before any layer merges.
-  let defaultsSource = "latest";
-  let selected = LATEST_DEFAULT_SET;
-  for (const { path, layer } of layers) {
-    if (layer.defaults === undefined) continue;
-    selected = layer.defaults;
-    defaultsSource = path;
-  }
-  let config: OmtConfig = structuredClone(defaultSet(selected));
-  config.defaults = selected;
+export function mergeConfigLayers(
+  layers: ConfigFileLayer[],
+  base: { config: OmtConfig; source: string } = { config: DEFAULT_CONFIG, source: "current" },
+): LoadedConfig & { steps: MergeStep[] } {
+  const defaultsSource = base.source;
+  let config: OmtConfig = structuredClone(base.config);
   const steps: MergeStep[] = [{ kind: "defaults", layer: {}, config }];
   const sources: ConfigSource[] = [{ kind: "defaults", present: true }];
   const issues: ConfigIssue[] = [];
@@ -123,5 +119,5 @@ export function mergeConfigLayers(layers: ConfigFileLayer[]): LoadedConfig & { s
     issues.push(...chainIssues.filter((issue) => issue.path === `profiles.${name}.extends`));
     issues.push(...profileIssues(copy, sources, [name]));
   }
-  return { config, sources, issues, defaultsSource, steps };
+  return { config, defaults: base.config, sources, issues, defaultsSource, steps };
 }

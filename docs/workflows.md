@@ -1,6 +1,6 @@
 # How the omt workflows run
 
-This page tells you what omt does when it builds a goal, plans, researches, designs, runs parallel tracks, and reviews a pull request. It also tells you when omt commits and opens a PR, how it adds tests, and how parallel workers share builds. To change these steps, see [Configure roles and profiles](configuration.md).
+This page describes how omt builds a goal, plans, researches, designs, runs parallel tracks, and reviews a pull request. It also describes when omt commits and opens a PR, how it adds tests, and how parallel workers share builds. To change these steps, see [Configure roles and profiles](configuration.md).
 
 ## Build a goal
 
@@ -11,7 +11,7 @@ This page tells you what omt does when it builds a goal, plans, researches, desi
 3. It frames the goal: the objective, done conditions that can fail, the tier (LIGHT or HEAVY), and a slug.
 4. It asks you every open question at once, each with 2 to 4 options and a recommendation. After your answers it asks the next batch, until no question is open. It does not ask what the code can answer.
 5. It plans. A LIGHT run gets a short plan that the main thread fills. A HEAVY run goes through `omt-plan`, and you approve the plan.
-6. When the plan needs designs that do not exist yet, it runs `omt-design` first.
+6. When the user requests a design pass first, it runs `omt-design` before the affected UI units. Otherwise it builds the UI from the task requirements.
 7. It builds the units itself, runs each unit's verify command, and writes the planned tests. A large unit with its own files can go to an `execute` task.
 8. One review task from the other model family reviews the whole diff. The reviewer fixes local findings itself and reports the rest. When the profile requires the oracle, this reviewer is the oracle.
 9. The main thread reads the reviewer's fix diff and fixes the reported findings.
@@ -21,11 +21,13 @@ This page tells you what omt does when it builds a goal, plans, researches, desi
 
 The main thread waits for each task inside its turn. A turn ends only for you: a batch of questions, a plan approval, or the report. No heartbeat wakes the thread. A LIGHT run skips the plan review and your plan approval, but it still has the review task and the qa task. In the `normal` profile, the reviewer checks the fixes again after each round, up to `maxReviewRounds` reviews.
 
+UI work needs no design spec. The agent that builds the UI follows an approved spec when one exists. Without one, it builds from the task requirements and loads Anthropic's `frontend-design` skill when it is installed. Setup recommends that skill when it is missing, and a missing skill does not block the work.
+
 ## Plan, research, and design
 
 - `omt-plan` plans only. The main thread reads the code, asks question batches until no question is open, and writes the plan with its summary last. One `plan-review` task from the other model family reviews it. The main thread fixes the blockers, and one more review checks only those blockers: at most 2 rounds. The reply shows the plan summary.
 - `omt-research` answers a narrow question in the main thread, with a `path:line` or a URL for each fact. A broad question gets 2 to 4 read-only tasks in parallel, and the main thread checks each claim before it answers.
-- `omt-design` draws the variants of each screen in a new Paper file. When the main thread runs Claude Opus, it draws them itself. Otherwise one `design` task on Opus draws them. You pick one variant per screen and steer until you approve. Then the main thread writes `docs/design/<slug>.md`, and on request it builds the screens with the build steps 7 to 12.
+- `omt-design` draws the variants of each screen in a new Paper file. When the main thread runs Claude Opus, it draws them itself. Otherwise one routed `design` task draws them, with the configured fallbacks. Both use Anthropic's `frontend-design` skill when available. Paper is optional. Without it, the designs are HTML mockups or platform-native previews. You pick one variant per screen and steer until you approve. Then the main thread writes `docs/design/<slug>.md`, and on request it builds the screens with the build steps 7 to 12.
 
 ## Build parallel tracks
 
@@ -74,11 +76,11 @@ With the default policy, on a branch that is not the default branch:
 - `omt-ulw` makes one commit for the run after QA passes. Then it pushes the branch and opens a ready PR, or the push updates the branch's open PR.
 - `omt-code-review` commits the approved fixes and tests and pushes them to the PR branch with no further question. For a PR by another author, it asks you first.
 
-A commit or push on the default branch asks you first. Each merge and each force push also asks you first. A config pinned to the default set `2026-10` has no `git` group, so each action that the config does not set asks. To change the policy, set `workflow.git` in a profile ([Write a custom profile](configuration.md#write-a-custom-profile)). The [spec](spec.md#515-omt-git) lists the rules.
+A commit or push on the default branch asks you first. Each merge and each force push also asks you first. Without a git policy, each action asks. To change the policy, set `workflow.git` in a profile ([Write a custom profile](configuration.md#write-a-custom-profile)). The [spec](spec.md#515-omt-git) lists the rules.
 
 ## Grill a goal before you plan
 
-Use the `omt-grill` skill when your goal is vague or you do not know its edge cases yet. The main thread reads the code first. Then one task from the other model family reads the goal and the code once, as a second opinion. The models decide the areas that you do not know and give a reason for each decision. You answer the questions in the areas that you know, and you accept or change each edge case, in one reply per batch. The main thread checks each answer against the code and asks the next batch, until no question is open. The skill writes the result to a grill file, and `omt-plan` reads it, asks no settled question again, and turns the accepted and changed edge cases into integration or unit tests.
+Use the `omt-grill` skill when your goal is vague or you do not know its edge cases yet. The main thread reads the code first. Then one task from the other model family reads the goal and the code once, as a second opinion. The models decide the areas that you do not know and give a reason for each decision. You answer the questions in the areas that you know, and you accept or change each edge case, in one reply per batch. The main thread checks each answer against the code and asks the next batch, until no question is open. The skill writes the result to a grill file. `omt-plan` reads that file, asks no settled question again, and turns the accepted and changed edge cases into integration or unit tests.
 
 ## Add tests only from the plan
 

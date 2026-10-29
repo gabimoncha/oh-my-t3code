@@ -1,4 +1,3 @@
-import { LATEST_DEFAULT_SET } from "./defaultSets.ts";
 import { setTopLevelValue } from "./jsonc.ts";
 
 export const SCHEMA_URL = "https://raw.githubusercontent.com/gabimoncha/oh-my-t3code/main/schema/omt.schema.json";
@@ -9,8 +8,6 @@ export const USER_STARTER_CONFIG = `// oh-my-t3code user config. It applies to e
 {
   "$schema": "${SCHEMA_URL}",
   "version": 1,
-  // The pinned default set. After an omt update, run \`omt defaults diff\` to see what a newer set changes.
-  "defaults": "${LATEST_DEFAULT_SET}",
   // "profile": "prototype",
   // Example: a profile that builds like prototype, with failure proofs and fast implementation.
   // Run \`omt profile show <name>\` to see the workflow, roles, and limits that a profile resolves to.
@@ -45,8 +42,6 @@ export const PROJECT_STARTER_CONFIG = `// oh-my-t3code project config. It overri
 {
   "$schema": "${SCHEMA_URL}",
   "version": 1,
-  // The pinned default set. After an omt update, run \`omt defaults diff\` to see what a newer set changes.
-  "defaults": "${LATEST_DEFAULT_SET}",
   // "profile": "prototype",
   // Example: a profile that builds like prototype, with failure proofs and fast implementation.
   // Run \`omt profile show <name>\` to see the workflow, roles, and limits that a profile resolves to.
@@ -72,7 +67,7 @@ export const PROJECT_STARTER_CONFIG = `// oh-my-t3code project config. It overri
 }
 `;
 
-// The starter that omt install writes: with harnesses, the key goes after the "defaults" line.
+// The starter used by omt install.
 export function starterConfig(scope: "user" | "project", harnesses?: string[]): string {
   const starter = scope === "project" ? PROJECT_STARTER_CONFIG : USER_STARTER_CONFIG;
   return harnesses === undefined ? starter : setTopLevelValue(starter, "harnesses", harnesses);

@@ -61,7 +61,7 @@ export interface Workflow {
     guardrails: "off" | "propose";
     crap: "off" | "report";
   };
-  git?: Partial<GitPolicy>; // set 2026-10 has no git group; a missing key means "ask"
+  git?: Partial<GitPolicy>; // a missing key means "ask"
 }
 
 export interface GitPolicy {
@@ -92,7 +92,6 @@ export type UpdateMode = "off" | "check" | "apply";
 
 export interface OmtConfig {
   version: 1;
-  defaults: string; // the selected default set, for example "2026-10"
   profile: string;
   profiles: Record<string, ProfileConfig>;
   models: Record<string, ModelConfig>;
@@ -104,7 +103,6 @@ export interface OmtConfig {
 
 export interface ConfigLayer {
   version?: 1;
-  defaults?: string;
   profile?: string;
   profiles?: Record<string, Partial<ProfileConfig> | null>;
   models?: Record<string, ModelConfig>;
@@ -131,9 +129,10 @@ export interface ConfigSource {
 
 export interface LoadedConfig {
   config: OmtConfig;
+  defaults: OmtConfig;
   sources: ConfigSource[];
   issues: ConfigIssue[];
-  defaultsSource: string; // the config file that selects config.defaults, or "latest"
+  defaultsSource: string; // "current", or the accepted-defaults snapshot path
 }
 
 export interface DefaultsChange {

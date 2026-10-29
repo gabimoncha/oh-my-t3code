@@ -8,7 +8,7 @@ disable-model-invocation: true
 
 You build one plan as parallel tracks. Each track is a top-level T3 thread in its own git worktree, on its own branch. Each track runs the build part of `omt-ulw` for its units and commits on its branch. You split, launch, wait, review, merge, test, and open the PR. You do not build.
 
-Invoking this skill is the explicit user request that T3 requires before `t3_thread_launch`. The launch rules are in [delegation.md](../omt/references/delegation.md#top-level-threads). T3 tools appear here by base name; your harness may prefix them, for example `mcp__t3-code__t3_thread_launch`.
+Invoking this skill is the explicit user request that T3 requires before `t3_thread_launch`. The launch rules are in [delegation.md](../omt/references/delegation.md#top-level-threads). T3 tools appear here by base name, and your harness may prefix them, for example `mcp__t3-code__t3_thread_launch`.
 
 ## Rules
 
@@ -47,7 +47,7 @@ Done when: the plan exists, you know its units, its `## Summary`, its `## Tests`
 
 ### 2. Split
 
-Run the `omt-ulw` step 6 design check in the main thread before the split. If `omt-design` is required, run it and get the owner's approval. Commit the approved design spec by the [Git actions](../omt/references/delegation.md#git-actions) rules before you record `<base>`, so the spec is in `<base>`. Tracks only cite the approved spec. A track does not run `omt-design`.
+Run the `omt-ulw` step 6 design check in the main thread before the split. If the plan has a requested design pass that has not run, run `omt-design` and get the owner's approval. When an approved design spec exists, commit it by the [Git actions](../omt/references/delegation.md#git-actions) rules before you record `<base>`, so the spec is in `<base>`. Tracks use that spec or the task requirements. A track does not run `omt-design`.
 
 Split the open units of the plan into tracks. Each track gets a kebab-case name, its units, and its scope paths.
 
@@ -79,7 +79,7 @@ For each track, call `t3_thread_launch` with:
 The launch message is a plain task, not an `omt brief`. It says:
 
 1. You are track `<track>` of the swarm plan `<slug>`. Your plan is `<slug>-<track>`. Your scope is `<scope paths>`. Edit no file outside it.
-2. First call `t3_thread_configuration` to read your own modes and `modelSelection`. Read `omt profile show --plan <slug>-<track> --json`, the track plan, and its tier. Use your own driver as `<your family>` for review. Apply the `F2` rule from `omt-ulw` step 5. Cite the approved design spec in `<base>`. Do not run `omt-design`. The main thread completed the step 6 design check before the split. Then run steps 7 to 12 of the `omt-ulw` skill for the units of plan `<slug>-<track>` only. Build, run your own review child and QA child, and fix.
+2. First call `t3_thread_configuration` to read your own modes and `modelSelection`. Read `omt profile show --plan <slug>-<track> --json`, the track plan, and its tier. Use your own driver as `<your family>` for review. Apply the `F2` rule from `omt-ulw` step 5. Cite the approved design spec in `<base>` when one exists. Otherwise implement the task requirements directly. Do not run `omt-design`. The main thread completed the step 6 design check before the split. Then run steps 7 to 12 of the `omt-ulw` skill for the units of plan `<slug>-<track>` only. Build, run your own review child and QA child, and fix.
 3. Commit on branch `omt/<slug>/<track>` by the `Git actions` rules of the omt `delegation.md` reference, with `--plan <slug>-<track>`. Do not push. Do not open a PR. The main thread owns the PR.
 4. Report what changed, each check with its exit code and log path, and the commit hash.
 5. End with one line: `TRACK <track>: DONE <commit hash>`, or `TRACK <track>: BLOCKED <reason>`.

@@ -4,7 +4,7 @@
 
 [![npm](https://img.shields.io/npm/v/oh-my-t3code)](https://www.npmjs.com/package/oh-my-t3code) [![CI](https://github.com/gabimoncha/oh-my-t3code/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/gabimoncha/oh-my-t3code/actions/workflows/ci.yml)
 
-oh-my-t3code adds plans, roles, task briefs, and review loops to the agents that you run in [T3 Code](https://t3.codes). You give the agent a goal, such as `ulw add OAuth to the API`. The agent reads the code, asks you its open questions, plans, and builds the change in its own thread. Then one T3 child task from the other model family reviews the change, and one child task runs every check.
+oh-my-t3code adds plans, roles, task briefs, and review loops to the agents that you run in [T3 Code](https://t3.codes). You give the agent a goal, such as `ulw add OAuth to the API`. The agent reads the code, asks you its open questions, plans, and builds the change in its own thread. Then a child task from the other model family reviews the change, and another child task runs every check.
 
 ## Names
 
@@ -64,17 +64,16 @@ Use omt if you use T3 Code and want an agent to plan and finish work that has se
 Do not use omt in these cases:
 
 - You do not use T3 Code. The skills start child tasks with the T3 `delegate_task` tool, and only a T3 thread has that tool.
-- You want a quick edit with no plan and no review. omt runs its full flow also for small tasks: a plan, one review task, and one qa task.
+- You want a quick edit with no plan and no review. omt runs its full flow for small tasks too: a plan, one review task, and one qa task.
 - You want a hosted service or a scheduler that runs in the background. omt has neither.
 
 ## Requirements
 
 - The latest [T3 Code](https://t3.codes) release. omt is tested only on the latest release.
-- Claude Code, Codex, or both, enabled in T3 under **Settings** > **Providers**. Design and UI work needs Claude Code.
+- Claude Code, Codex, or both, enabled in T3 under **Settings** > **Providers**. Design and UI tasks can run with either provider.
 - git.
-- Node 22 or later for the npm package. The release binary needs neither Node nor Bun.
+- Node 22 or later for the npm package. Use a patched supported release: 22.23.4 or 24.22.1 LTS. The release binary needs neither Node nor Bun.
 
-Use a patched supported Node release for the npm package: 22.23.4 or 24.22.1 LTS.
 [Bun 1.4.4](https://bun.com/blog/bun-v1.4.4) blocks the compromised emSign intermediate keys. Rebuild release binaries with this version to include the fix.
 
 ## First run
@@ -104,7 +103,7 @@ If you do not know what to do next, type `$omt-help`. To change the setup, type 
 | `omt-code-review` | You want a review of uncommitted changes, a branch, a commit, or a pull request. It replaces `omt-review`. |
 | `omt-research` | You need an answer with sources from the repository, library docs, or the web. |
 | `omt-help` | You want to know what omt can do, what to do next, or how to do something. It only reads and changes nothing. |
-| `omt-setup` | You want omt set up, configured, or updated: the harnesses, the default set, models, roles, or profiles. It asks before each write. |
+| `omt-setup` | You want omt set up, configured, or updated: the harnesses, the defaults, models, roles, or profiles. It asks before each write. |
 | `omt-swarm` | You have a plan whose units split into independent tracks, each built in its own worktree thread, then merged into one pull request. |
 | `omt` | You want the list of workflows and CLI commands. |
 
@@ -126,13 +125,13 @@ The setup works with Bun and pnpm, and never overwrites a file. Commit the new f
 
 ## How it works
 
-omt has two parts. The skills tell the agent how to plan, build, review, and test. The `omt` CLI does the steps that must give the same result each time: it merges the config, picks a model for each role, writes the task briefs, and counts the tasks in the ledger. The CLI has no runtime dependencies. The CLI sends no telemetry. It contacts the npm registry only when you run `omt update`, or once a day in `omt install` and `omt doctor` after you set `update` in the user config. `omt update` runs the package manager or mise command of the channel that installed omt.
+omt has two parts. The skills tell the agent how to plan, build, review, and test. The `omt` CLI does the steps that must give the same result each time: it merges the config, picks a model for each role, writes the task briefs, and counts the tasks in the ledger. The CLI has no runtime dependencies and sends no telemetry. It contacts the npm registry only when you run `omt update`, or once a day in `omt install` and `omt doctor` after you set `update` in the user config. `omt update` runs the package manager or mise command of the channel that installed omt.
 
 T3 gives each agent session tools to start, check, and cancel child tasks on any provider and model. Each child task is a T3 thread, so you can watch it in T3. omt adds roles, model routing, briefs, review loops, and limits. It does not change T3.
 
-Each role, such as `execute` or `review`, has an ordered list of models. If T3 refuses the first model, the agent uses the next one. When both families are available, the reviewer comes from the other family than the main thread. `omt roles` shows the model of each role.
+Each role, such as `execute` or `review`, has an ordered list of models. If T3 refuses the first model, the agent uses the next one. When both families are available, the reviewer comes from the family that the main thread does not use. `omt roles` shows the model of each role.
 
-The [walkthrough](docs/walkthrough.md) follows two real runs on this repository, from before the main thread built the units. One run had 4 units and used 29 child tasks in 2 hours 20 minutes. The other had 10 units and used 128 child tasks over 5 days.
+The [walkthrough](docs/walkthrough.md) follows two real runs on this repository, from before the main thread built the units itself. One run had 4 units and used 29 child tasks in 2 hours 20 minutes. The other had 10 units and used 128 child tasks over 5 days.
 
 ## Glossary
 

@@ -1,5 +1,6 @@
+import { activeDefaults } from "../config/defaultsState.ts";
 import { parseJsonc, setTopLevelValue } from "../config/jsonc.ts";
-import { readConfigLayers } from "../config/load.ts";
+import { mergeConfigLayers, readConfigLayers } from "../config/load.ts";
 import { confirmApply } from "../install/confirm.ts";
 import {
   allDetected,
@@ -14,8 +15,8 @@ import { OmtError, usageError } from "../util/errors.ts";
 import { readFileIfExists } from "../util/fs.ts";
 import { isRecord } from "../util/json.ts";
 import { formatJson } from "../util/output.ts";
-import { configTarget, readConfigTarget, writeConfigTarget } from "./defaults.ts";
-import type { ConfigTarget } from "./defaults.ts";
+import { configTarget, readConfigTarget, writeConfigTarget } from "../config/target.ts";
+import type { ConfigTarget } from "../config/target.ts";
 import { readCapabilities } from "./shared.ts";
 
 export const summary = "Detect the harnesses that can run child tasks, and set the harnesses key.";
@@ -81,7 +82,7 @@ export const run: CommandRun = async (ctx) => {
   const changed = !none && JSON.stringify(current) !== JSON.stringify(wanted);
   const overriddenBy =
     changed && target.scope === "user" && project?.layer.harnesses !== undefined ? project : undefined;
-  const effects = harnessEffects(report.recommended);
+  const effects = harnessEffects(report.recommended, mergeConfigLayers(layers, await activeDefaults(ctx)).config.roles);
 
   if (!json) {
     for (const harness of report.harnesses) ctx.stdout(formatHarnessLine(harness));

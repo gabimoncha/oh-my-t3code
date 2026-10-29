@@ -124,7 +124,7 @@ for (const role of ["execute", "ui"]) {
 test("ui lists screens for the qa task and leaves the visual comparison to the owner (personas)", () => {
   const persona = readFileSync(join(SKILLS_DIR, "omt", "references", "roles", "ui.md"), "utf8");
   assert.match(persona, /Drive no device yourself\. Under `OPEN`, list each screen and state that you changed, with the steps to reach it, for the main thread to send to the `qa` task\./);
-  assert.match(persona, /The owner compares the screenshots with the spec\./);
+  assert.match(persona, /The owner reviews the UI against the spec or task requirements\./);
 });
 
 for (const role of ["review", "oracle"]) {

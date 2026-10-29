@@ -1,13 +1,12 @@
 import { spawn } from "node:child_process";
 import { chmod } from "node:fs/promises";
-import { defaultsPins } from "../commands/defaults.ts";
-import type { DefaultsPin } from "../commands/defaults.ts";
-import { LATEST_DEFAULT_SET } from "../config/defaultSets.ts";
+import { DEFAULT_CONFIG } from "../config/defaults.ts";
+import { parseDefaultsSnapshot, reviewDefaults } from "../config/defaultsState.ts";
 import { confirmApply } from "../install/confirm.ts";
 import { oneShotRunner, runnerCommand, shimContent } from "../install/project.ts";
 import type { Runner } from "../install/project.ts";
 import { findProjectRoot, updateStatePath } from "../paths.ts";
-import type { CliContext } from "../types.ts";
+import type { CliContext, DefaultsChange, OmtConfig } from "../types.ts";
 import { OmtError } from "../util/errors.ts";
 import { readFileIfExists, realOrSelf, writeFileAtomic } from "../util/fs.ts";
 import { isRecord } from "../util/json.ts";
@@ -37,10 +36,11 @@ export interface UpdateSeams {
 }
 
 interface DefaultsResult {
-  file: string;
-  set: string;
-  latest: string;
-  moved: boolean;
+  scope: "user" | "project";
+  root?: string;
+  changed: boolean;
+  applied: boolean;
+  changes: DefaultsChange[];
 }
 
 // The runner shim that the repin action rewrites. The pin is written only while the file still holds `before`.
@@ -276,77 +276,57 @@ function renderResults(results: ScopeResult[]): string {
   return text;
 }
 
-// The defaults commands of the CLI that runs after the update: a child process, or this process for
-// --skills-only, which starts no child and never asks.
 interface DefaultsCli {
-  list: (root: string) => Promise<{ latest: string; pins: DefaultsPin[] } | undefined>;
-  diff?: (root: string, set: string) => Promise<string>;
-  use?: (root: string, kind: DefaultsPin["kind"]) => Promise<boolean>;
+  current: (root: string) => Promise<OmtConfig | undefined>;
 }
 
-function childDefaults(cli: string[], run: RunCommand, say: Say): DefaultsCli {
+function childDefaults(cli: string[], run: RunCommand): DefaultsCli {
   return {
-    list: async (root) => {
-      const done = await run([...cli, "defaults", "list", "--json"], { cwd: root });
-      let value: unknown;
+    current: async (root) => {
+      const done = await run([...cli, "config", "show", "--defaults"], { cwd: root });
+      if (done.code !== 0) return undefined;
       try {
-        value = JSON.parse(done.stdout);
+        const config: unknown = JSON.parse(done.stdout);
+        return parseDefaultsSnapshot(JSON.stringify({ version: 1, cliVersion: "", config }), "updated CLI defaults").config;
       } catch {
         return undefined;
       }
-      if (!isRecord(value) || typeof value.latest !== "string" || !Array.isArray(value.pins)) return undefined;
-      const pins = value.pins.filter((pin: unknown): pin is DefaultsPin =>
-        isRecord(pin) && typeof pin.file === "string" && typeof pin.set === "string" && (pin.kind === "user" || pin.kind === "project"));
-      return { latest: value.latest, pins };
-    },
-    diff: async (root, set) => (await run([...cli, "defaults", "diff", set, "latest"], { cwd: root })).stdout,
-    use: async (root, kind) => {
-      const done = await run([...cli, "defaults", "use", "latest", "--yes", kind === "user" ? "--user" : "--project"], { cwd: root });
-      say(done.stdout);
-      return done.code === 0;
     },
   };
 }
 
-function localDefaults(ctx: CliContext): DefaultsCli {
-  return { list: async (root) => ({ latest: LATEST_DEFAULT_SET, pins: await defaultsPins({ ...ctx, cwd: root }) }) };
+function localDefaults(): DefaultsCli {
+  return { current: async () => DEFAULT_CONFIG };
 }
 
-// Step 7: the user file from the current folder, and the project file of each synced project. Failed is true when
-// the owner approved a move and `defaults use` failed.
-async function defaultsStep(ctx: CliContext, say: Say, results: ScopeResult[], cli: DefaultsCli, ask: boolean): Promise<{ reports: DefaultsResult[]; failed: boolean }> {
-  const lookups: { root: string; kind: DefaultsPin["kind"] }[] = [{ root: ctx.cwd, kind: "user" }];
-  for (const result of results) {
-    if (result.scope === "project" && result.root !== undefined && (result.status === "synced" || result.status === "unchanged")) {
-      lookups.push({ root: result.root, kind: "project" });
-    }
+async function defaultsStep(
+  ctx: CliContext,
+  options: UpdateOptions,
+  results: ScopeResult[],
+  cli: DefaultsCli,
+): Promise<{ reports: DefaultsResult[]; failed: boolean }> {
+  if (ctx.env.OMT_UPDATE_DEFER_DEFAULTS === "1") return { reports: [], failed: false };
+  const target = await cli.current(ctx.cwd).catch(() => undefined);
+  if (target === undefined) {
+    ctx.stderr("warning: cannot read the updated CLI's defaults; run omt doctor to review them\n");
+    return { reports: [], failed: true };
   }
-  const pins = new Map<string, { pin: DefaultsPin; root: string; latest: string }>();
-  for (const { root, kind } of lookups) {
-    const listed = await cli.list(root).catch(() => undefined);
-    if (listed === undefined) {
-      ctx.stderr(`warning: cannot read the defaults pins in ${root}\n`);
-      continue;
+  const scopes: { scope: "user" | "project"; root: string }[] = options.project ? [] : [{ scope: "user", root: ctx.cwd }];
+  for (const result of results) {
+    if (result.scope === "project" && result.root !== undefined && ["synced", "unchanged"].includes(result.status)) {
+      scopes.push({ scope: "project", root: result.root });
     }
-    for (const pin of listed.pins) if (pin.kind === kind && !pins.has(pin.file)) pins.set(pin.file, { pin, root, latest: listed.latest });
   }
   const reports: DefaultsResult[] = [];
-  let failed = false;
-  for (const { pin, root, latest } of pins.values()) {
-    if (!(pin.set < latest)) continue;
-    let moved = false;
-    if (cli.diff !== undefined) say(await cli.diff(root, pin.set));
-    if (ask && cli.use !== undefined) {
-      const answer = (await ctx.prompt(`Move the defaults pin in ${pin.file} from ${pin.set} to ${latest}? [y/N] `)).trim().toLowerCase();
-      if (answer === "y" || answer === "yes") {
-        moved = await cli.use(root, pin.kind).catch(() => false);
-        if (!moved) failed = true;
-      }
-    }
-    if (!moved) say(`hint: run omt defaults use latest in ${pin.kind === "user" ? ctx.homedir : root} to move the pin in ${pin.file}\n`);
-    reports.push({ file: pin.file, set: pin.set, latest, moved });
+  const seen = new Set<string>();
+  for (const { scope, root } of scopes) {
+    const key = `${scope}:${root}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const result = await reviewDefaults({ ...ctx, cwd: root }, scope, { yes: options.yes, dryRun: options.dryRun, json: options.json }, target);
+    reports.push({ scope, ...(scope === "project" ? { root } : {}), ...result });
   }
-  return { reports, failed };
+  return { reports, failed: false };
 }
 
 interface Report {
@@ -370,7 +350,7 @@ function printReport(ctx: CliContext, report: Report): void {
 async function finish(ctx: CliContext, options: UpdateOptions, say: Say, report: Report, cli: DefaultsCli, failed: boolean): Promise<number> {
   // With --json the scopes and the restart flag are in the JSON, so stderr gets only the plan and the defaults.
   if (!options.json) say(renderResults(report.scopes));
-  const defaults = await defaultsStep(ctx, say, report.scopes, cli, ctx.isTTY && !options.yes && !options.json);
+  const defaults = await defaultsStep({ ...ctx, version: report.updated ? report.latest ?? ctx.version : ctx.version }, options, report.scopes, cli);
   report.defaults = defaults.reports;
   if (options.json) printReport(ctx, report);
   else if (report.scopes.some((scope) => scope.changed.length > 0)) say("Restart agent sessions in T3 Code so they load the new skills.\n");
@@ -390,6 +370,7 @@ async function syncHere(
   const entries = await planSync(ctx, running, sync);
   say(renderSyncPlan(entries));
   if (options.dryRun) {
+    report.defaults = (await defaultsStep(ctx, options, entries.map((entry) => entry.result), localDefaults())).reports;
     say("Dry run: nothing was written.\n");
     if (options.json) printReport(ctx, { ...report, scopes: entries.map((entry) => entry.result) });
     return { code: 0 };
@@ -453,7 +434,7 @@ async function skillsOnly(ctx: CliContext, options: UpdateOptions, say: Say, run
   }, report, async () => {});
   if ("code" in done) return done.code;
   report.scopes = done.results;
-  return finish(ctx, options, say, report, localDefaults(ctx), false);
+  return finish(ctx, options, say, report, localDefaults(), false);
 }
 
 function other(ctx: CliContext, options: UpdateOptions, say: Say, report: Report, message: string): number {
@@ -521,7 +502,7 @@ async function update(ctx: CliContext, options: UpdateOptions, seams: UpdateSeam
     }, report, () => writeState(ctx, latest));
     if ("code" in done) return done.code;
     report.scopes = done.results;
-    return finish(ctx, options, say, report, childDefaults(runningCli(ctx), run, say), false);
+    return finish(ctx, options, say, report, childDefaults(runningCli(ctx), run), false);
   }
 
   report.action = action.kind;
@@ -530,6 +511,8 @@ async function update(ctx: CliContext, options: UpdateOptions, seams: UpdateSeam
   const entries = await planSync(ctx, resolved.running, { projectOnly: options.project, runners: "delegate", targetVersion: latest, run });
   for (const entry of entries) say(`sync: ${entry.header}\n`);
   if (options.dryRun) {
+    report.defaults = (await defaultsStep(ctx, options, entries.map((entry) => entry.result), localDefaults())).reports;
+    say("Defaults changes above are for the installed CLI. Review the new release's defaults after the CLI update.\n");
     say("Dry run: nothing was written.\n");
     if (options.json) printReport(ctx, { ...report, scopes: entries.map((entry) => entry.result) });
     return 0;
@@ -556,8 +539,8 @@ async function update(ctx: CliContext, options: UpdateOptions, seams: UpdateSeam
   }
   const child = [...cli, "update", "--skills-only", "--yes", ...(options.project ? ["--project"] : []), "--json"];
   // offlineChannel of the new CLI cannot confirm a shared pnpm store path by itself.
-  const env = confirmedGlobalEnv(resolved.channel, cli);
-  const synced = await run(child, { cwd: ctx.cwd, ...(env === undefined ? {} : { env }) });
+  const env = { ...confirmedGlobalEnv(resolved.channel, cli), OMT_UPDATE_DEFER_DEFAULTS: "1" };
+  const synced = await run(child, { cwd: ctx.cwd, env });
   const scopes = childScopes(synced.stdout);
   let failed = synced.code !== 0;
   if (scopes === undefined) {
@@ -575,7 +558,7 @@ async function update(ctx: CliContext, options: UpdateOptions, seams: UpdateSeam
       else report.scopes.push(result);
     }
   }
-  return finish(ctx, options, say, report, childDefaults(cli, run, say), failed);
+  return finish(ctx, options, say, report, childDefaults(cli, run), failed);
 }
 
 // The flow of omt update, shared with auto-apply in install and doctor (section 5.14).

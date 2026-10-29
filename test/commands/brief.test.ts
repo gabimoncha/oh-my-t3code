@@ -52,8 +52,8 @@ test("brief --json holds exactly the delegate_task fields, without clientRequest
   assert.equal(output.delegateTask.interactionMode, "default");
   assert.equal(output.delegateTask.runtimeMode, "inherit");
   assert.equal(output.delegateTask.title, "review: Check the diff.");
-  assert.deepEqual(output.delegateTask.target, { providerInstanceId: "codex", model: "gpt-6-astra", options: { reasoningEffort: "high" } });
-  assert.deepEqual(output.fallbacks, [{ providerInstanceId: "claudeAgent", model: "claude-opus-5-5", options: { effort: "high" } }]);
+  assert.deepEqual(output.delegateTask.target, { providerInstanceId: "codex", model: "gpt-6-astra", options: { reasoningEffort: "medium" } });
+  assert.deepEqual(output.fallbacks, [{ providerInstanceId: "claudeAgent", model: "claude-opus-5-5", options: { effort: "medium" } }]);
   assert.match(output.delegateTask.task, /^<!-- omt-brief v1 role=review round=1 depth=1\/1 -->/);
   assert.equal(ctx.err(), "");
 });
@@ -144,7 +144,7 @@ test("brief --json --capabilities resolves the target against T3", async () => {
   assert.deepEqual(parse(ctx.out()).delegateTask.target, {
     providerInstanceId: "claudeAgent",
     model: "claude-opus-5-5",
-    options: { effort: "medium" },
+    options: { effort: "low" },
   });
 });
 
@@ -196,15 +196,15 @@ test("brief --json --against puts the other family first and prints the notes to
   const codex = await project.runOk(["brief", "review", "--task", "Check U1.", "--against", "codex", "--json"]);
   const output = parse(codex.ctx.out());
   assert.deepEqual(Object.keys(output), ["delegateTask", "fallbacks"]);
-  assert.deepEqual(output.delegateTask.target, { providerInstanceId: "claudeAgent", model: "claude-opus-5-5", options: { effort: "high" } });
-  assert.deepEqual(output.fallbacks, [{ providerInstanceId: "codex", model: "gpt-6-astra", options: { reasoningEffort: "high" } }]);
+  assert.deepEqual(output.delegateTask.target, { providerInstanceId: "claudeAgent", model: "claude-opus-5-5", options: { effort: "medium" } });
+  assert.deepEqual(output.fallbacks, [{ providerInstanceId: "codex", model: "gpt-6-astra", options: { reasoningEffort: "medium" } }]);
   assert.equal(codex.ctx.err(), "note: cross-family: worker family codex; other families first\n");
 
   const claude = await project.run(["brief", "review", "--task", "Check U1.", "--against", "claudeAgent", "--json"]);
   assert.deepEqual(parse(claude.ctx.out()).delegateTask.target, {
     providerInstanceId: "codex",
     model: "gpt-6-astra",
-    options: { reasoningEffort: "high" },
+    options: { reasoningEffort: "medium" },
   });
 });
 

@@ -36,8 +36,8 @@ test("formatRolesTable matches the section 5.3 layout", () => {
     formatRolesTable(resolveAll(config, caps())),
     [
       "ROLE         STATUS      TARGET                                         ACCESS     MODE     CROSS",
-      "execute      resolved    claudeAgent/claude-opus-5-5 effort=medium      edit       default  no",
-      "review       resolved    codex/gpt-6-astra reasoningEffort=high         edit       default  yes",
+      "execute      resolved    claudeAgent/claude-opus-5-5 effort=low         edit       default  no",
+      "review       resolved    codex/gpt-6-astra reasoningEffort=medium       edit       default  yes",
       "oracle       unavailable -                                              edit       default  yes",
       "  rung 1 grok/grok-build: provider grok cannot run child tasks: Provider instance is disabled.; Provider executable is not installed.",
       "",
@@ -76,7 +76,7 @@ test("formatRolesTable widens columns and prints the unverified footer", () => {
   assert.ok(output.endsWith("\nunverified: pass --capabilities <file> to check the chains against T3\n"));
   assert.equal(lines.length, 1 + Object.keys(DEFAULT_CONFIG.roles).length + 3);
   const planReview = lines.find((line) => line.startsWith("plan-review"));
-  assert.match(planReview ?? "", /^plan-review\s+unverified\s+codex\/gpt-6-astra reasoningEffort=high\s+read-only\s+plan\s+yes$/);
+  assert.match(planReview ?? "", /^plan-review\s+unverified\s+codex\/gpt-6-astra reasoningEffort=medium\s+read-only\s+plan\s+yes$/);
   const long: OmtConfig = {
     ...DEFAULT_CONFIG,
     roles: {

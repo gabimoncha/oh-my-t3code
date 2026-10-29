@@ -41,13 +41,11 @@ test("global npm install of A updates to B with --yes: CLI, user skills, project
   assert.equal(versionA, A, "omt --version before the update");
   await installAll(omt, env, join(reg.root, "user-cwd"), project);
 
-  // Pins in both config files, so the update has to leave them alone.
   const userCfg = userConfigPath(env, env.HOME!);
   const projCfg = projectConfigPath(project);
   mkdirSync(dirname(userCfg), { recursive: true });
-  writeFileSync(userCfg, '{\n  "defaults": "2026-10"\n}\n');
-  writeFileSync(projCfg, '{\n  "defaults": "2026-10"\n}\n');
-  const cfgBefore = [readFileSync(userCfg, "utf8"), readFileSync(projCfg, "utf8")];
+  writeFileSync(userCfg, '{\n  // Keep this override.\n  "defaults": "2026-10",\n  "limits": { "maxParallel": 2 }\n}\n');
+  writeFileSync(projCfg, '{\n  // Keep this override.\n  "defaults": "2026-10",\n  "limits": { "maxParallel": 2 }\n}\n');
 
   const line = () => `This line exists only in the e2e update build ${B}.`;
   const skillFiles = [
@@ -66,7 +64,12 @@ test("global npm install of A updates to B with --yes: CLI, user skills, project
   assert.equal(JSON.parse(readFileSync(projectManifestPath(project), "utf8")).version, B, "project manifest must record B");
   assert.match(out, /changed\s+omt-help/, "output must name the changed skill");
   assert.ok(out.includes(RESTART), "output must print the restart line");
-  assert.deepEqual([readFileSync(userCfg, "utf8"), readFileSync(projCfg, "utf8")], cfgBefore, "defaults keys must be unchanged");
+  for (const file of [userCfg, projCfg]) {
+    const text = readFileSync(file, "utf8");
+    assert.doesNotMatch(text, /"defaults"/);
+    assert.match(text, /Keep this override/);
+    assert.match(text, /"maxParallel": 2/);
+  }
 }, LONG);
 
 test("npx omt3@A install --project, then .omt/bin/omt update --yes pins the shim to B", async () => {

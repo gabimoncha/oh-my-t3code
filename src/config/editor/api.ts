@@ -1,14 +1,15 @@
 import { createHash } from "node:crypto";
-import { readConfigTarget, writeConfigTarget } from "../../commands/defaults.ts";
-import type { ConfigTarget } from "../../commands/defaults.ts";
+import { readConfigTarget, writeConfigTarget } from "../target.ts";
+import type { ConfigTarget } from "../target.ts";
 import { findProjectRoot, projectConfigPath, userConfigPath } from "../../paths.ts";
 import { EFFORT_LADDER } from "../../types.ts";
-import type { CliContext, ConfigIssue, DefaultsChange, OmtConfig, ProfileConfig } from "../../types.ts";
+import type { CliContext, ConfigIssue, OmtConfig, ProfileConfig } from "../../types.ts";
 import { OmtError } from "../../util/errors.ts";
 import { readFileIfExists } from "../../util/fs.ts";
 import { isRecord } from "../../util/json.ts";
 import { plural } from "../../util/output.ts";
-import { configLeaves, defaultSet, defaultSetNames, diffDefaultSets, LATEST_DEFAULT_SET } from "../defaultSets.ts";
+import { configLeaves, DEFAULT_CONFIG } from "../defaults.ts";
+import { activeDefaults } from "../defaultsState.ts";
 import { explainConfig } from "../explain.ts";
 import type { ExplainEntry, ExplainReport, ExplainSource } from "../explain.ts";
 import { parseJsonc, setJsoncValue } from "../jsonc.ts";
@@ -100,7 +101,7 @@ export interface EditorFile {
 
 export interface EditorState {
   version: string;
-  defaults: { selected: string; source: string; latest: string; sets: string[] };
+  defaults: { source: string };
   files: EditorFile[];
   profiles: string[];
   selectedProfile: string;
@@ -120,7 +121,6 @@ export interface PreviewResult {
   diff: DiffLine[];
   issues: ConfigIssue[];
   newErrors: ConfigIssue[];
-  defaultsChanges?: DefaultsChange[];
 }
 
 const MAX_EDITS = 200;
@@ -140,7 +140,7 @@ function configFiles(ctx: CliContext): { kind: FileKind; path: string }[] {
 async function readLayers(ctx: CliContext) {
   const files = await Promise.all(configFiles(ctx).map(async (file) => ({ ...file, text: await readFileIfExists(file.path) })));
   const layers = files.map((file) => layerFromText(file.kind, file.path, file.text));
-  return { files, layers, loaded: mergeConfigLayers(layers) };
+  return { files, layers, loaded: mergeConfigLayers(layers, await activeDefaults(ctx)) };
 }
 
 function valueAt(value: unknown, path: readonly string[]): unknown {
@@ -153,10 +153,10 @@ function valueAt(value: unknown, path: readonly string[]): unknown {
 }
 
 // The root entry of profiles.<name>.extends, with the rules of explainConfig for a key that no layer fills in.
-function extendsEntry(steps: MergeStep[], path: string[], set: string): ExplainEntry {
+function extendsEntry(steps: MergeStep[], path: string[]): ExplainEntry {
   const holder = path.slice(0, 2);
   const source = (step: MergeStep): ExplainSource =>
-    step.kind === "defaults" || step.path === undefined ? { kind: "defaults", set } : { kind: step.kind, path: step.path };
+    step.kind === "defaults" || step.path === undefined ? { kind: "defaults" } : { kind: step.kind, path: step.path };
   const touches = steps.map((step, index) => {
     if (index === 0) return undefined;
     if (valueAt(step.layer, path) !== undefined && valueAt(step.config, path) !== undefined) return "set";
@@ -195,8 +195,8 @@ function explainSelected(layers: ConfigFileLayer[], loaded: ReturnType<typeof me
   const report = explainConfig(layers, { ...loaded, config: { ...config, profiles } }, "normal");
   const entries = new Map(report.root.map((entry) => [JSON.stringify(entry.path), entry]));
   const root = configLeaves(config).map((path) =>
-    entries.get(JSON.stringify(path)) ?? extendsEntry(loaded.steps, path, config.defaults));
-  const source = config.profile !== defaultSet(config.defaults).profile ? "config" : "default";
+    entries.get(JSON.stringify(path)) ?? extendsEntry(loaded.steps, path));
+  const source = config.profile !== DEFAULT_CONFIG.profile ? "config" : "default";
   return { ...report, profile: { name: config.profile, source }, root, effective: [] };
 }
 
@@ -205,10 +205,7 @@ export async function editorState(ctx: CliContext): Promise<EditorState> {
   return {
     version: ctx.version,
     defaults: {
-      selected: loaded.config.defaults,
       source: loaded.defaultsSource,
-      latest: LATEST_DEFAULT_SET,
-      sets: defaultSetNames(),
     },
     files: files.map((file, index) => ({
       kind: file.kind,
@@ -319,9 +316,10 @@ async function prepare(ctx: CliContext, request: EditRequest) {
   const otherText = await readFileIfExists(other.path);
   const layersWith = (text: string) =>
     files.map((entry) => layerFromText(entry.kind, entry.path, entry.kind === request.file ? text : otherText));
-  const current = mergeConfigLayers(layersWith(snapshot));
+  const baseDefaults = await activeDefaults(ctx);
+  const current = mergeConfigLayers(layersWith(snapshot), baseDefaults);
   const candidateLayers = layersWith(next);
-  const candidate = mergeConfigLayers(candidateLayers);
+  const candidate = mergeConfigLayers(candidateLayers, baseDefaults);
   const known = new Set(current.issues.map(issueKey));
   const newErrors = candidate.issues.filter((issue) => issue.severity === "error" && !known.has(issueKey(issue)));
   return { target, snapshot, next, current, candidate, candidateLayers, newErrors };
@@ -335,16 +333,6 @@ export async function previewEdits(ctx: CliContext, request: EditRequest): Promi
     issues: prepared.candidate.issues,
     newErrors: prepared.newErrors,
   };
-  if (request.edits.some((edit) => edit.path.length === 1 && edit.path[0] === "defaults")) {
-    const layers = prepared.candidateLayers
-      .filter((file) => file.present)
-      .map((file) => ({ source: file.path, layer: file.layer }));
-    result.defaultsChanges = diffDefaultSets(
-      defaultSet(prepared.current.config.defaults),
-      defaultSet(prepared.candidate.config.defaults),
-      layers,
-    );
-  }
   return result;
 }
 

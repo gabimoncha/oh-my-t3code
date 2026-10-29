@@ -15,12 +15,12 @@ import type {
   WorkflowLayer,
 } from "../types.ts";
 import { usageError } from "../util/errors.ts";
-import { defaultSetNames, isDefaultSet, RETIRED_BUILD_KEYS, RETIRED_LIMIT_KEYS, RETIRED_ROLES } from "./defaultSets.ts";
+import { RETIRED_BUILD_KEYS, RETIRED_LIMIT_KEYS, RETIRED_ROLES } from "./defaults.ts";
 import { isRecord } from "../util/json.ts";
 
-export const ROOT_KEYS: readonly string[] = ["$schema", "version", "defaults", "profile", "profiles", "models", "roles", "limits", "harnesses", "update"];
+export const ROOT_KEYS: readonly string[] = ["$schema", "version", "profile", "profiles", "models", "roles", "limits", "harnesses", "update"];
 // Keys of older releases: a layer that still has one loads, with a warning.
-export const RETIRED_ROOT_KEYS: readonly string[] = ["visuals"];
+export const RETIRED_ROOT_KEYS: readonly string[] = ["visuals", "defaults"];
 export const UPDATE_VALUES: readonly UpdateMode[] = ["off", "check", "apply"];
 export const ROLE_KEYS: readonly string[] = [
   "description",
@@ -458,9 +458,6 @@ export function validateLayer(value: unknown, source: string): { layer: ConfigLa
     } else if (key === "version") {
       if (item === 1) layer.version = 1;
       else out.error(key, `must be 1, got ${describe(item)}`);
-    } else if (key === "defaults") {
-      if (typeof item === "string" && isDefaultSet(item)) layer.defaults = item;
-      else out.error(key, `unknown default set ${describe(item)}; known sets: ${defaultSetNames().join(", ")}`);
     } else if (key === "roles") {
       const roles = validateRoles(item, key, out);
       if (roles !== undefined) layer.roles = roles;

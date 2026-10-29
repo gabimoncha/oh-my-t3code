@@ -6,7 +6,6 @@ import { fileURLToPath } from "node:url";
 import pkg from "../package.json" with { type: "json" };
 import * as brief from "./commands/brief.ts";
 import * as config from "./commands/config.ts";
-import * as defaults from "./commands/defaults.ts";
 import * as detect from "./commands/detect.ts";
 import * as doctor from "./commands/doctor.ts";
 import * as git from "./commands/git.ts";
@@ -40,7 +39,6 @@ export const COMMANDS: Readonly<Record<string, CommandModule>> = {
   doctor,
   init,
   config,
-  defaults,
   detect,
   roles,
   route,

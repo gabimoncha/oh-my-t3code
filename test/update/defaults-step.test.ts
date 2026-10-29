@@ -1,82 +1,89 @@
 import assert from "node:assert/strict";
+import { readFileSync, writeFileSync } from "node:fs";
 import { test } from "bun:test";
 import { run as install } from "../../src/commands/install.ts";
-import { projectConfigPath, userConfigPath } from "../../src/paths.ts";
+import { DEFAULT_CONFIG } from "../../src/config/defaults.ts";
+import { defaultsSnapshotPath } from "../../src/config/defaultsState.ts";
 import type { RunCommand } from "../../src/update/channel.ts";
 import { runUpdate } from "../../src/update/flow.ts";
 import type { UpdateOptions } from "../../src/update/flow.ts";
 import { fakeContext, gitRepo, tempDir } from "../helpers.ts";
 
 const options: UpdateOptions = {
-  check: false,
-  dryRun: false,
-  yes: false,
-  skillsOnly: false,
-  project: false,
-  json: false,
+  check: false, dryRun: false, yes: false, skillsOnly: false, project: false, json: false,
 };
 
-const scenarios: { name: string; answers: string[]; moved: string[]; isTTY: boolean; yes?: boolean; json?: boolean }[] = [
-  { name: "TTY accepts the user pin and refuses the project pin", answers: ["yes", "no"], moved: ["user"], isTTY: true },
-  { name: "TTY refuses the user pin and accepts the project pin", answers: ["no", "y"], moved: ["project"], isTTY: true },
-  { name: "--yes prints hints without a defaults prompt", answers: [], moved: [], isTTY: true, yes: true },
-  { name: "--json prints hints without a defaults prompt", answers: [], moved: [], isTTY: true, json: true },
-  { name: "no TTY prints hints without a defaults prompt", answers: [], moved: [], isTTY: false },
-];
-
-for (const scenario of scenarios) {
-  test(`defaults step: ${scenario.name}`, async () => {
-    const root = tempDir("omt-defaults-step-");
+for (const scenario of [
+  { name: "accepts current defaults", isTTY: true, answer: "yes", applied: true },
+  { name: "keeps accepted defaults after refusal", isTTY: true, answer: "no", applied: false },
+  { name: "--yes accepts without another prompt", isTTY: true, yes: true, applied: true },
+  { name: "JSON reports changes without a prompt", isTTY: true, json: true, applied: false },
+  { name: "no TTY reports changes without writing", isTTY: false, applied: false },
+]) {
+  test(`defaults review after update: ${scenario.name}`, async () => {
+    const root = tempDir("omt-defaults-review-");
     const fixture = { root, build: "binary" as const, cliPath: "/opt/omt-qa/omt" };
     const setup = fakeContext(fixture);
     gitRepo(root, setup.cwd);
-    assert.equal(await install({ ...setup, argv: ["--project", "--yes"] }), 0);
+    assert.equal(await install({ ...setup, argv: ["--yes"] }), 0);
+    const path = defaultsSnapshotPath(setup, "user");
+    const manifest = JSON.parse(readFileSync(path, "utf8"));
+    manifest.acceptedDefaults.config.roles.execute.chain[0].effort = "medium";
+    writeFileSync(path, `${JSON.stringify(manifest, null, 2)}\n`);
+    const before = readFileSync(path, "utf8");
     const ctx = fakeContext(fixture);
-    const pins = [
-      { file: userConfigPath(ctx.env, ctx.homedir), kind: "user", set: "2026-09" },
-      { file: projectConfigPath(ctx.cwd), kind: "project", set: "2026-08" },
-    ];
-    const calls: { args: string[]; cwd: string | undefined }[] = [];
-    const run: RunCommand = async (argv, opts) => {
-      const index = argv.indexOf("defaults");
-      assert.ok(index >= 0, `Unexpected child command: ${argv.join(" ")}`);
-      const args = argv.slice(index);
-      calls.push({ args, cwd: opts.cwd });
-      if (args[1] === "list") return { code: 0, stdout: JSON.stringify({ latest: "2026-10", pins }) };
-      if (args[1] === "diff") return { code: 0, stdout: `diff ${args[2]} to latest\n` };
-      if (args[1] === "use") return { code: 0, stdout: "defaults updated\n" };
-      assert.fail(`Unexpected defaults command: ${args.join(" ")}`);
+    const calls: string[][] = [];
+    const run: RunCommand = async (argv) => {
+      calls.push(argv);
+      assert.deepEqual(argv.slice(-3), ["config", "show", "--defaults"]);
+      return { code: 0, stdout: JSON.stringify(DEFAULT_CONFIG) };
     };
     const prompts: string[] = [];
     assert.equal(await runUpdate(ctx, { ...options, yes: scenario.yes ?? false, json: scenario.json ?? false }, {
-      latest: ctx.version,
-      run,
-      isTTY: scenario.isTTY,
-      prompt: async (question) => {
-        prompts.push(question);
-        const answer = scenario.answers[prompts.length - 1];
-        assert.notEqual(answer, undefined, `Unexpected prompt: ${question}`);
-        return answer!;
-      },
-      fetch: (() => { throw new Error("The defaults step must not use the network"); }) as unknown as typeof fetch,
+      latest: ctx.version, run, isTTY: scenario.isTTY,
+      prompt: async (question) => { prompts.push(question); return scenario.answer ?? "no"; },
+      fetch: (() => { throw new Error("The defaults review must not use the network"); }) as unknown as typeof fetch,
     }), 0);
-    assert.deepEqual(prompts, scenario.answers.length === 0 ? [] : pins.map((pin) =>
-      `Move the defaults pin in ${pin.file} from ${pin.set} to 2026-10? [y/N] `));
-    assert.deepEqual(calls.filter((call) => call.args[1] === "use"), scenario.moved.map((kind) => ({
-      args: ["defaults", "use", "latest", "--yes", `--${kind}`],
-      cwd: ctx.cwd,
-    })));
-    assert.deepEqual(calls.filter((call) => call.args[1] === "diff").map((call) => call.args),
-      pins.map((pin) => ["defaults", "diff", pin.set, "latest"]));
+    assert.equal(prompts.length, scenario.answer === undefined ? 0 : 1);
+    if (prompts.length > 0) assert.equal(prompts[0], "Use the current defaults? [y/N] ");
     const output = scenario.json ? ctx.err() : ctx.out();
-    for (const pin of pins) {
-      assert.ok(output.includes(`diff ${pin.set} to latest`));
-      const hint = `hint: run omt defaults use latest in ${pin.kind === "user" ? ctx.homedir : ctx.cwd} to move the pin in ${pin.file}`;
-      assert.equal(output.includes(hint), !scenario.moved.includes(pin.kind));
-    }
+    assert.match(output, /roles\.execute\.chain:.*medium.*->.*low/);
+    assert.equal(readFileSync(path, "utf8") !== before, scenario.applied);
+    assert.ok(calls.length > 0);
     if (scenario.json) {
-      const report = JSON.parse(ctx.out()) as { defaults: unknown[] };
-      assert.deepEqual(report.defaults, pins.map((pin) => ({ file: pin.file, set: pin.set, latest: "2026-10", moved: false })));
+      const report = JSON.parse(ctx.out());
+      assert.equal(report.defaults[0].changed, true);
+      assert.equal(report.defaults[0].applied, false);
+      assert.equal("set" in report.defaults[0], false);
+    }
+  });
+}
+
+for (const deferred of [false, true]) {
+  test(`skills sync ${deferred ? "defers defaults to its parent" : "shows pending defaults in a dry run"}`, async () => {
+    const root = tempDir("omt-defaults-sync-");
+    const fixture = { root, build: "binary" as const, cliPath: "/opt/omt-qa/omt" };
+    const setup = fakeContext(fixture);
+    gitRepo(root, setup.cwd);
+    assert.equal(await install({ ...setup, argv: ["--yes"] }), 0);
+    const path = defaultsSnapshotPath(setup, "user");
+    const manifest = JSON.parse(readFileSync(path, "utf8"));
+    manifest.acceptedDefaults.config.roles.execute.chain[0].effort = "medium";
+    writeFileSync(path, `${JSON.stringify(manifest, null, 2)}\n`);
+    const before = readFileSync(path, "utf8");
+    const ctx = fakeContext({ ...fixture, env: deferred ? { OMT_UPDATE_DEFER_DEFAULTS: "1" } : {} });
+    assert.equal(await runUpdate(ctx, {
+      ...options, skillsOnly: true, yes: true, dryRun: !deferred, json: true,
+    }, { run: async () => assert.fail("skills-only must not start another CLI") }), 0);
+    const report = JSON.parse(ctx.out());
+    assert.equal(readFileSync(path, "utf8"), before);
+    if (deferred) {
+      assert.deepEqual(report.defaults, []);
+      assert.doesNotMatch(ctx.err(), /Default settings update/);
+    } else {
+      assert.equal(report.defaults[0].changed, true);
+      assert.equal(report.defaults[0].applied, false);
+      assert.match(ctx.err(), /roles\.execute\.chain:.*medium.*->.*low/);
     }
   });
 }

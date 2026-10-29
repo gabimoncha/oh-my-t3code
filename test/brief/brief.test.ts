@@ -422,7 +422,7 @@ test("brief fails for the retired verify, quick, and deep roles like any unknown
 
 test("fast role settings map Opus and print unsupported model notes through each CLI command", async () => {
   const project = makeProject();
-  project.projectConfig(JSON.stringify({ version: 1, roles: { execute: { fast: true }, explore: { fast: true } } }));
+  project.projectConfig(JSON.stringify({ version: 1, roles: { execute: { fast: true }, explore: { fast: true, chain: [{ driver: "codex", model: "gpt-6-luna", effort: "low" }, { driver: "claudeAgent", model: "claude-sonnet-5-5", effort: "low" }] }, qa: { chain: [{ driver: "claudeAgent", model: "claude-haiku-5-5", effort: "medium" }, { driver: "claudeAgent", model: "claude-sonnet-5-5", effort: "low" }] } } }));
   const opus = await project.runOk(["brief", "execute", "--task", "x", "--json", "--capabilities", LIVE_CAPS_FILE]);
   assert.equal((JSON.parse(opus.ctx.out()) as BriefJsonOutput).delegateTask.target.options?.fastMode, true);
   const sonnetNote = "fast mode is not offered by claudeAgent/claude-sonnet-5-5";
@@ -436,7 +436,7 @@ test("fast role settings map Opus and print unsupported model notes through each
   }
   const table = await project.runOk(["roles", "--role", "qa", "--capabilities", LIVE_CAPS_FILE, "--json"]);
   assert.equal((JSON.parse(table.ctx.out()) as RolesReport).roles.qa?.delegateTask?.target.model, "claude-haiku-5-5");
-  project.projectConfig(JSON.stringify({ version: 1, roles: { qa: { fast: true } } }));
+  project.projectConfig(JSON.stringify({ version: 1, roles: { qa: { fast: true, chain: [{ driver: "claudeAgent", model: "claude-haiku-5-5", effort: "medium" }, { driver: "claudeAgent", model: "claude-sonnet-5-5", effort: "low" }] } } }));
   const unsupported = await project.runOk(["roles", "--role", "qa", "--capabilities", LIVE_CAPS_FILE]);
   assert.match(unsupported.ctx.out(), /rung 1 claudeAgent\/claude-haiku-5-5: fast mode is not offered/);
   const fallback = await project.runOk(["route", "qa", "--capabilities", CAPS_FILE]);
@@ -473,7 +473,7 @@ test("brief --save writes the full brief and returns a short task and complete l
   assert.match(text, new RegExp(`^- CLI: Run omt as ${command.replaceAll(".", "\\.")}\\.$`, "m"));
   assert.match(text, /^- Tests: write no tests and no failure proofs\./m);
   assert.equal(output.ledger?.dispatched,
-    `${command} ledger add --plan p --unit U4 --role qa --round 2 --attempt 3 --status dispatched --task-id <taskId> --client-request-id ${id} --provider claudeAgent --model claude-haiku-5-5`);
+    `${command} ledger add --plan p --unit U4 --role qa --round 2 --attempt 3 --status dispatched --task-id <taskId> --client-request-id ${id} --provider codex --model gpt-6.1-sol`);
   const recorded = await project.runOk(["ledger", "add", ...output.ledger.dispatched.split(" ledger add ")[1]!.replace("<taskId>", "task-u4").split(" ")]);
   assert.equal((JSON.parse(recorded.ctx.out()) as { clientRequestId: string }).clientRequestId, id);
   assert.equal(existsSync(join(project.cwd, ".omt", "evidence", "briefs", `.${id}.md.tmp`)), false);

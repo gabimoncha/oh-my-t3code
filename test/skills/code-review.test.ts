@@ -52,7 +52,7 @@ test("omt-code-review introduces the shape and the rules", () => {
   assert.match(rules, /You end your turn only for the owner: a question, an offer, or the report\./);
   assert.match(rules, /Every `review` and `oracle` task says `Report every finding with its fix\. Change no files, and write none under FIXES\.`/);
   assert.match(rules, /Set `interactionMode` to `"plan"` in the `delegateTask` of each `review` and `oracle` task before you call `delegate_task`\./);
-  assert.match(rules, /Set 2026-12 makes `review` and `oracle` edit roles, because the omt-ulw reviewer fixes local findings\./);
+  assert.match(rules, /The defaults make `review` and `oracle` edit roles, because the omt-ulw reviewer fixes local findings\./);
   assert.match(rules, /Put the result block in your final assistant message\./);
   assert.match(rules, /You make every fix and write every approved test in the main thread\./);
 });

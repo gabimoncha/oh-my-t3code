@@ -5,14 +5,14 @@ description: Code review with subagents in T3 Code. Use when the user asks to re
 
 # Code review
 
-You review a change with report-only children and merge their findings. A small diff gets 1 reviewer. A large diff gets 2 to 4 grouped reviewers and 1 oracle over the whole change. The effective profile controls the reviewers, the oracle, and the offers. The T3 rules are in [delegation.md](../omt/references/delegation.md); T3 tools appear by base name and your harness may prefix them, for example `mcp__t3-code__delegate_task`.
+You review a change with report-only children and merge their findings. A small diff gets 1 reviewer. A large diff gets 2 to 4 grouped reviewers and 1 oracle over the whole change. The effective profile controls the reviewers, the oracle, and the offers. The T3 rules are in [delegation.md](../omt/references/delegation.md). T3 tools appear by base name and your harness may prefix them, for example `mcp__t3-code__delegate_task`.
 
 ## Rules
 
 - You wait for each child inside your turn ([delegation.md](../omt/references/delegation.md#waiting)). For one child, call `delegate_task` with `mode: "wait"`. For parallel children, dispatch each with `mode: "async"`, then call `t3_thread_wait` with `threadId` and `runId` for each, then `task_status` for each.
 - You end your turn only for the owner: a question, an offer, or the report.
 - Reviewers report only. Every `review` and `oracle` task says `Report every finding with its fix. Change no files, and write none under FIXES.`
-- Set `interactionMode` to `"plan"` in the `delegateTask` of each `review` and `oracle` task before you call `delegate_task`. Then the child cannot edit. Set 2026-12 makes `review` and `oracle` edit roles, because the omt-ulw reviewer fixes local findings. So the role alone does not stop edits.
+- Set `interactionMode` to `"plan"` in the `delegateTask` of each `review` and `oracle` task before you call `delegate_task`. Then the child cannot edit. The defaults make `review` and `oracle` edit roles, because the omt-ulw reviewer fixes local findings. So the role alone does not stop edits.
 - The brief of an edit role has no plan-mode line. So each `review` and `oracle` task also says `You run in plan mode. Stay in it. Do not call ExitPlanMode and do not write a proposed plan. Put the result block in your final assistant message.`
 - You make every fix and write every approved test in the main thread.
 - Record every dispatch and every result in the ledger under `review-<slug>`.

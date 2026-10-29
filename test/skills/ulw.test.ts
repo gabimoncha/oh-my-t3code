@@ -138,10 +138,12 @@ test("omt-ulw plans LIGHT runs itself and HEAVY runs through omt-plan", () => {
   assert.match(plan, /When no oracle is required, remove the `F2` oracle line\./);
 });
 
-test("omt-ulw runs the design check before any ui unit, also after the omt-plan hand-off", () => {
+test("omt-ulw waits for requested designs and permits direct UI implementation", () => {
   const ulw = readSkill("omt-ulw");
   const check = section(ulw, "### 6. ");
-  assert.match(check, /run the `omt-design` skill with the plan slug first\. Build no `ui` unit until it returns an approved spec\./);
+  assert.match(check, /When the plan includes a requested design pass/);
+  assert.match(check, /Wait for the owner's approval of that spec before you build the affected UI units\./);
+  assert.match(check, /Without a requested design pass, build the UI directly from the task requirements\./);
   assert.match(check, /also the hand-off from `omt-plan`/);
   assert.ok(ulw.indexOf("### 6. Design check") < ulw.indexOf("### 7. Build"));
 });
@@ -155,7 +157,8 @@ test("omt-ulw builds every unit in the main thread", () => {
   assert.match(build, /With `build\.failureProofs: on`, prove that each new test fails without the change, in a private copy of the working tree\./);
   assert.match(build, /Never break or restore files in the shared checkout\. With `build\.failureProofs: off`, skip the proofs\./);
   assert.match(build, /Run `omt plan mark <slug> <unit> done`\./);
-  assert.match(build, /When `ui` cannot run, stop and tell the user\. Do not fall back to `execute` or to another family\./);
+  assert.match(build, /Try the configured `ui` fallbacks when T3 refuses a target\./);
+  assert.match(build, /When every configured `ui` target fails, stop and tell the user\. Do not switch to `execute`\./);
   assert.match(build, /Independent track: a large unit with a scope that no other open unit touches may go to an `execute` child, or to a `ui` child for a `ui` unit\./);
   assert.match(build, /omt brief <role> --task-file - --title "<role> <unit>: <short unit title>" --scope \.\.\. --done \.\.\. --verify \.\.\. --plan <slug> --unit <id> --round 1 --attempt 1 --save --json/);
   assert.match(build, /Dispatch only while `omt ledger stats --plan <slug>` reports `can dispatch: yes`\./);
@@ -295,8 +298,8 @@ test("delegation.md waits in the turn, routes devices to qa, and has no stall se
   assert.doesNotMatch(waiting, /then end your turn/);
   const devices = section(text, "## Verification and devices");
   assert.match(devices, /Only `qa` drives a device, a Simulator UI, a browser, or a computer\./);
-  assert.match(devices, /The default chain is Claude Haiku 5\.5, then Claude Sonnet 5\.5, then Codex Sol\./);
-  assert.match(devices, /The Claude rungs come first because a Codex child could not reach the local device daemon\./);
+  assert.match(devices, /the chain is GPT-6\.1-Sol at medium effort, then Claude Sonnet 5\.5 at low effort\./);
+  assert.match(devices, /In the current defaults/);
   assert.match(devices, /A read-only or edit child lists each device check, with its steps and expected result, for the main thread to send to `qa`\./);
   assert.match(devices, /When a `qa` task returns `INCONCLUSIVE` because it cannot reach a local tool, send the same task once to the next rung of another provider\./);
   assert.match(devices, /After that one retry, send an unresolved result to the fix or stop step of the current workflow\./);

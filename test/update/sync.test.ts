@@ -122,6 +122,7 @@ test("U5 another runner delegate checks the version and reports child JSON", asy
       return { code: 0, stdout: "0.2.0\n" };
     }
     assert.match(readFileSync(f.shim, "utf8"), /omt3@0\.2\.0/);
+    assert.equal(opts.env?.OMT_UPDATE_DEFER_DEFAULTS, "1");
     return { code: 0, stdout: JSON.stringify({ scopes: [scope] }) };
   };
   const entries = await planSync(f.ctx, channel(f.ctx), { ...options, runners: "delegate", run });

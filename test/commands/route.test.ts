@@ -20,12 +20,12 @@ test("route prints an unverified RouteOutput and exits 0", async () => {
     access: "edit",
     result: "review",
     delegateTask: {
-      target: { providerInstanceId: "codex", model: "gpt-6-astra", options: { reasoningEffort: "high" } },
+      target: { providerInstanceId: "codex", model: "gpt-6-astra", options: { reasoningEffort: "medium" } },
       role: "review",
       interactionMode: "default",
       runtimeMode: "inherit",
     },
-    fallbacks: [{ providerInstanceId: "claudeAgent", model: "claude-opus-5-5", options: { effort: "high" } }],
+    fallbacks: [{ providerInstanceId: "claudeAgent", model: "claude-opus-5-5", options: { effort: "medium" } }],
     notes: [],
   });
 });
@@ -36,7 +36,7 @@ test("route --capabilities resolves against the provider instances", async () =>
   assert.deepEqual(output.delegateTask?.target, {
     providerInstanceId: "claudeAgent",
     model: "claude-opus-5-5",
-    options: { effort: "medium" },
+    options: { effort: "low" },
   });
 });
 
@@ -71,10 +71,10 @@ test("route --against reorders a cross-family role and prints the note", async (
   assert.deepEqual(againstCodex.delegateTask?.target, {
     providerInstanceId: "claudeAgent",
     model: "claude-opus-5-5",
-    options: { effort: "high" },
+    options: { effort: "medium" },
   });
   assert.deepEqual(againstCodex.fallbacks, [
-    { providerInstanceId: "codex", model: "gpt-6-astra", options: { reasoningEffort: "high" } },
+    { providerInstanceId: "codex", model: "gpt-6-astra", options: { reasoningEffort: "medium" } },
   ]);
 });
 

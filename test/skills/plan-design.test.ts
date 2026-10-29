@@ -156,7 +156,7 @@ test("the design and ui personas exist, and no model reviews design artifacts (p
   assert.doesNotMatch(design, /omt brief review/);
   assert.doesNotMatch(design, /omt brief oracle/);
   assert.match(design, /--unit DS<k>/);
-  assert.match(section(readSkill("omt-plan"), "### 3. "), /plan an `omt-design` step before those units/);
+  assert.match(section(readSkill("omt-plan"), "### 3. "), /Plan an `omt-design` step only when the user requests a design pass first/);
 });
 
 test("the design check runs before any ui dispatch, also after the omt-plan hand-off (plan-design)", () => {
@@ -186,13 +186,14 @@ test("omt-plan writes the plan summary in its hand-off reply, and every plan has
 
 test("omt-design reads the profile with a plan file or a ledger-only id", () => {
   const design = readSkill("omt-design");
-  assert.match(design, /A main thread on Claude Opus draws the profile's variant count in a new Paper file itself; any other model sends the drawing to one Opus design child\./);
+  assert.match(design, /A main thread on Claude Opus draws the profile's variant count in a new Paper file itself; any other model sends the drawing to one routed design child\./);
   const frame = section(design, "### 1. ");
   assert.match(frame, /When the ledger plan has a plan file, run `omt profile show --plan <ledger plan> --json`\./);
   assert.match(frame, /When the ledger plan has no plan file, use `omt profile show <name> --json` for an explicit profile name\./);
   assert.match(frame, /When neither a plan file nor a profile name exists, run `omt profile show --json`\./);
   assert.match(frame, /Keep the returned `profile` as `<name>` for later commands\./);
-  assert.match(section(design, "### 2. "), /When T3 refuses its rung, or `omt roles --plan <ledger plan>` reports `design` as `unavailable`, stop and tell the owner which target failed and why\./);
+  assert.match(section(design, "### 2. "), /When T3 refuses a target, try the configured `design` fallbacks/);
+  assert.match(section(design, "### 2. "), /When every configured target fails, or the role is unavailable, stop and tell the owner/);
 });
 
 test("omt-design draws in the main thread on Opus and in one design child otherwise", () => {
@@ -273,4 +274,22 @@ test("omt-plan allows grill in plan mode and reads its final message (U3)", () =
   const mode = section(readSkill("omt-plan"), "### 0. ");
   assert.match(mode, /- Dispatch only `explore`, `research`, `grill`, and `plan-review`\. `research` runs only inside `omt-grill`\./);
   assert.match(mode, /No grill file exists: take the grill text from the final message of `omt-grill` in this conversation\./);
+});
+
+
+test("UI work can skip design while setup recommends the optional frontend-design skill", () => {
+  const setup = readSkill("omt-setup");
+  assert.match(setup, /For a plain "set up omt", run steps 3, 4, 5, and 5a in order/);
+  assert.match(setup, /Check for Anthropic's `frontend-design` skill and recommend installing it when missing/);
+  const guidance = readFileSync(join(SKILLS_DIR, "omt", "references", "frontend-design.md"), "utf8");
+  assert.match(guidance, /Install only when the user asks/);
+  assert.match(guidance, /A missing skill or a declined installation does not block setup, design, or UI implementation/);
+  assert.match(guidance, /When the task cites an approved design spec, follow that spec/);
+  assert.match(guidance, /The implementation does not need to load `frontend-design` again/);
+  assert.match(guidance, /Without an approved design spec, implement the UI directly from the task requirements unless the user requested a design pass first/);
+  assert.match(section(readSkill("omt-plan"), "### 3. "), /Plan an `omt-design` step only when the user requests a design pass first/);
+  assert.match(section(readSkill("omt-design"), "### 2. "), /to load Anthropic's `frontend-design` skill when available/);
+  const ui = readFileSync(join(SKILLS_DIR, "omt", "references", "roles", "ui.md"), "utf8");
+  assert.match(ui, /A missing design spec, Paper, Figma, or the `frontend-design` skill does not block the work/);
+  assert.doesNotMatch(ui, /BLOCKED[^\n]*no spec/);
 });

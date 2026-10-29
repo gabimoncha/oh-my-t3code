@@ -1,3 +1,4 @@
+import { DEFAULT_CONFIG } from "../config/defaults.ts";
 import { randomBytes } from "node:crypto";
 import { chmod, readdir, readlink, rename, rm, rmdir, symlink } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
@@ -315,6 +316,9 @@ function installManifest(plan: InstallPlan, now: Date, fields: Pick<Manifest, "c
     ...(plan.project === undefined ? {} : { scope: "project" as const, root: plan.project.root }),
     package: PACKAGE_NAME,
     version: plan.version,
+    ...(plan.previous === undefined
+      ? { acceptedDefaults: { version: 1 as const, cliVersion: plan.version, config: DEFAULT_CONFIG } }
+      : plan.previous.acceptedDefaults === undefined ? {} : { acceptedDefaults: plan.previous.acceptedDefaults }),
     installedAt: now.toISOString(),
     skillsRoot: plan.agentsRoot,
     // A project manifest lists only what an install owns; `project.existing` lists the rest.

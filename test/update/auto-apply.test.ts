@@ -84,7 +84,7 @@ test("U7 apply with --json prints one doctor report and sends update output to s
     },
   }), 0);
   const report = JSON.parse(s.ctx.out()) as DoctorReport;
-  assert.deepEqual(Object.keys(report).sort(), ["checks", "ok"]);
+  assert.deepEqual(Object.keys(report).sort(), ["checks", "defaults", "ok"]);
   assert.equal(report.ok, true);
   assert.ok(report.checks.some((check) => check.id === "update" && check.message.includes(LATEST)));
   assert.equal(calls, 1);

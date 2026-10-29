@@ -1,11 +1,11 @@
 ---
 name: omt-design
-description: Design pass in T3 Code. Use when the user asks for designs, mockups, screens, UX, or a design pass, or when omt-plan or omt-ulw needs designs before UI units. A main thread on Claude Opus draws the profile's variant count in a new Paper file itself; any other model sends the drawing to one Opus design child. Shows the screenshots by screen, lets the owner pick one variant per screen and steer until they approve, writes a design spec that UI units cite, and can build the screens in the same thread.
+description: Design pass in T3 Code. Use when the user asks for designs, mockups, screens, UX, or a design pass, or when an omt-plan or omt-ulw run has a requested design pass before its UI units. A main thread on Claude Opus draws the profile's variant count in a new Paper file itself; any other model sends the drawing to one routed design child. Shows the screenshots by screen, lets the owner pick one variant per screen and steer until they approve, writes a design spec that UI units cite, and can build the screens in the same thread.
 ---
 
 # Design
 
-You get designs drawn, show their screenshots to the owner, and apply the owner's words until the owner approves. Then you write the design spec. When your model is Claude Opus, you draw the designs yourself. With any other model, one `design` child on Opus draws them. The T3 rules are in [delegation.md](../omt/references/delegation.md); T3 tools appear by base name and your harness may prefix them, for example `mcp__t3-code__delegate_task`.
+You get designs drawn, show their screenshots to the owner, and apply the owner's words until the owner approves. Then you write the design spec. When your model is Claude Opus, you draw the designs yourself. With any other model, one routed `design` child draws them. The T3 rules are in [delegation.md](../omt/references/delegation.md). T3 tools appear by base name, and your harness may prefix them, for example `mcp__t3-code__delegate_task`.
 
 The owner is the design review. No `review`, `oracle`, `plan-review`, or other model task looks at the design files or the screenshots.
 
@@ -43,22 +43,22 @@ Done when: the frame and the slug are written in your reply.
 
 ### 2. Draw the variants
 
-Read the effective profile again with the step 1 command before each design pass. Read `workflow.design.variants` as `design.variants`. Draw `design.variants` distinct variants of each screen. When the owner asked for another count, use that count. Make a screenshot of every variant. The persona in [roles/design.md](../omt/references/roles/design.md) is the standard for both drawers.
+Read the effective profile again with the step 1 command before each design pass. Read `workflow.design.variants` as `design.variants`. Draw `design.variants` distinct variants of each screen. When the owner asked for another count, use that count. Make a screenshot of every variant. The persona in [roles/design.md](../omt/references/roles/design.md) is the standard for both drawers. Follow [Design](../omt/references/frontend-design.md#design) to load Anthropic's `frontend-design` skill when available. Put its installed path in a child's brief so the child loads it too.
 
 When you draw:
 
-1. Load the Paper guide first, then make a new Paper file named after the project. Do not reuse a file that is already open.
-2. Draw one frame per variant of each screen, each with its empty, loading, and error states.
+1. When Paper is available, load its guide and make a new Paper file named after the project. Do not reuse an open file. Without Paper, make self-contained HTML mockups or platform-native previews, by [roles/design.md](../omt/references/roles/design.md).
+2. Draw one frame or mockup per variant of each screen, each with its empty, loading, and error states.
 3. Export a PNG of each frame to `docs/design/<slug>/`, with a name that says the screen, the variant, and the state.
-4. Call `finish_working_on_nodes` when you are done.
+4. With Paper, call `finish_working_on_nodes` when you are done.
 
 When a `design` child draws:
 
 1. Before each dispatch, run `omt ledger stats --plan <ledger plan>`. When a plan file exists, dispatch only while it reports `can dispatch: yes`. Otherwise, use the step 1 dispatch check.
-2. Build the brief with `omt brief design --task-file - --title "design DS<k>: <slug> variants" --scope docs/design/<slug>/ --plan <ledger plan> --unit DS<k> --round 1 --attempt 1 --json`. The task carries the frame from step 1 and the variant count. The task asks the designer to make a new Paper file named after the project, not to reuse an open file.
+2. Build the brief with `omt brief design --task-file - --title "design DS<k>: <slug> variants" --scope docs/design/<slug>/ --plan <ledger plan> --unit DS<k> --round 1 --attempt 1 --json`. The task carries the frame from step 1 and the variant count. The task asks the designer to make a new Paper file named after the project when Paper is available, or to use the mockup fallback otherwise.
 3. Call `delegate_task` with `mode: "wait"`. Record the dispatch with `--task-id`, `--provider`, and `--model` ([results.md](../omt/references/results.md#recording)), and wait for it in this turn ([delegation.md](../omt/references/delegation.md#waiting)). Then read the result, record it, and settle the child.
 
-A `design` dispatch never falls back to another family. When T3 refuses its rung, or `omt roles --plan <ledger plan>` reports `design` as `unavailable`, stop and tell the owner which target failed and why.
+When T3 refuses a target, try the configured `design` fallbacks by [Fall back to the next rung](../omt/references/roles.md#fall-back-to-the-next-rung). When every configured target fails, or the role is unavailable, stop and tell the owner which targets failed and why.
 
 Done when: every variant of each screen has a screenshot under `docs/design/<slug>/`, or the owner knows why the design child cannot run.
 
@@ -72,10 +72,10 @@ Done when: the owner has the screenshots and the question.
 
 ### 4. Steer
 
-Apply the owner's words verbatim to the chosen variants in the same Paper file:
+Apply the owner's words verbatim to the chosen variants in the same Paper file or mockup files:
 
 - When you draw, change the frames yourself and export the screenshots again.
-- When a child draws, dispatch a new `design` task for the next round `<n+1>` of the same unit, with the owner's words verbatim in the task text and every earlier round in `--prior-file`. The task names the Paper file from the first result. Only one `design` child runs at a time.
+- When a child draws, dispatch a new `design` task for the next round `<n+1>` of the same unit, with the owner's words verbatim in the task text and every earlier round in `--prior-file`. The task names the Paper file or mockup files from the first result. Only one `design` child runs at a time.
 
 Then go back to step 3. Repeat until the owner approves one variant for each screen.
 
@@ -83,7 +83,7 @@ Done when: the owner approved one variant for each screen.
 
 ### 5. Write the spec
 
-Write `docs/design/<slug>.md` yourself, also when a child drew. Read exact values from the Paper file, not from the screenshots. Use the spec sections in [roles/design.md](../omt/references/roles/design.md): screens, flows, components, tokens, states, the Paper file and frame names, and the screenshot paths. Name the approved variant of each screen, and quote the owner's last words.
+Write `docs/design/<slug>.md` yourself, also when a child drew. Read exact values from the Paper file or mockup source, not from the screenshots. Use the spec sections in [roles/design.md](../omt/references/roles/design.md): screens, flows, components, tokens, states, the Paper file and frame names or the mockup paths, and the screenshot paths. Name the approved variant of each screen, and quote the owner's last words.
 
 Check that each screenshot path in the spec exists. Give the owner the spec path.
 

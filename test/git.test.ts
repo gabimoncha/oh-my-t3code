@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { test } from "bun:test";
+import { DEFAULT_CONFIG } from "../src/config/defaults.ts";
 import { run } from "../src/commands/git.ts";
 import { findDefaultBranch } from "../src/git/branch.ts";
 import { fakeContext, gitEnv, gitRepo, tempDir, writeFile } from "./helpers.ts";
@@ -81,15 +82,20 @@ test("git pullRequests off disables push and pr", async () => {
   }
 });
 
-test("git 2026-10 partial policy allows merge and asks for an unset commit value", async () => {
+test("git uses a previously accepted partial policy until defaults are accepted", async () => {
   const p = project();
   p.git(["checkout", "-q", "-b", "feat/x"]);
-  p.config({ defaults: "2026-10", profiles: { normal: { workflow: { git: { merge: "auto" } } } } });
+  const accepted = structuredClone(DEFAULT_CONFIG);
+  delete accepted.profiles.normal!.workflow!.git;
+  writeFile(join(p.cwd, ".omt", "install.json"), JSON.stringify({
+    acceptedDefaults: { version: 1, cliVersion: "0.1.0", config: accepted },
+  }));
+  p.config({ profiles: { normal: { workflow: { git: { merge: "auto" } } } } });
   assert.equal((await p.check("merge")).decision, "auto");
   const result = await p.check("commit");
   assert.equal(result.decision, "ask");
   assert.equal(result.value, null);
-  assert.match(result.reason, /2026-10/);
+  assert.match(result.reason, /normal/);
 });
 
 test("git merge outside a repo uses the merge value", async () => {
@@ -112,8 +118,8 @@ test("git check prints the PR file limit of the profile", async () => {
   assert.equal((await p.check("pr", p.cwd, "--user", "alice")).maxPrFiles, 100);
   p.config({ profiles: { normal: { workflow: { git: { maxPrFiles: 0 } } } } });
   assert.equal((await p.check("pr", p.cwd, "--user", "alice")).maxPrFiles, 0);
-  p.config({ defaults: "2026-11" });
-  assert.equal((await p.check("pr", p.cwd, "--user", "alice")).maxPrFiles, null);
+  p.config({});
+  assert.equal((await p.check("pr", p.cwd, "--user", "alice")).maxPrFiles, 100);
 });
 
 test("git check asks when maxPrFiles is out of range", async () => {

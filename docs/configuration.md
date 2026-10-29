@@ -7,7 +7,7 @@ omt reads two config files:
 
 `omt config path` prints both paths and says which files exist. `omt config init` writes the user starter config, and `--force` overwrites an existing file.
 
-Run `omt config validate` after each change. It checks every key of both files and every profile, also the profiles that you do not select, and it exits 1 on an error. The [spec](spec.md#62-layer-validation) has the full schema and the merge rules.
+Run `omt config validate` after each change. It checks every key of both files and every profile, including the profiles that you do not select. It exits 1 on an error. The [spec](spec.md#62-layer-validation) has the full schema and the merge rules.
 
 To let omt make a change for you, ask the agent in a T3 thread to set up omt. The `omt-setup` skill runs the commands on this page, shows each change, and asks before it writes. For help with a question, ask `$omt-help`.
 
@@ -30,29 +30,29 @@ A role, such as `execute` or `review`, maps to an ordered chain of provider, mod
 
 | Role | Use | First choice | Fallback |
 | --- | --- | --- | --- |
-| `explore` | Answer one narrow question about this repository | GPT-6-Luna, low | Claude Sonnet 5.5, low |
-| `research` | Answer a question from docs, the web, and code | GPT-6.1-Sol, low | Claude Opus 5.5, low |
-| `plan` | Turn a goal into a plan file | Claude Opus 5.5, xhigh | GPT-6-Astra, xhigh |
-| `plan-review` | Check a plan for gaps | GPT-6-Astra, high | Claude Opus 5.5, high |
-| `grill` | Test a goal before it has a plan: edge cases, questions, and options | GPT-6-Astra, high | Claude Opus 5.5, high |
-| `execute` | Implement one planned unit that the main thread hands off as an independent track | Claude Opus 5.5, medium | GPT-6.1-Sol, xhigh |
-| `review` | Review a diff against its brief, fix local findings, and report the rest | GPT-6-Astra, high | Claude Opus 5.5, high |
-| `oracle` | Attack the finished change before it counts as done, fix local findings, and report the rest | GPT-6-Astra, high | Claude Opus 5.5, high |
-| `qa` | Run the check commands and device flows, and return each exit code with its log and screenshots. Edits nothing. | Claude Haiku 5.5, medium | Claude Sonnet 5.5, low; then GPT-6.1-Sol, low |
+| `explore` | Answer one narrow question about this repository | GPT-6.1-Terra, low | Claude Haiku 5.5, medium |
+| `research` | Answer a question from docs, the web, and code | GPT-6.1-Sol, low | Claude Sonnet 5.5, medium |
+| `plan` | Turn a goal into a plan file | Claude Opus 5.5, medium | GPT-6-Astra, high |
+| `plan-review` | Check a plan for gaps | GPT-6-Astra, medium | Claude Opus 5.5, medium |
+| `grill` | Test a goal before it has a plan: edge cases, questions, and options | GPT-6-Astra, medium | Claude Opus 5.5, medium |
+| `execute` | Implement one planned unit that the main thread hands off as an independent track | Claude Opus 5.5, low | GPT-6.1-Sol, high |
+| `review` | Review a diff against its brief, fix local findings, and report the rest | GPT-6-Astra, medium | Claude Opus 5.5, medium |
+| `oracle` | Attack the finished change before it counts as done, fix local findings, and report the rest | GPT-6-Astra, medium | Claude Opus 5.5, medium |
+| `qa` | Run the check commands and device flows, and return each exit code with its log and screenshots. Edits nothing. | GPT-6.1-Sol, medium | Claude Sonnet 5.5, low |
 | `guardrail` | Propose checks and rule fixes for review findings | Claude Opus 5.5, high | GPT-6-Astra, high |
-| `writing` | Write or edit documentation | Claude Opus 5.5, high | GPT-6-Astra, medium |
-| `design` | Design screens and flows, and write a design spec | Claude Opus 5.5, high | none |
-| `ui` | Implement one UI unit from its design spec | Claude Opus 5.5, medium | none |
+| `writing` | Write or edit documentation | Claude Opus 5.5, medium | GPT-6-Astra, medium |
+| `design` | Design screens and flows, and write a design spec | Claude Opus 5.5, medium | GPT-6-Astra, high |
+| `ui` | Implement one UI unit from a design spec or task requirements | Claude Opus 5.5, low | GPT-6.1-Sol, high |
 
-The fallback runs only when T3 refuses the first choice. `design` and `ui` have no fallback. Designs come only from Claude Opus 5.5, and you are the design review.
+The table shows the current defaults. The fallback runs when T3 refuses the first choice. You review the designs.
 
-`plan-review`, `grill`, `review`, and `oracle` are cross-family roles. The reviewer comes from the other model family than the worker. GPT-6-Astra reviews Claude work, and Claude Opus 5.5 reviews GPT work. The skills pass the worker to `omt brief --against`, and the CLI puts the rungs of the other family first. When the other family is not available, the same family reviews. A build oracle uses the family that did not do most of the implementation. A review oracle uses the family that did not do most of the reviews.
+`plan-review`, `grill`, `review`, and `oracle` are cross-family roles. The reviewer comes from the model family that did not do the work. GPT-6-Astra reviews Claude work, and Claude Opus 5.5 reviews GPT work. The skills pass the worker to `omt brief --against`, and the CLI puts the rungs of the other family first. When the other family is not available, the same family reviews. A build oracle uses the family that did not do most of the implementation. A review oracle uses the family that did not do most of the reviews.
 
 Claude models run on the `claudeAgent` driver, and GPT models run on the `codex` driver. Each default rung also names the T3 built-in provider instance of its driver. T3 checks a named instance again before it refuses it. A target with only a driver can fail because of an old provider snapshot.
 
 The read-only roles are `explore`, `research`, `plan-review`, `grill`, and `guardrail`. They run in T3 plan mode. On Claude, Codex, Cursor, and OpenCode, plan mode stops the child from editing files. T3 has no plan mode for Pi, so only its brief stops a Pi child in a read-only role. No default role uses Pi.
 
-`review` and `oracle` can edit files. In an `omt-ulw` build, the reviewer fixes each local finding itself: a clear fix inside the changed files that agrees with the plan summary. It reports every other finding. `omt-code-review` still runs its reviewers in plan mode, so they only report. `qa` has edit access only to run commands and write logs. Its brief forbids edits in the repository, and it writes no tests. `qa` puts its Claude rungs first, because a Codex child cannot reach the local device daemon. Only `qa` drives a device, a simulator, a browser, or a computer.
+`review` and `oracle` can edit files. In an `omt-ulw` build, the reviewer fixes each local finding itself: a clear fix inside the changed files that agrees with the plan summary. It reports every other finding. `omt-code-review` still runs its reviewers in plan mode, so they only report. `qa` has edit access only to run commands and write logs. Its brief forbids edits in the repository, and it writes no tests. `qa` tries GPT-6.1-Sol first, then Claude Sonnet. If a local tool is unreachable, the workflow retries once on the other provider. Only `qa` drives a device, a simulator, a browser, or a computer.
 
 Run `omt roles` to see how each role resolves with your config.
 
@@ -209,7 +209,7 @@ Set limits at the root of a config file, or in a profile:
 
 Each value must be an integer. `prototype` sets `maxReviewRounds` to 2.
 
-A run has no task budget. The number of child tasks that a run started never stops the next one; only `maxParallel` does. `omt ledger stats` prints `can dispatch: yes` while fewer than `maxParallel` tasks are active. `limits.maxTasksPerRun` was removed in set `2026-12`, and `omt plan limit --tasks` fails with a usage error. A plan header that still has a `max-tasks` key has no effect, and `omt plan status` prints a warning for it.
+A run has no task budget. Only `maxParallel` can stop the next child task. The number of tasks that a run already started never does. `omt ledger stats` prints `can dispatch: yes` while fewer than `maxParallel` tasks are active. `limits.maxTasksPerRun` was removed, and `omt plan limit --tasks` fails with a usage error. A plan header that still has a `max-tasks` key has no effect, and `omt plan status` prints a warning for it.
 
 ## Set fast mode per role
 
@@ -224,36 +224,22 @@ A run has no task budget. The number of child tasks that a run started never sto
 
 The first value that is set wins: the rung `fast`, the role `fast`, the model `fast`, and then `false`. GPT-6.1-Sol has fast mode on by default. For a model that supports it, `true` becomes `serviceTier: "priority"` or `fastMode: true`. A model without fast mode keeps its target, and omt reports a note. A value in `rung.options` wins over this mapping. `false` adds no fast option.
 
-## Pin the default set
+## Review current defaults
 
-Each omt release ships dated default sets. A set holds every built-in role, profile, limit, and model setting. The sets today are `2026-10`, `2026-11`, which adds the `grill` role, and `2026-12`. Set `2026-12` retires the per-unit build keys, the task budget, and the `verify`, `quick`, and `deep` roles. It gives `review` and `oracle` edit access, and it moves the device chain to `qa` ([Remove the retired keys](#remove-the-retired-keys)). A set does not change after its release. New defaults go into a new set with a later name.
+Each release ships one current default configuration. Your user and project overrides apply on top of the defaults you last accepted.
 
-The `"defaults"` key pins one set:
-
-```jsonc
-{
-  "$schema": "https://raw.githubusercontent.com/gabimoncha/oh-my-t3code/main/schema/omt.schema.json",
-  "version": 1,
-  "defaults": "2026-12"
-}
-```
-
-Each new starter config pins the latest set. Your overrides apply on top of the pinned set, and an omt update does not change them. The project config's pin wins over the user config's. A config without a pin follows the latest set, so its defaults can change when you update omt. For such a config, the `defaults` line of `omt doctor` says `2026-12 (latest, not pinned); run omt defaults use latest to pin`.
-
-After an omt update, compare your set with the new one, then move the pin:
+`omt doctor` and `omt update` show each changed value before asking whether to use the current defaults. A line marked `(overridden by <file>)` has no effect because your config sets that value. Declining keeps the last accepted defaults active.
 
 ```sh
-omt defaults list
-omt defaults diff
-omt defaults use latest --dry-run
-omt defaults use latest
+omt doctor --dry-run
+omt doctor
 ```
 
-- `omt defaults list` prints each set. It marks the `latest` set and the `selected` set, with the file that selects it.
-- `omt defaults diff` prints one line per value that changes from your set to the latest set: `<path>: <from> -> <to>`. A line that ends with `(overridden by <file>)` names a value that your config sets, so that change has no effect for you. With no change, it prints `no changes`. `omt defaults diff <from> <to>` compares two other sets.
-- `omt defaults use latest` changes only the `defaults` key of one config file and keeps the rest of the file, comments included. It prints the change and asks first. `--dry-run` writes nothing, and `--yes` skips the question. `--project` or `--user` picks the file. Without a flag, it changes the project config when it exists, else the user config.
+Use `--project` to review a project install. `--yes` accepts without a prompt. JSON output and commands without a terminal report changes without accepting them unless you pass `--yes`. A dry run writes nothing and skips the daily update check.
 
-`omt config validate` reports an unknown set name, such as a set from a newer omt. `omt defaults use latest` repairs it.
+omt stores one accepted defaults snapshot in the install record, `install.json`. A project snapshot takes precedence over the user snapshot. With no snapshot, omt uses the installed release's defaults. An older install has no saved baseline, so its first review shows the current role choices.
+
+The old `"defaults"` config key is ignored with a warning. Acceptance removes that key from the reviewed scope's config and keeps its comments and overrides. There is no date selector or defaults history. `omt config show --defaults` prints the installed release's current defaults.
 
 ## Match the harnesses on your machine
 
@@ -265,7 +251,7 @@ The default chains use two harnesses: Claude Code, on the `claudeAgent` driver, 
 }
 ```
 
-With this value, `omt roles` marks each Claude rung as `harness claudeAgent is not enabled (harnesses: codex); run omt detect`, and the next rung runs. `design` and `ui` have only a Claude rung, so they become `unavailable`. The cross-family roles review with the same family. Without the key, omt uses every rung. The key holds 1 to 10 driver kinds, and a project value replaces the user value as a whole.
+With this value, `omt roles` marks each Claude rung as `harness claudeAgent is not enabled (harnesses: codex); run omt detect`, and the next rung runs. `design` falls back to Astra and `ui` falls back to Sol. The cross-family roles review with the same family. Without the key, omt uses every rung. The key holds 1 to 10 driver kinds, and a project value replaces the user value as a whole.
 
 You do not have to write the key yourself. When `omt install` creates a config file, it detects the harnesses, shows the result in its plan, and writes the key only when a harness is missing. `omt detect` runs the same check at any time. `--project` or `--user` picks the config file to compare with or change. Without a flag, omt uses the project config when it exists, else the user config. `--write` changes only a file that exists, so run `omt init` or `omt config init` first. The sample uses the project config:
 
@@ -279,7 +265,6 @@ omt detect --write --project
 claudeAgent  not detected  T3 disabled, claude not on PATH
 codex        detected  T3 enabled, /usr/local/bin/codex
 recommended: harnesses ["codex"]
-design and ui: unavailable without claudeAgent
 cross-family review: the same family reviews
 <project>/.omt/config.jsonc: harnesses none -> ["codex"]
 run omt detect --write to apply
@@ -287,7 +272,7 @@ run omt detect --write to apply
 
 A harness is detected when T3 does not disable it in `~/.t3/userdata/settings.json` (or `$T3CODE_HOME/userdata/settings.json`) and its executable, `claude` or `codex`, is on `PATH`. omt does not read T3's settings per project, so it can miss a harness that T3 turns on for one project only. An agent in a T3 thread saves the result of the T3 tool `orchestrator_capabilities` to a temp file and passes it with `--capabilities <file>`. Then a harness is detected when T3 has a provider of its driver that can run child tasks.
 
-`--write` changes only the `harnesses` key of one file, with the same file rule, `--dry-run`, and `--yes` as `omt defaults use`. When every harness is detected, it removes the key. One case keeps the key: the file is the project config, and the user config sets a `harnesses` value that leaves out a detected harness. Then the project config gets the full list, so that it overrides the user value. `omt doctor` prints a `harnesses` line with the effective value.
+`--write` changes only the `harnesses` key of one file, with the file rule described above. `--dry-run` previews the change, and `--yes` accepts without a prompt. When every harness is detected, it removes the key. One case keeps the key: the file is the project config, and the user config sets a `harnesses` value that leaves out a detected harness. Then the project config gets the full list, so that it overrides the user value. `omt doctor` prints a `harnesses` line with the effective value.
 
 ## Move a `roles.test` override
 
@@ -295,13 +280,13 @@ The `test` role was renamed to `qa`. Move each `roles.test` override to `qa`. om
 
 ## Remove the retired keys
 
-Set `2026-12` moves the build into the main thread, so the keys that served per-unit dispatch have no job left. These keys and roles are retired:
+The main thread runs the build, so the keys that served per-unit dispatch have no job left. These keys and roles are retired:
 
 - `workflow.build.verify`, `workflow.build.checkpoint`, and `workflow.build.stallMinutes`, in any profile.
 - `limits.maxTasksPerRun`, at the root or in a profile.
 - The roles `verify`, `quick`, and `deep`, at the root or in a profile. `qa` now runs the checks and the device flows that `verify` ran.
 
-A config file that still sets one of them loads. omt ignores the key and prints one warning for each key, such as `profiles.normal.workflow.build.checkpoint is no longer used; remove it`. Delete the key to clear the warning. A config that pins `2026-10` or `2026-11` and does not set these keys loads with no warning.
+A config file that still sets one of them loads. omt ignores the key and prints one warning for each key, such as `profiles.normal.workflow.build.checkpoint is no longer used; remove it`. Delete the key to clear the warning.
 
 ## Remove the `visuals` key
 
@@ -321,7 +306,7 @@ The `update` key turns on a check for a new omt version. Set it in the user conf
 | --- | --- |
 | `off` | No check. An absent key means `off`. |
 | `check` | `omt install` and `omt doctor` ask the npm registry for the latest version, at most once a day. `omt doctor` prints an `update` line. When a new version is out, `omt install` prints `note: omt <version> is out; run omt update`. |
-| `apply` | The same check. When a new version is out and the command runs at a terminal, `omt install` and `omt doctor` then run `omt update --yes`, once for each new version. Without a terminal, they print only the note. The automatic update never moves the `defaults` pin. |
+| `apply` | The same check. When a new version is out and the command runs at a terminal, `omt install` and `omt doctor` then run `omt update --yes`, once for each new version. Without a terminal, they print only the note. The automatic update also accepts the current defaults. |
 
 Only the user config can set the key. In the project config, omt prints the warning `update is read only from the user config; remove it from <file>` and ignores the key. So a cloned repository cannot turn on network calls. The user starter config holds the key as a comment.
 
@@ -329,13 +314,13 @@ omt asks the registry only in `omt install`, `omt doctor`, and `omt update`. The
 
 ## See where each value comes from
 
-A value can come from the pinned default set, the user config, the project config, or a profile. To see which of them sets each value, run:
+A value can come from the accepted defaults, the user config, the project config, or a profile. To see which of them sets each value, run:
 
 ```sh
 omt config explain
 ```
 
-Each line holds the dotted path, the value, and the layer that sets it: `defaults <set>`, `user`, `project`, or `profile <name> (<layer that declares the value>)`. Below a value, each `over <layer>: <value>` line names a lower layer that also sets the path, highest first. The `root` block holds the merged config that `omt config show` prints. The `effective` block holds the `roles`, `limits`, `models`, and `workflow` values after omt applies the profile, as `omt profile show` resolves them. A `removed` block, when present, lists each role or profile that a config file removes with `null`.
+Each line holds the dotted path, the value, and the layer that sets it: `defaults`, `user`, `project`, or `profile <name> (<layer that declares the value>)`. Below a value, each `over <layer>: <value>` line names a lower layer that also sets the path, highest first. The `root` block holds the merged config that `omt config show` prints. The `effective` block holds the `roles`, `limits`, `models`, and `workflow` values after omt applies the profile, as `omt profile show` resolves them. A `removed` block, when present, lists each role or profile that a config file removes with `null`.
 
 In this example, the user config adds a profile `fast-proto` that extends `prototype` and sets `limits.maxParallel` to 2, and the project config sets `limits.maxParallel` to 4. The output is shortened:
 
@@ -346,16 +331,16 @@ omt config explain --profile fast-proto
 ```text
 user: <home>/.config/oh-my-t3code/config.jsonc
 project: <project>/.omt/config.jsonc
-defaults: 2026-10 (<home>/.config/oh-my-t3code/config.jsonc)
+defaults: <home>/.config/oh-my-t3code/install.json
 profile: fast-proto (argument)
 root:
 limits.maxParallel  4  project
-  over defaults 2026-10: 6
+  over defaults: 6
 effective:
 limits.maxParallel  2  profile fast-proto (user)
   over project: 4
-limits.maxReviewRounds  2  profile prototype (defaults 2026-10)
-  over defaults 2026-10: 4
+limits.maxReviewRounds  2  profile prototype (defaults)
+  over defaults: 4
 ```
 
 Without `--profile`, omt explains the selected profile. `--json` prints the same report as JSON, with the full file path of each source. Config issues go to stderr. When the profile resolves, the command prints the report and exits 0, also when an issue is an error. When it does not resolve, the command prints no report. An unknown profile exits 2, and a profile cycle or a chain of more than 8 profiles exits 1.
@@ -375,7 +360,7 @@ Press Ctrl-C to stop. The editor also stops when you close its tab.
 
 omt starts a local server and opens the URL in your default browser. With `--no-open`, it only prints the URL, and you open it yourself. The page reads the same value sources as `omt config explain`. The editor edits only a config file that exists, so run `omt config init` or `omt init` first.
 
-The page shows the config as a tree of keys. Each row shows the value, a strip of four cells, and the layer that sets the value, such as `defaults 2026-10`, `user`, or `profile fast-proto (user)`. The cells of the strip are the default set, the user config, the project config, and the profile, in this order (`strip = D U P F`). The purple cell is the layer that wins. A gray cell is a layer that also sets the value, but a higher layer overrides it. Click a key to see its source stack, from the default set to the profile.
+The page shows the config as a tree of keys. Each row shows the value, a strip of four cells, and the layer that sets the value, such as `defaults`, `user`, or `profile fast-proto (user)`. The cells of the strip are the accepted defaults, the user config, the project config, and the profile, in this order (`strip = D U P F`). The purple cell is the layer that wins. A gray cell is a layer that also sets the value, but a higher layer overrides it. Click a key to see its source stack, from the accepted defaults to the profile.
 
 To change one value:
 
@@ -390,12 +375,14 @@ To change one value:
 The page follows these rules:
 
 - `Reset to inherited` queues the removal of the key from the selected file. The sentence below the button gives the value that runs after the removal. The button is off when the file does not set the key.
-- Click a role or a profile in the tree to open its editor. The `edit` link of the `harnesses · models · defaults` group opens the root settings. These screens queue edits in the same way. To go back to the tree, press Esc when no field has focus.
+- Click a role or a profile in the tree to open its editor. The `edit` link of the `harnesses · models · profile` group opens the root settings. These screens queue edits in the same way. To go back to the tree, press Esc when no field has focus.
 - Queued edits stay in the page until you write them. The status bar counts the queued edits of each file.
-- When the page loads the config again, for example after a write, an editor that you did not change shows the new values. An editor that you changed but did not queue keeps your input. If its file changed, also after a write from the page to that file, the editor shows `Based on older text. The file changed after you started this edit.` You cannot queue that input until you click `Keep my edit` or `Discard`. `Keep my edit` keeps your input on the new text, and the review shows what the write changes. `Discard` shows the new values. When you leave an editor that has input that you did not queue, the editor keeps that input. When you open the same editor again with the same profile and the same `Edit in` file, it shows your input. Each path in the file keeps its own input: when you select the other path in `PATH IN THIS FILE` and then select the first path again, the editor shows your input for that path. Each file keeps its input when you select the other file in `Edit in`, and when the page selects the other file because the selected file was deleted or stops parsing. When you select that file again, the editors show your input.
+- When the page loads the config again, for example after a write, an editor that you did not change shows the new values. An editor that you changed but did not queue keeps your input.
+- If the file of an unqueued edit changed, also through a write from the page, the editor shows `Based on older text. The file changed after you started this edit.` You cannot queue that input until you click `Keep my edit` or `Discard`. `Keep my edit` keeps your input on the new text, and the review shows what the write changes. `Discard` shows the new values.
+- Unqueued input stays when you leave an editor. The editor shows it again when you open it with the same profile and the same `Edit in` file. Each path in `PATH IN THIS FILE` keeps its own input. Each file keeps its input when you select the other file in `Edit in`, or when the page selects the other file because the selected file was deleted or stops parsing.
 - In a chain, an option key that you clear removes the option when you queue the chain. A key that is the same as another key of the rung stops the queue, and a message shows next to the key. The page keeps your text until you change it. While a `+ key=value` form has text, you cannot queue the chain, and the form shows `Press Enter to add the option, or clear it.`
 - When the edits add a config error, the `CHECK` block of the review shows the new errors, and the write button is off. A warning that the file already has does not block the write.
-- When you edit `defaults`, the review also lists each value that changes between the two default sets.
+- The defaults source is read-only. Use `omt doctor` or `omt update` to review and accept current defaults.
 - When the file changed on disk, the page shows `✕ CHANGED ON DISK`. Click `Reload…`, then `Drop 1 edit and reload` to drop the queued edits of that file and load the new file. The queued edits of the other file stay. To keep your edits, click `Keep editing`.
 - When a config file does not exist, its layer shows `absent`, and you cannot select it in `edit in`. Create the file with the command that the page shows, then reload the page. When a file does not parse, you cannot select it until you fix the file.
 - When the editor stops, the page shows `● disconnected · the editor stopped` and becomes read-only. omt does not write the queued edits. To edit again, run `omt config edit --web`.
@@ -412,11 +399,11 @@ The server listens on 127.0.0.1 only, and the URL holds a random port and a rand
 ## Inspect the config
 
 - `omt config path` prints the paths of the user and project configs.
-- `omt config show --defaults` prints the selected default set: the built-in profiles, roles, models, and limits.
+- `omt config show --defaults` prints the installed release's current defaults: the built-in profiles, roles, models, and limits.
 - `omt config show` prints the merged config before omt applies the profile.
 - `omt config explain` prints the layer that sets each value. See [See where each value comes from](#see-where-each-value-comes-from).
 - `omt config edit --web` opens an editor for both config files in a browser. See [Edit the config in a browser](#edit-the-config-in-a-browser).
 - `omt profile show <name> --json` prints the values after omt applies the profile.
 - `omt config validate` reports problems in your files and in every profile.
-- `omt defaults list` prints the default sets and the one that you use.
+- `omt doctor --dry-run` shows pending defaults changes without writing.
 - `omt detect` prints the harnesses that omt finds and the `harnesses` value that fits them.

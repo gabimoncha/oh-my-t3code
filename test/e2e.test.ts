@@ -110,7 +110,7 @@ test("end to end: a grill session initializes shared paths and routes against ea
   }
 });
 
-test("end to end: git policy checks each action on feature and default branches and a pinned set", () => {
+test("end to end: git policy checks each action on feature and default branches and explicit overrides", () => {
   const p = gitProject({});
   p.git(["remote", "add", "origin", "git@github.com:alice/app.git"]);
   p.git(["update-ref", "refs/remotes/origin/main", "HEAD"]);
@@ -125,8 +125,8 @@ test("end to end: git policy checks each action on feature and default branches 
   }
   p.git(["checkout", "-q", "feat/x"]);
   mkdirSync(join(p.project, ".omt"));
-  writeFileSync(join(p.project, ".omt", "config.jsonc"), JSON.stringify({ defaults: "2026-10" }));
-  assert.match(p.omt("git", "check", "commit", "--user", "alice"), /^ask: .*2026-10/);
+  writeFileSync(join(p.project, ".omt", "config.jsonc"), JSON.stringify({ profiles: { normal: { workflow: { git: { branchCommits: "ask" } } } } }));
+  assert.match(p.omt("git", "check", "commit", "--user", "alice"), /^ask: /);
 });
 
 test("end to end: git policy permits owned repos and asks for another owner's repo or PR", () => {

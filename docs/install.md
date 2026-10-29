@@ -1,8 +1,5 @@
 # Install oh-my-t3code
 
-Use a patched supported Node release for the npm package: 22.23.4 or 24.22.1 LTS.
-[Bun 1.4.4](https://bun.com/blog/bun-v1.4.4) blocks the compromised emSign intermediate keys. Rebuild release binaries with this version to include the fix.
-
 You install omt in two parts. First, install the `omt` CLI from a package registry or as a release binary. You do not clone the repository. Then let the CLI install the skills, in one of two modes:
 
 - The project install puts omt into one repository. It does not change `~/.agents/skills`, `~/.claude`, or your `PATH`. Start here.
@@ -17,11 +14,13 @@ If you are a coding agent, follow the [agent quick start](agents/quickstart.md) 
 - The latest T3 Code release. omt is tested only on the latest release.
 - Claude Code, Codex, or both, signed in and enabled in T3 Settings, Providers.
 - git.
-- For the npm package: Node.js 22 or later on `PATH`. On a machine with only Bun 1.4.4 or later, see [Run the npm package with Bun only](#run-the-npm-package-with-bun-only). The release binary needs neither Node nor Bun.
+- For the npm package: Node.js 22 or later on `PATH`. Use a patched supported release: 22.23.4 or 24.22.1 LTS. On a machine with only Bun 1.4.4 or later, see [Run the npm package with Bun only](#run-the-npm-package-with-bun-only). The release binary needs neither Node nor Bun.
+
+[Bun 1.4.4](https://bun.com/blog/bun-v1.4.4) blocks the compromised emSign intermediate keys. Rebuild release binaries with this version to include the fix.
 
 ## Install the CLI
 
-Pick one channel. The commands that each channel gives are in the last column.
+Pick one channel. The last column shows how to run omt from that channel.
 
 | Channel | Command | Run omt as |
 | --- | --- | --- |
@@ -79,7 +78,7 @@ A one-shot run can install only into a project. A global install from a one-shot
 
 ### Run the npm package with Bun only
 
-On a machine with Bun 1.4.4 or later and no Node, the bare `omt` command fails with `env: node: No such file or directory` and exit code 127. For this machine, the release binary is the best channel, because it needs neither Node nor Bun. To use the npm package, run it through Bun:
+On a machine with Bun 1.4.4 or later and no Node, the bare `omt` command fails with `env: node: No such file or directory` and exit code 127. The release binary is the best channel for this machine, because it needs neither Node nor Bun. To use the npm package, run it through Bun:
 
 | Channel | Run omt as |
 | --- | --- |
@@ -92,19 +91,17 @@ When `node` is not on `PATH`, `bunx` runs the package with Bun. To run it with B
 
 An install that runs through Bun records Bun in the shim, so `.omt/bin/omt` works with no Node. A one-shot shim runs `bunx omt3@<version>`, which also works with no Node.
 
-The global install through Bun works too: `bun "$(bun pm bin -g)/omt" install`. But the skills look for the CLI as `omt` on `PATH` first, then as `.omt/bin/omt`. With no Node, `omt` on `PATH` cannot run. So when the directory that `bun pm bin -g` prints is on `PATH`, the skills find an `omt` that fails. On a machine with only Bun, use the release binary, a Bun dev dependency, or a one-shot run.
+The global install through Bun works too: `bun "$(bun pm bin -g)/omt" install`. But the skills look for `omt` on `PATH` before `.omt/bin/omt`, and with no Node, that `omt` fails. This happens when the directory that `bun pm bin -g` prints is on `PATH`. On a machine with only Bun, use the release binary, a Bun dev dependency, or a one-shot run.
 
 ## Install into one project
 
-Run the install in the project root, with the command of your channel. This example uses `omt`:
+Run the install in the project root. This example uses `omt`. Replace it with the command of your channel from the last column of [Install the CLI](#install-the-cli), such as `npx omt` or `npx omt3`:
 
 ```sh
 cd /path/to/your-project
 omt install --project --hooks
 omt doctor --project
 ```
-
-After a dev-dependency install, run `npx omt install --project`, `pnpm exec omt install --project`, or `bunx omt install --project`. For a one-shot run, run `npx omt3 install --project`, `bunx omt3 install --project`, or `pnpm dlx omt3 install --project`.
 
 The install shows its plan first and asks before it writes. Add `--yes` to skip the question. Add `--dry-run` to print the plan and write nothing. `--hooks` adds the Claude Code hook that arms ultrawork with the `ulw` keyword. Leave it out if you use only Codex.
 
@@ -117,7 +114,6 @@ Harnesses (T3 settings and PATH):
     claudeAgent  not detected  T3 disabled, claude not on PATH
     codex        detected  T3 enabled, /usr/local/bin/codex
     the starter config gets "harnesses": ["codex"]
-    design and ui: unavailable without claudeAgent
     cross-family review: the same family reviews
 ```
 
@@ -145,7 +141,7 @@ The install writes these paths in the project root:
 | --- | --- |
 | `.agents/skills/<skill>` | A copy of each skill. Codex, Cursor, OpenCode, Pi, and Antigravity read this directory. |
 | `.claude/skills/<skill>` | A relative symlink to the copy, for Claude Code. |
-| `.omt/config.jsonc`, `.omt/plans/` | The project config and the plans directory, as `omt init` creates them. The config pins the latest default set, and gets a `"harnesses"` key when a harness is missing. |
+| `.omt/config.jsonc`, `.omt/plans/` | The project config and the plans directory, as `omt init` creates them. The config gets a `"harnesses"` key when a harness is missing. |
 | `.omt/bin/omt` | The shim: a shell script that runs the CLI that made the install. The next section lists its forms. |
 | `.claude/settings.local.json` | The `ulw` hook entry, only with `--hooks`. The hook calls `.omt/bin/omt`. |
 | `.omt/install.json`, `.omt/backups/` | The manifest and the backups. |
@@ -200,7 +196,7 @@ For a Bun or pnpm project without a setup script, generate one:
 
 This writes `t3.json` and `.t3/omt-worktree-setup.mjs` in the current checkout, also in a linked worktree. For pnpm, it also writes `pnpm-workspace.yaml` with `enableGlobalVirtualStore: true` when that file is missing. The runner uses only Node, so it works in worktrees without omt. It installs from the lockfile with a frozen install and the isolated linker, into a global virtual store, so worktrees share the installed package directories. It needs Bun 1.4.4 or later, pnpm 10.34.5 on major 10, pnpm 11.11.0 on major 11, or pnpm 12 or later, already on `PATH`. It downloads no package manager and sets no global configuration. It stops instead of converting an existing `node_modules`.
 
-omt never rewrites an existing `t3.json`, runner, or `pnpm-workspace.yaml`, and never changes a linker or store setting. pnpm needs the store setting in `pnpm-workspace.yaml`: without it, a later `pnpm run` or `pnpm exec` can re-install `node_modules` with a local store. When an existing `pnpm-workspace.yaml` lacks the setting, turns it off, or cannot be read, `omt worktree setup` prints `Setup is incomplete` with the line to add and exits 1, `omt worktree check` shows it on its `store` line, and the runner stops before it installs anything. Add `enableGlobalVirtualStore: true` (or `virtualStoreType: global` with pnpm 11.23.0 or later) as a top-level line.
+omt never rewrites an existing `t3.json`, runner, or `pnpm-workspace.yaml`, and never changes a linker or store setting. pnpm needs the store setting in `pnpm-workspace.yaml`. Without it, a later `pnpm run` or `pnpm exec` can re-install `node_modules` with a local store. An existing `pnpm-workspace.yaml` can lack the setting, turn it off, or fail to parse. Then `omt worktree setup` prints `Setup is incomplete` with the line to add and exits 1, `omt worktree check` shows the problem on its `store` line, and the runner stops before it installs anything. Add `enableGlobalVirtualStore: true` (or `virtualStoreType: global` with pnpm 11.23.0 or later) as a top-level line.
 
 omt also refuses a `.t3` folder or runner that is a symlink, even one that stays inside the checkout. Node runs a linked script from the link target, so the runner would install in another folder.
 
@@ -240,7 +236,7 @@ The uninstall removes the shim. Run later commands with the command of your chan
 
 The uninstall removes the skills, the links, the shim, the hook entry, the exclude block, and the manifest. It also removes each file and empty directory that the install created.
 
-When the settings file that is left after the uninstall removes the hook entry equals the backup from the install, the uninstall writes the backup's bytes back and deletes the backup. So the project and `.git/info/exclude` are byte for byte as they were before the install, apart from the plans, the ledger, and the evidence that you added. These stay. When the ledger or the evidence stays, `.omt/.gitignore` stays too, so git does not show them.
+The uninstall removes the hook entry from the settings file. When the result equals the backup from the install, the uninstall writes the backup's bytes back and deletes the backup. So the project and `.git/info/exclude` are byte for byte as they were before the install, apart from the plans, the ledger, and the evidence that you added. These stay. When the ledger or the evidence stays, `.omt/.gitignore` stays too, so git does not show them.
 
 A path that `install --force` replaced stays in `.omt/backups/`, and the uninstall does not move it back. Git does not show it there.
 
@@ -260,7 +256,7 @@ The uninstall removes every omt hook entry. This includes an entry that was alre
 
 ## Install for your user
 
-The global install needs `omt` on your `PATH`. Install the CLI with a global channel first: `mise use -g github:gabimoncha/oh-my-t3code`, `mise use -g npm:oh-my-t3code`, `npm i -g oh-my-t3code`, `pnpm add -g oh-my-t3code`, or `bun add -g oh-my-t3code`. The npm package channels need Node on `PATH`. On a machine with only Bun, use the release binary, as [Run the npm package with Bun only](#run-the-npm-package-with-bun-only) explains.
+The global install needs `omt` on your `PATH`. First install the CLI with a mise or global channel from [Install the CLI](#install-the-cli). The npm package channels need Node on `PATH`. On a machine with only Bun, use the release binary, as [Run the npm package with Bun only](#run-the-npm-package-with-bun-only) explains.
 
 Then install the skills:
 
@@ -268,7 +264,7 @@ Then install the skills:
 omt install
 ```
 
-`omt install` shows its plan first and asks before it writes. Add `--yes` to skip the question. The plan includes the [harness detection](#harness-detection) of the project install, and the user config gets the same `"harnesses"` key when a harness is missing.
+`omt install` shows its plan and asks before it writes, as the project install does. The plan includes the [harness detection](#harness-detection) of the project install, and the user config gets the same `"harnesses"` key when a harness is missing.
 
 To arm ultrawork with the `ulw` keyword in Claude Code, also install the hook:
 
@@ -301,7 +297,7 @@ Restart your agent sessions in T3 Code after the install. A running session does
 
 Each installed skill directory holds a `.omt-managed.json` marker. The install never overwrites a path that it does not manage, unless you pass `--force`. With `--force`, it moves the old path to the backups directory first.
 
-When the bundle no longer ships a skill that an earlier install wrote, such as `omt-loop`, `omt-review`, or `omt-show`, `omt install` removes that skill folder and the links to it. The plan shows `remove <name> (no longer shipped)`. The install removes only a folder that its manifest lists and that has the marker. A folder that omt did not install stays. When you edited the retired skill, the install stops; `--force` backs up the folder and removes it. Until a retired skill is gone, `omt doctor` prints `WARN` on its `skills` line: `no longer shipped: <names> in <agents root>; run omt install`.
+When the bundle no longer ships a skill that an earlier install wrote, such as `omt-loop`, `omt-review`, or `omt-show`, `omt install` removes that skill folder and the links to it. The plan shows `remove <name> (no longer shipped)`. The install removes only a folder that its manifest lists and that has the marker. A folder that omt did not install stays. When you edited the retired skill, the install stops. `--force` backs up the folder and removes it. Until a retired skill is gone, `omt doctor` prints `WARN` on its `skills` line: `no longer shipped: <names> in <agents root>; run omt install`.
 
 ### Remove the global install
 
@@ -322,7 +318,7 @@ omt update --dry-run
 omt update
 ```
 
-`omt update` asks the npm registry for the latest version. Then it runs the update command of the channel that installed omt, and the new CLI syncs the skills in user scope and in each project that `omt install --project` recorded. It shows its plan first and asks before it writes. Add `--yes` to skip the question. `--dry-run` prints the plan and writes nothing, and `--check` prints the current version, the latest version, the channel, and its update command, and writes nothing.
+`omt update` asks the npm registry for the latest version. Then it runs the update command of the channel that installed omt, and the new CLI syncs the skills in user scope and in each project that `omt install --project` recorded. It shows its plan first and asks before it writes. Add `--yes` to skip the question. `--dry-run` prints the plan and writes nothing. `--check` prints the current version, the latest version, the channel, and its update command, and writes nothing.
 
 | Channel | What `omt update` does |
 | --- | --- |
@@ -335,7 +331,7 @@ omt update
 
 Each command installs the exact version that the registry returned. So the mise channels write an exact pin, such as `github:gabimoncha/oh-my-t3code@0.3.0`, into your global mise config. A later `omt update` moves that pin. An exact version also skips the 24-hour wait of `minimum_release_age`.
 
-The sync keeps a skill that you edited, and prints `kept <skill>  (<reason>)`. `omt install --force` replaces it. The sync removes a managed skill that the new bundle no longer ships, with its links, as `omt install` does. It keeps an edited one with the reason `locally modified; no longer shipped; omt install --force backs it up and removes it`. A project that runs another omt, such as a dev dependency, gets the command to run in that project. The `defaults` pin of a config moves only when you answer yes to its own question, at a terminal. `--yes` never moves it, and prints the `omt defaults use latest` command instead. When any skill changed, restart your agent sessions in T3 Code.
+The sync keeps a skill that you edited, and prints `kept <skill>  (<reason>)`. `omt install --force` replaces it. The sync removes a managed skill that the new bundle no longer ships, with its links, as `omt install` does. It keeps an edited one with the reason `locally modified; no longer shipped; omt install --force backs it up and removes it`. A project that runs another omt, such as a dev dependency, gets the command to run in that project. The command shows defaults changes and asks before accepting them. `--yes` also accepts the current defaults. Declining keeps the last accepted defaults. When any skill changed, restart your agent sessions in T3 Code.
 
 `--project` updates only the current project. `--skills-only` syncs the skills with the CLI that runs now. It sends no request, so it works without the network.
 

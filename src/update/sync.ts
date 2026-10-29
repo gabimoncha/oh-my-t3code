@@ -359,7 +359,7 @@ async function syncThroughRunner(sync: RunnerSync, result: ScopeResult): Promise
   await writeFileAtomic(sync.shim, shimContent({ kind: "runner", runner: sync.runner, version: sync.target }), { mode: 0o755 });
   await chmod(sync.shim, 0o755);
   const child = [sync.shim, "update", "--skills-only", "--project", "--yes", "--json"];
-  const done = await sync.run(child, { cwd: sync.root });
+  const done = await sync.run(child, { cwd: sync.root, env: { OMT_UPDATE_DEFER_DEFAULTS: "1" } });
   const exit = `${child.join(" ")} exited ${done.code}`;
   let value: unknown;
   try {

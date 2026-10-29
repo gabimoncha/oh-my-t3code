@@ -87,9 +87,10 @@ test("profile application reports incomplete new roles through effectiveConfig",
   const config = configured({ profiles: { custom: { description: "Custom.", roles: { brandnew: { fast: true } } } } });
   const loaded: LoadedConfig = {
     config,
+    defaults: DEFAULT_CONFIG,
     sources: [],
     issues: [{ source: "test", path: "old", message: "Existing issue.", severity: "warning" }],
-    defaultsSource: "latest",
+    defaultsSource: "current",
   };
   const result = effectiveConfig(loaded, { profile: "custom" });
   assert.equal(result.config.roles.brandnew, undefined);

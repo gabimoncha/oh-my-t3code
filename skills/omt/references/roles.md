@@ -12,15 +12,15 @@ A role names a kind of work. The config maps each role to a chain of rungs (prov
 | `plan-review` | read-only | review | Checking a plan for gaps before any unit runs. Cross-family. Pass the plan author's provider with `--against`. |
 | `grill` | read-only | grill | Testing a goal before it has a plan: edge cases, open questions, and options. Cross-family. One child per grill, with the main thread's family in `--against`. |
 | `execute` | edit | work | One large planned unit with a disjoint scope, built as an independent track while the main thread builds the rest. |
-| `review` | edit from set 2026-12; read-only in 2026-10 and 2026-11 | review | One review round of a diff against its brief. Fixes local findings when its access allows edits, and reports the rest. Cross-family. Pass the author's family with `--against`. |
-| `oracle` | edit from set 2026-12; read-only in 2026-10 and 2026-11 | review | The final gate. Attack the finished change from the family other than the main implementer's. Fixes local findings when its access allows edits. Cross-family. |
+| `review` | edit | review | One review round of a diff against its brief. Fixes local findings when its access allows edits, and reports the rest. Cross-family. Pass the author's family with `--against`. |
+| `oracle` | edit | review | The final gate. Attack the finished change from the family other than the main implementer's. Fixes local findings when its access allows edits. Cross-family. |
 | `qa` | edit | test | Running the given check commands and device flows for a verdict with exit codes, logs, and screenshots. Edits nothing and writes no tests. |
 | `guardrail` | read-only | guardrail | Turning review findings into deterministic checks and rule fixes. Proposes changes and edits no files. |
 | `writing` | edit | work | Documentation and other prose. |
-| `design` | edit | work | Design variants of each screen and the design spec for screens and flows ([omt-design](../../omt-design/SKILL.md)). Opus only, no fallback. |
-| `ui` | edit | work | One UI unit built from its design spec as an independent track, when the main thread is not Opus. Opus only, no fallback. |
+| `design` | edit | work | Design variants of each screen and the design spec for screens and flows ([omt-design](../../omt-design/SKILL.md)). |
+| `ui` | edit | work | One UI unit, built from its approved design spec or the task requirements as an independent track, when the main thread is not Opus. |
 
-Read-only roles run in `plan` interaction mode; edit roles run in `default`. Every default role inherits your runtime mode. The persona for each role is `roles/<role>.md`, for example [roles/execute.md](roles/execute.md). The result block for each kind is `results/<kind>.md`, for example [results/work.md](results/work.md).
+Read-only roles run in `plan` interaction mode, and edit roles run in `default`. Every default role inherits your runtime mode. The persona for each role is `roles/<role>.md`, for example [roles/execute.md](roles/execute.md). The result block for each kind is `results/<kind>.md`, for example [results/work.md](results/work.md).
 
 Only `qa` drives a device, a Simulator UI, a browser, or a computer. Every other role lists each device check with its steps and expected results for the main thread, which sends it to `qa` ([delegation.md](delegation.md#verification-and-devices)).
 
@@ -40,25 +40,25 @@ ELECTRON_RUN_AS_NODE=1 "$T3_ACP_MCP_NODE" ${T3_ACP_MCP_ENTRYPOINT:+"$T3_ACP_MCP_
 
 ## Resolve by hand
 
-When neither `omt` nor `.omt/bin/omt` is found (see [The CLI](delegation.md#the-cli)), use the default chains below, or the chains in `.omt/config.jsonc` and `~/.config/oh-my-t3code/config.jsonc` when they exist (the project file wins).
+When neither `omt` nor `.omt/bin/omt` is found (see [The CLI](delegation.md#the-cli)), use the current default chains below, or the chains in `.omt/config.jsonc` and `~/.config/oh-my-t3code/config.jsonc` when they exist (the project file wins).
 
-Use the access and interaction mode of the selected default set. In sets 2026-10 and 2026-11, `review` and `oracle` are read-only and run in `plan` interaction mode.
+Use the access and interaction mode from `omt roles`. In the current defaults, `review` and `oracle` have edit access and default interaction mode.
 
-| Role | Rung 1 | Rung 2 | Rung 3 |
-| --- | --- | --- | --- |
-| `explore` | codex / gpt-6-luna / low | claudeAgent / claude-sonnet-5-5 / low | none |
-| `research` | codex / gpt-6.1-sol / low | claudeAgent / claude-opus-5-5 / low | none |
-| `plan` | claudeAgent / claude-opus-5-5 / xhigh | codex / gpt-6-astra / xhigh | none |
-| `plan-review` | codex / gpt-6-astra / high | claudeAgent / claude-opus-5-5 / high | none |
-| `grill` | codex / gpt-6-astra / high | claudeAgent / claude-opus-5-5 / high | none |
-| `execute` | claudeAgent / claude-opus-5-5 / medium | codex / gpt-6.1-sol / xhigh | none |
-| `review` | codex / gpt-6-astra / high | claudeAgent / claude-opus-5-5 / high | none |
-| `oracle` | codex / gpt-6-astra / high | claudeAgent / claude-opus-5-5 / high | none |
-| `qa` | claudeAgent / claude-haiku-5-5 / medium | claudeAgent / claude-sonnet-5-5 / low | codex / gpt-6.1-sol / low |
-| `guardrail` | claudeAgent / claude-opus-5-5 / high | codex / gpt-6-astra / high | none |
-| `writing` | claudeAgent / claude-opus-5-5 / high | codex / gpt-6-astra / medium | none |
-| `design` | claudeAgent / claude-opus-5-5 / high | none | none |
-| `ui` | claudeAgent / claude-opus-5-5 / medium | none | none |
+| Role | Rung 1 | Rung 2 |
+| --- | --- | --- |
+| `explore` | codex / gpt-6.1-terra / low | claudeAgent / claude-haiku-5-5 / medium |
+| `research` | codex / gpt-6.1-sol / low | claudeAgent / claude-sonnet-5-5 / medium |
+| `plan` | claudeAgent / claude-opus-5-5 / medium | codex / gpt-6-astra / high |
+| `plan-review` | codex / gpt-6-astra / medium | claudeAgent / claude-opus-5-5 / medium |
+| `grill` | codex / gpt-6-astra / medium | claudeAgent / claude-opus-5-5 / medium |
+| `execute` | claudeAgent / claude-opus-5-5 / low | codex / gpt-6.1-sol / high |
+| `review` | codex / gpt-6-astra / medium | claudeAgent / claude-opus-5-5 / medium |
+| `oracle` | codex / gpt-6-astra / medium | claudeAgent / claude-opus-5-5 / medium |
+| `qa` | codex / gpt-6.1-sol / medium | claudeAgent / claude-sonnet-5-5 / low |
+| `guardrail` | claudeAgent / claude-opus-5-5 / high | codex / gpt-6-astra / high |
+| `writing` | claudeAgent / claude-opus-5-5 / medium | codex / gpt-6-astra / medium |
+| `design` | claudeAgent / claude-opus-5-5 / medium | codex / gpt-6-astra / high |
+| `ui` | claudeAgent / claude-opus-5-5 / low | codex / gpt-6.1-sol / high |
 
 The cross-family roles are `plan-review`, `grill`, `review`, and `oracle`. For these roles, try the rungs outside the worker's family first, then the rungs in the worker's family, each in table order. When no rung outside the worker's family can run, the same family reviews.
 
@@ -112,12 +112,12 @@ On `provider_unavailable`, `model_unavailable`, or an `invalid_request` about op
 3. Call `delegate_task` with that payload.
 4. Record the new call as a new `dispatched` entry with `--attempt <n+1>`, its `--task-id`, and the fallback's `--provider` and `--model` ([results.md](results.md#recording)). The failed call returned no task, so it has no ledger entry to close.
 
-A role with one rung (`design` and `ui`) has no fallback. When T3 refuses its rung, stop and tell the user which target failed.
+A role with one rung has no fallback. When T3 refuses every configured rung, stop and tell the user which targets failed.
 
-A mode escalation error is not a rung problem: stop and report it ([delegation.md](delegation.md#failure-codes)).
+A mode escalation error is not a rung problem. Stop and report it ([delegation.md](delegation.md#failure-codes)).
 
 ## Custom roles and personas
 
-- Add or override a role in `.omt/config.jsonc` (project) or `~/.config/oh-my-t3code/config.jsonc` (user). A new role needs `description`, `access`, and `chain`. `omt config show --defaults` prints the built-in config; `omt config validate` checks a file.
+- Add or override a role in `.omt/config.jsonc` (project) or `~/.config/oh-my-t3code/config.jsonc` (user). A new role needs `description`, `access`, and `chain`. `omt config show --defaults` prints the built-in config, and `omt config validate` checks a file.
 - A persona file `<role>.md` overrides the bundled one. Lookup order: `.omt/roles/`, then `~/.config/oh-my-t3code/roles/`, then the bundled `roles/`, then [roles/_generic.md](roles/_generic.md).
 - A custom role gets its result block from its `result` field: `work`, `review`, `test`, `research`, `plan`, `guardrail`, or `grill`.

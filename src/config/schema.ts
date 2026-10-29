@@ -1,5 +1,5 @@
 import { EFFORT_LADDER } from "../types.ts";
-import { DEFAULT_SETS, LATEST_DEFAULT_SET, RETIRED_BUILD_KEYS, RETIRED_LIMIT_KEYS } from "./defaultSets.ts";
+import { RETIRED_BUILD_KEYS, RETIRED_LIMIT_KEYS } from "./defaults.ts";
 import { SCHEMA_URL } from "./starter.ts";
 import {
   ACCESS_VALUES,
@@ -53,10 +53,7 @@ export const CONFIG_SCHEMA = {
   properties: {
     $schema: { type: "string" },
     version: { const: 1 },
-    defaults: {
-      enum: Object.keys(DEFAULT_SETS),
-      description: `Pinned default set. Without it, omt uses the latest set (${LATEST_DEFAULT_SET}). Run omt defaults diff to see what a newer set changes.`,
-    },
+    defaults: RETIRED,
     profile: { type: "string", pattern: ROLE_NAME_PATTERN, description: "Default workflow profile. Default normal." },
     profiles: {
       type: "object",

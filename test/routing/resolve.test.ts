@@ -28,26 +28,26 @@ test("a resolved role uses the first ok rung and keeps later ok rungs as fallbac
     crossFamily: false,
     status: "resolved",
     delegateTask: {
-      target: { providerInstanceId: "claudeAgent", model: "claude-opus-5-5", options: { effort: "medium" } },
+      target: { providerInstanceId: "claudeAgent", model: "claude-opus-5-5", options: { effort: "low" } },
       role: "implementation",
       interactionMode: "default",
       runtimeMode: "inherit",
     },
-    fallbacks: [{ providerInstanceId: "codex", model: "gpt-6.1-sol", options: { reasoningEffort: "xhigh" } }],
+    fallbacks: [{ providerInstanceId: "codex", model: "gpt-6.1-sol", options: { reasoningEffort: "high" } }],
     attempts: [
       {
         index: 0,
         rung: execute.chain[0],
         ok: true,
         notes: [],
-        target: { providerInstanceId: "claudeAgent", model: "claude-opus-5-5", options: { effort: "medium" } },
+        target: { providerInstanceId: "claudeAgent", model: "claude-opus-5-5", options: { effort: "low" } },
       },
       {
         index: 1,
         rung: execute.chain[1],
         ok: true,
         notes: [],
-        target: { providerInstanceId: "codex", model: "gpt-6.1-sol", options: { reasoningEffort: "xhigh" } },
+        target: { providerInstanceId: "codex", model: "gpt-6.1-sol", options: { reasoningEffort: "high" } },
       },
     ],
   });
@@ -121,10 +121,10 @@ test("a rung whose provider instance is not registered falls back to its driver,
   assert.deepEqual(resolution.delegateTask?.target, {
     providerInstanceId: "claude-main",
     model: "claude-opus-5-5",
-    options: { effort: "medium" },
+    options: { effort: "low" },
   });
   assert.deepEqual(resolution.fallbacks, [
-    { providerInstanceId: "codex-main", model: "gpt-6.1-sol", options: { reasoningEffort: "xhigh" } },
+    { providerInstanceId: "codex-main", model: "gpt-6.1-sol", options: { reasoningEffort: "high" } },
   ]);
   assert.deepEqual(toRouteOutput(resolution).notes, [
     "rung 1: provider instance claudeAgent is not registered; using instance claude-main of driver claudeAgent",
@@ -355,23 +355,31 @@ test("driver-only rungs prefer the inherited provider instance", () => {
   assert.equal(resolution.attempts[0]?.reason, "provider claudeWork cannot run child tasks: no reason given");
 });
 
-test("every default role resolves against the fixture", () => {
+test("every default role resolves when its models are advertised", () => {
+  const c = caps();
+  const codex = provider(c, "codex");
+  const sol = codex.models.find((model) => model.id === "gpt-6.1-sol");
+  const claude = provider(c, "claudeAgent");
+  const sonnet = claude.models.find((model) => model.id === "claude-sonnet-5-5");
+  assert.ok(sol && sonnet);
+  codex.models.push({ ...structuredClone(sol), id: "gpt-6.1-terra" });
+  claude.models.push({ ...structuredClone(sonnet), id: "claude-haiku-5-5" });
   const expected: Record<string, [string, string, Record<string, string>]> = {
-    explore: ["codex", "gpt-6-luna", { reasoningEffort: "low" }],
-    research: ["codex", "gpt-6.1-sol", { reasoningEffort: "low", serviceTier: "priority" }],
-    plan: ["claudeAgent", "claude-opus-5-5", { effort: "xhigh" }],
-    "plan-review": ["codex", "gpt-6-astra", { reasoningEffort: "high" }],
-    grill: ["codex", "gpt-6-astra", { reasoningEffort: "high" }],
-    execute: ["claudeAgent", "claude-opus-5-5", { effort: "medium" }],
-    review: ["codex", "gpt-6-astra", { reasoningEffort: "high" }],
-    oracle: ["codex", "gpt-6-astra", { reasoningEffort: "high" }],
-    qa: ["claudeAgent", "claude-sonnet-5-5", { effort: "low" }],
-    guardrail: ["claudeAgent", "claude-opus-5-5", { effort: "high" }],
-    writing: ["claudeAgent", "claude-opus-5-5", { effort: "high" }],
-    design: ["claudeAgent", "claude-opus-5-5", { effort: "high" }],
-    ui: ["claudeAgent", "claude-opus-5-5", { effort: "medium" }],
+    "explore": ["codex", "gpt-6.1-terra", {"reasoningEffort": "low"}],
+    "research": ["codex", "gpt-6.1-sol", {"reasoningEffort": "low", "serviceTier": "priority"}],
+    "plan": ["claudeAgent", "claude-opus-5-5", {"effort": "medium"}],
+    "plan-review": ["codex", "gpt-6-astra", {"reasoningEffort": "medium"}],
+    "grill": ["codex", "gpt-6-astra", {"reasoningEffort": "medium"}],
+    "execute": ["claudeAgent", "claude-opus-5-5", {"effort": "low"}],
+    "review": ["codex", "gpt-6-astra", {"reasoningEffort": "medium"}],
+    "oracle": ["codex", "gpt-6-astra", {"reasoningEffort": "medium"}],
+    "qa": ["codex", "gpt-6.1-sol", {"reasoningEffort": "medium", "serviceTier": "priority"}],
+    "guardrail": ["claudeAgent", "claude-opus-5-5", {"effort": "high"}],
+    "writing": ["claudeAgent", "claude-opus-5-5", {"effort": "medium"}],
+    "design": ["claudeAgent", "claude-opus-5-5", {"effort": "medium"}],
+    "ui": ["claudeAgent", "claude-opus-5-5", {"effort": "low"}],
   };
-  const report = resolveAll(DEFAULT_CONFIG, caps());
+  const report = resolveAll(DEFAULT_CONFIG, c);
   assert.equal(report.version, 1);
   assert.equal(report.verified, true);
   assert.deepEqual(report.limits, DEFAULT_CONFIG.limits);
@@ -385,16 +393,16 @@ test("every default role resolves against the fixture", () => {
     assert.deepEqual(resolution.delegateTask?.target, { providerInstanceId, model, options }, name);
     assert.equal(resolution.delegateTask?.role, config.t3Role, name);
     assert.equal(resolution.delegateTask?.interactionMode, config.interactionMode, name);
-    assert.equal(resolution.fallbacks.length, config.chain.length - (name === "qa" ? 2 : 1), name);
-    assert.equal(resolution.attempts.filter((a) => !a.ok).length, name === "qa" ? 1 : 0, name);
+    assert.equal(resolution.fallbacks.length, config.chain.length - 1, name);
+    assert.equal(resolution.attempts.filter((attempt) => !attempt.ok).length, 0, name);
   }
 });
 
-test("qa routes to Sonnet with the old fixture, which has no Haiku", () => {
-  const resolution = resolveAll(DEFAULT_CONFIG, caps(), ["qa"]).roles.qa;
-  assert.equal(resolution?.delegateTask?.target.model, "claude-sonnet-5-5");
-  assert.equal(resolution?.attempts[0]?.reason, "model claude-haiku-5-5 is not advertised by claudeAgent");
-  assert.equal(resolution?.attempts[1]?.ok, true);
+test("explore reports both missing models with the older fixture", () => {
+  const resolution = resolveAll(DEFAULT_CONFIG, caps(), ["explore"]).roles.explore;
+  assert.equal(resolution?.status, "unavailable");
+  assert.equal(resolution?.attempts[0]?.reason, "model gpt-6.1-terra is not advertised by codex");
+  assert.equal(resolution?.attempts[1]?.reason, "model claude-haiku-5-5 is not advertised by claudeAgent");
 });
 
 test("every default role is unverified with provider instance targets without capabilities", () => {
