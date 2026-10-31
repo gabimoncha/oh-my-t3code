@@ -116,3 +116,14 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Redirect the previous Pages address
+        run: |
+          redirect="$RUNNER_TEMP/previous-pages-redirect"
+          mkdir -p "$redirect"
+          printf '%s\n' '/* https://oh-my-t3.pages.dev/:splat 301' > "$redirect/_redirects"
+          printf '%s\n' '<!doctype html><title>oh-my-t3</title><a href="https://oh-my-t3.pages.dev">Visit oh-my-t3</a>' > "$redirect/index.html"
+          bunx wrangler pages deploy "$redirect" --project-name oh-my-t3code --branch main
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

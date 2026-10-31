@@ -12,7 +12,7 @@ npx oh-my-t3 --version
 
 The `omt` command stays the same. `oh-my-t3code` and `omt3` remain npm package aliases. Keep their releases at the same version. The npm name `omt` belongs to another author.
 
-The website uses the Cloudflare Pages project `oh-my-t3`, at `https://oh-my-t3.pages.dev`. The previous project, `oh-my-t3code`, stays available for links in published packages.
+The website uses the Cloudflare Pages project `oh-my-t3`, at `https://oh-my-t3.pages.dev`. The previous project, `oh-my-t3code`, redirects to the new site with HTTP 301 and preserves paths for links in published packages.
 
 ## Compatibility identities
 
